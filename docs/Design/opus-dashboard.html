@@ -1,0 +1,353 @@
+<title>OPUS IT Inventory</title>
+
+<style>
+  /* ============ OPUS — committed dark enterprise theme (light via toggle) ============ */
+  :root {
+    --bg:#0E1317; --sidebar:#0B1014; --card:#151C22; --card-2:#1A222A; --raised:#1E2831;
+    --border:#232E37; --border-soft:#1B242C;
+    --text:#F2F6F8; --text-muted:#93A2AD; --text-faint:#5E6C77;
+    --accent:#2DD4BF; --accent-strong:#14B8A6; --accent-soft:rgba(45,212,191,.13);
+    --blue:#3B82F6; --green:#4ADE80; --amber:#FBBF24; --slate:#64748B; --violet:#8B5CF6;
+    --pos:#4ADE80; --focus:#2DD4BF;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.5);
+  }
+  :root[data-theme="light"] {
+    --bg:#F4F6F8; --sidebar:#FFFFFF; --card:#FFFFFF; --card-2:#F7F9FA; --raised:#FFFFFF;
+    --border:#E3E8EC; --border-soft:#EDF0F3;
+    --text:#0F1B22; --text-muted:#5A6B76; --text-faint:#94A3AD;
+    --accent:#0D9488; --accent-strong:#0F766E; --accent-soft:rgba(13,148,136,.10);
+    --blue:#2563EB; --green:#16A34A; --amber:#D97706; --slate:#64748B; --violet:#7C3AED;
+    --pos:#16A34A; --focus:#0D9488;
+    --shadow:0 1px 2px rgba(16,27,34,.06), 0 10px 30px -18px rgba(16,27,34,.25);
+  }
+
+  * { box-sizing:border-box; }
+  html,body { height:100%; }
+  body {
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;
+    font-size:14px; line-height:1.5; -webkit-font-smoothing:antialiased;
+  }
+  .num { font-variant-numeric:tabular-nums; }
+  .ic { width:18px; height:18px; stroke:currentColor; stroke-width:1.8; fill:none; stroke-linecap:round; stroke-linejoin:round; flex:none; }
+
+  /* ============ Shell ============ */
+  .app { display:grid; grid-template-columns:236px minmax(0,1fr); height:100vh; overflow:hidden; }
+  @media (max-width:900px){ .app{ grid-template-columns:1fr; } .sidebar{ display:none; } }
+
+  /* ---- Sidebar ---- */
+  .sidebar { background:var(--sidebar); border-right:1px solid var(--border); display:flex; flex-direction:column; min-height:0; }
+  .logo { display:flex; align-items:center; gap:11px; padding:20px 20px 18px; }
+  .logo .ring { width:38px; height:38px; border-radius:50%; flex:none;
+    background:conic-gradient(from 210deg, var(--accent), var(--blue), var(--violet), var(--accent));
+    display:grid; place-items:center; position:relative; }
+  .logo .ring::after { content:""; position:absolute; inset:6px; border-radius:50%; background:var(--sidebar); }
+  .logo .ring i { position:relative; z-index:1; width:11px; height:11px; border-radius:50%; background:var(--accent); }
+  .logo .wm { font-weight:800; font-size:21px; letter-spacing:.02em; line-height:1; }
+  .logo .wm span { display:block; font-size:9px; font-weight:600; letter-spacing:.28em; color:var(--text-muted); margin-top:3px; }
+  .nav { flex:1; overflow-y:auto; padding:8px 12px 16px; }
+  .nav a { display:flex; align-items:center; gap:12px; padding:9px 12px; border-radius:9px; color:var(--text-muted);
+    text-decoration:none; font-size:13.5px; font-weight:500; margin-bottom:2px; }
+  .nav a:hover { background:var(--card); color:var(--text); }
+  .nav a.active { background:var(--accent-soft); color:var(--accent); font-weight:600; }
+  .nav a.active .ic { stroke:var(--accent); }
+  .nav .sec { display:flex; align-items:center; justify-content:space-between; padding:16px 12px 7px; font-size:11px;
+    font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:var(--text-faint); }
+  .side-foot { border-top:1px solid var(--border); padding:14px 16px; display:flex; align-items:center; gap:11px; }
+  .side-foot .dot { width:8px; height:8px; border-radius:50%; background:var(--green); box-shadow:0 0 0 3px color-mix(in srgb,var(--green) 22%,transparent); }
+  .side-foot small { color:var(--text-faint); font-size:12px; }
+
+  /* ---- Main ---- */
+  .main { display:flex; flex-direction:column; min-height:0; }
+  .topbar { display:flex; align-items:center; gap:16px; padding:14px 26px; border-bottom:1px solid var(--border);
+    background:color-mix(in srgb,var(--bg) 85%,transparent); backdrop-filter:blur(8px); position:sticky; top:0; z-index:5; }
+  .gsearch { position:relative; flex:1; max-width:560px; }
+  .gsearch .ic { position:absolute; left:14px; top:50%; transform:translateY(-50%); stroke:var(--text-faint); }
+  .gsearch input { width:100%; background:var(--card); border:1px solid var(--border); border-radius:11px;
+    padding:11px 14px 11px 42px; color:var(--text); font-size:13.5px; font-family:inherit; }
+  .gsearch input:focus { outline:none; border-color:var(--accent); background:var(--card-2); }
+  .gsearch input::placeholder{ color:var(--text-faint); }
+  .tb-actions { margin-left:auto; display:flex; align-items:center; gap:8px; }
+  .tb-icon { position:relative; width:40px; height:40px; border-radius:10px; border:1px solid var(--border); background:var(--card);
+    color:var(--text-muted); display:grid; place-items:center; cursor:pointer; }
+  .tb-icon:hover { background:var(--card-2); color:var(--text); }
+  .tb-icon .badge { position:absolute; top:-5px; right:-5px; min-width:17px; height:17px; padding:0 4px; border-radius:9px;
+    background:var(--accent); color:#04201C; font-size:10px; font-weight:800; display:grid; place-items:center; border:2px solid var(--bg); }
+  .user { display:flex; align-items:center; gap:10px; padding:5px 8px 5px 5px; border-radius:11px; cursor:pointer; }
+  .user:hover { background:var(--card); }
+  .avatar { width:36px; height:36px; border-radius:50%; flex:none; display:grid; place-items:center; font-weight:700; font-size:13px; color:#04201C;
+    background:linear-gradient(135deg,var(--accent),var(--blue)); }
+  .user .who b { font-size:13px; font-weight:650; display:block; line-height:1.2; }
+  .user .who small { color:var(--text-muted); font-size:11.5px; }
+
+  .content { flex:1; overflow-y:auto; padding:24px 26px 40px; }
+  .page-head { display:flex; align-items:center; gap:16px; margin-bottom:22px; }
+  .page-head h1 { font-size:26px; font-weight:500; margin:0; letter-spacing:-.01em; }
+  .page-head h1 b { font-weight:800; }
+  .btn { display:inline-flex; align-items:center; gap:8px; border-radius:10px; font-size:13px; font-weight:600;
+    font-family:inherit; cursor:pointer; padding:10px 15px; border:1px solid var(--border); background:var(--card); color:var(--text); }
+  .btn:hover { background:var(--card-2); }
+  .btn.primary { background:var(--accent); color:#04201C; border-color:transparent; }
+  .btn.primary:hover { filter:brightness(1.08); }
+  .btn.ghost { background:transparent; }
+  .quick { margin-left:auto; }
+
+  /* KPI cards */
+  .kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:20px; }
+  @media (max-width:1150px){ .kpis{ grid-template-columns:repeat(2,1fr); } }
+  @media (max-width:560px){ .kpis{ grid-template-columns:1fr; } }
+  .kpi { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:18px 20px; box-shadow:var(--shadow); }
+  .kpi .k-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  .kpi .k-label { color:var(--text-muted); font-size:13px; font-weight:550; }
+  .kpi .k-ico { width:34px; height:34px; border-radius:10px; display:grid; place-items:center; background:var(--accent-soft); color:var(--accent); }
+  .kpi .k-num { font-size:34px; font-weight:800; letter-spacing:-.02em; line-height:1; }
+  .kpi .k-sub { margin-top:9px; font-size:12.5px; color:var(--text-muted); display:flex; align-items:center; gap:8px; }
+  .delta { color:var(--pos); font-weight:700; display:inline-flex; align-items:center; gap:3px; }
+
+  /* generic card */
+  .card { background:var(--card); border:1px solid var(--border); border-radius:16px; box-shadow:var(--shadow); }
+  .card-head { display:flex; align-items:center; gap:12px; padding:16px 18px; border-bottom:1px solid var(--border-soft); }
+  .card-head h2 { font-size:15px; font-weight:700; margin:0; }
+  .card-head .more { margin-left:auto; color:var(--text-faint); cursor:pointer; }
+
+  /* toolbar */
+  .toolbar { display:flex; align-items:center; gap:10px; padding:14px 16px; flex-wrap:wrap; border-bottom:1px solid var(--border-soft); }
+  .select { display:inline-flex; align-items:center; gap:9px; background:var(--card-2); border:1px solid var(--border); border-radius:10px;
+    padding:8px 12px; font-size:13px; color:var(--text-muted); cursor:pointer; }
+  .select:hover { color:var(--text); }
+  .select .ic { width:14px; height:14px; }
+  .toolbar .sp { margin-left:auto; }
+
+  /* table */
+  .twrap { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; min-width:820px; }
+  thead th { text-align:left; padding:12px 18px; font-size:11.5px; font-weight:650; letter-spacing:.03em; text-transform:uppercase;
+    color:var(--text-faint); border-bottom:1px solid var(--border-soft); white-space:nowrap; }
+  thead th .ic { width:12px; height:12px; display:inline; vertical-align:middle; margin-left:3px; stroke:var(--accent); }
+  tbody td { padding:13px 18px; border-bottom:1px solid var(--border-soft); font-size:13.5px; white-space:nowrap; }
+  tbody tr:last-child td { border-bottom:none; }
+  tbody tr:hover td { background:var(--card-2); }
+  .aid { font-weight:600; font-size:13px; color:var(--text); }
+  .named { display:flex; align-items:center; gap:11px; }
+  .tico { width:30px; height:30px; border-radius:8px; background:var(--card-2); border:1px solid var(--border); display:grid; place-items:center; color:var(--text-muted); flex:none; }
+  .named b { font-weight:600; }
+  .muted { color:var(--text-muted); }
+  .mono { font-family:ui-monospace,"Cascadia Mono",Consolas,monospace; font-size:12.5px; color:var(--text-muted); }
+  .assigned { display:flex; align-items:center; gap:9px; }
+  .assigned .av { width:26px; height:26px; border-radius:50%; font-size:10px; font-weight:700; color:#04201C;
+    display:grid; place-items:center; background:linear-gradient(135deg,var(--accent),var(--blue)); flex:none; }
+  .assigned .av.pool { background:var(--raised); color:var(--text-muted); border:1px solid var(--border); }
+  .stat { display:inline-flex; align-items:center; gap:7px; font-weight:650; font-size:13px; }
+  .stat .d { width:7px; height:7px; border-radius:50%; }
+  .stat.deployed { color:var(--green); } .stat.deployed .d{ background:var(--green); }
+  .stat.maintenance { color:var(--amber); } .stat.maintenance .d{ background:var(--amber); }
+  .stat.online { color:var(--accent); } .stat.online .d{ background:var(--accent); }
+  .stat.storage { color:var(--slate); } .stat.storage .d{ background:var(--slate); }
+  .rowmore { color:var(--text-faint); cursor:pointer; }
+  .rowmore:hover { color:var(--text); }
+
+  /* charts row */
+  .charts { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:20px; }
+  @media (max-width:900px){ .charts{ grid-template-columns:1fr; } }
+  .donut-wrap { display:flex; align-items:center; gap:26px; padding:22px 20px; }
+  .donut { width:150px; height:150px; border-radius:50%; flex:none; position:relative;
+    background:conic-gradient(var(--accent) 0 40%, var(--blue) 40% 72%, var(--amber) 72% 84%, var(--slate) 84% 100%); }
+  .donut::after { content:""; position:absolute; inset:26px; border-radius:50%; background:var(--card); }
+  .donut .center { position:absolute; inset:0; display:grid; place-content:center; text-align:center; }
+  .donut .center b { font-size:22px; font-weight:800; } .donut .center span{ font-size:11px; color:var(--text-muted); }
+  .legend { display:grid; gap:12px; flex:1; }
+  .legend .li { display:flex; align-items:center; gap:10px; font-size:13.5px; }
+  .legend .sw { width:11px; height:11px; border-radius:3px; flex:none; }
+  .legend .pct { margin-left:auto; font-weight:700; color:var(--text-muted); }
+  .bars { padding:22px 20px; display:grid; gap:20px; }
+  .barrow .bl { display:flex; align-items:center; justify-content:space-between; margin-bottom:9px; font-size:13.5px; }
+  .barrow .bl b { font-weight:750; }
+  .track { height:9px; border-radius:6px; background:var(--card-2); overflow:hidden; }
+  .track i { display:block; height:100%; border-radius:6px; }
+
+  a:focus-visible,button:focus-visible,input:focus-visible,.select:focus-visible,[tabindex]:focus-visible {
+    outline:2px solid var(--focus); outline-offset:2px; }
+  @media (prefers-reduced-motion:no-preference){ .nav a,.btn,.kpi,tbody tr td,.tb-icon{ transition:background-color .13s ease,color .13s ease,filter .13s ease; } }
+</style>
+
+<!-- icon sprite -->
+<svg style="display:none" aria-hidden="true">
+  <symbol id="i-dash" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></symbol>
+  <symbol id="i-computer" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></symbol>
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></symbol>
+  <symbol id="i-printer" viewBox="0 0 24 24"><path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><rect x="7" y="14" width="10" height="6" rx="1"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/></symbol>
+  <symbol id="i-network" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="6" rx="1.5"/><rect x="3" y="15" width="6" height="6" rx="1.5"/><rect x="15" y="15" width="6" height="6" rx="1.5"/><path d="M12 9v3M12 12H6v3M12 12h6v3"/></symbol>
+  <symbol id="i-software" viewBox="0 0 24 24"><path d="M8 9l-3 3 3 3M16 9l3 3-3 3M14 5l-4 14"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 5-3.5 8-7 10-3.5-2-7-5-7-10V6z"/><path d="M9.5 12l2 2 3.5-4"/></symbol>
+  <symbol id="i-report" viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></symbol>
+  <symbol id="i-admin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M4 7l8 6 8-6"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M10.5 21a2 2 0 0 0 3 0"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-export" viewBox="0 0 24 24"><path d="M12 15V3M8 7l4-4 4 4M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></symbol>
+  <symbol id="i-qr" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M20 14v.01M14 20h.01M20 20v.01M17 20h.01M20 17h.01"/></symbol>
+  <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="12" cy="19" r="1.4"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></symbol>
+</svg>
+
+<div class="app">
+  <!-- ===== Sidebar ===== -->
+  <aside class="sidebar">
+    <div class="logo">
+      <span class="ring" aria-hidden="true"><i></i></span>
+      <span class="wm">OPUS<span>IT INVENTORY</span></span>
+    </div>
+    <nav class="nav">
+      <a href="#" class="active"><svg class="ic"><use href="#i-dash"/></svg> Dashboard</a>
+      <div class="sec">Assets <svg class="ic" style="width:14px;height:14px"><use href="#i-chev"/></svg></div>
+      <a href="#"><svg class="ic"><use href="#i-computer"/></svg> Computers</a>
+      <a href="#"><svg class="ic"><use href="#i-monitor"/></svg> Monitors</a>
+      <a href="#"><svg class="ic"><use href="#i-printer"/></svg> Printers</a>
+      <a href="#"><svg class="ic"><use href="#i-phone"/></svg> Phones</a>
+      <a href="#"><svg class="ic"><use href="#i-network"/></svg> Network</a>
+      <a href="#"><svg class="ic"><use href="#i-software"/></svg> Software</a>
+      <a href="#"><svg class="ic"><use href="#i-shield"/></svg> Compliance</a>
+      <a href="#"><svg class="ic"><use href="#i-report"/></svg> Reports</a>
+      <a href="#"><svg class="ic"><use href="#i-admin"/></svg> Admin</a>
+    </nav>
+    <div class="side-foot">
+      <span class="dot" aria-hidden="true"></span>
+      <div><div style="font-size:12.5px;font-weight:600">Collector online</div><small>Last scan 02:00 · 96% reached</small></div>
+    </div>
+  </aside>
+
+  <!-- ===== Main ===== -->
+  <div class="main">
+    <header class="topbar">
+      <div class="gsearch">
+        <svg class="ic"><use href="#i-search"/></svg>
+        <input type="search" placeholder="Global Search" aria-label="Global search">
+      </div>
+      <div class="tb-actions">
+        <button class="tb-icon" id="theme" title="Toggle theme" aria-label="Toggle theme"><svg class="ic"><use href="#i-sun"/></svg></button>
+        <button class="tb-icon" aria-label="Mail"><svg class="ic"><use href="#i-mail"/></svg></button>
+        <button class="tb-icon" aria-label="Notifications"><svg class="ic"><use href="#i-bell"/></svg><span class="badge">1</span></button>
+        <div class="user" tabindex="0">
+          <span class="avatar">SJ</span>
+          <span class="who"><b>Sarah Jenkins</b><small>IT Director</small></span>
+          <svg class="ic" style="stroke:var(--text-faint)"><use href="#i-chev"/></svg>
+        </div>
+      </div>
+    </header>
+
+    <div class="content">
+      <div class="page-head">
+        <h1>IT Asset Management: <b>Overview &amp; Inventory</b></h1>
+        <button class="btn quick">Quick Actions <svg class="ic" style="width:15px;height:15px"><use href="#i-chev"/></svg></button>
+      </div>
+
+      <!-- KPIs -->
+      <section class="kpis">
+        <div class="kpi">
+          <div class="k-top"><span class="k-label">Total IT Assets</span><span class="k-ico"><svg class="ic"><use href="#i-dash"/></svg></span></div>
+          <div class="k-num num">7,845</div>
+          <div class="k-sub"><span class="delta">▲ 4.2%</span> vs last quarter</div>
+        </div>
+        <div class="kpi">
+          <div class="k-top"><span class="k-label">Computers</span><span class="k-ico"><svg class="ic"><use href="#i-computer"/></svg></span></div>
+          <div class="k-num num">3,120</div>
+          <div class="k-sub">28 newly deployed</div>
+        </div>
+        <div class="kpi">
+          <div class="k-top"><span class="k-label">Monitors</span><span class="k-ico"><svg class="ic"><use href="#i-monitor"/></svg></span></div>
+          <div class="k-num num">2,548</div>
+          <div class="k-sub">19 activated this week</div>
+        </div>
+        <div class="kpi">
+          <div class="k-top"><span class="k-label">Printers / Phones</span><span class="k-ico"><svg class="ic"><use href="#i-phone"/></svg></span></div>
+          <div class="k-num num">2,177</div>
+          <div class="k-sub">56 available in pool</div>
+        </div>
+      </section>
+
+      <!-- Inventory table -->
+      <section class="card">
+        <div class="toolbar">
+          <span class="select">Asset Type <svg class="ic"><use href="#i-chev"/></svg></span>
+          <span class="select">Location <svg class="ic"><use href="#i-chev"/></svg></span>
+          <span class="select">Status <svg class="ic"><use href="#i-chev"/></svg></span>
+          <span class="select">Department <svg class="ic"><use href="#i-chev"/></svg></span>
+          <span class="sp"></span>
+          <button class="btn primary"><svg class="ic" style="width:15px;height:15px"><use href="#i-plus"/></svg> Add Asset</button>
+          <button class="btn"><svg class="ic" style="width:15px;height:15px"><use href="#i-export"/></svg> Export</button>
+          <button class="btn"><svg class="ic" style="width:15px;height:15px"><use href="#i-qr"/></svg> Scan QR</button>
+        </div>
+        <div class="twrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Asset ID <svg class="ic"><use href="#i-chev"/></svg></th>
+                <th>Asset Name</th><th>Type</th><th>Serial Number</th><th>Model</th>
+                <th>Assigned To</th><th>Location</th><th>Status</th><th>Last Sync</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Charts -->
+      <section class="charts">
+        <div class="card">
+          <div class="card-head"><h2>Asset Distribution</h2><svg class="ic more"><use href="#i-dots"/></svg></div>
+          <div class="donut-wrap">
+            <div class="donut" role="img" aria-label="Asset distribution donut">
+              <div class="center"><b class="num">7,845</b><span>assets</span></div>
+            </div>
+            <div class="legend">
+              <div class="li"><span class="sw" style="background:var(--accent)"></span> Computers <span class="pct">40%</span></div>
+              <div class="li"><span class="sw" style="background:var(--blue)"></span> Monitors <span class="pct">32%</span></div>
+              <div class="li"><span class="sw" style="background:var(--amber)"></span> Printers <span class="pct">12%</span></div>
+              <div class="li"><span class="sw" style="background:var(--slate)"></span> Phones <span class="pct">16%</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Asset Status</h2><svg class="ic more"><use href="#i-dots"/></svg></div>
+          <div class="bars">
+            <div class="barrow"><div class="bl"><span>Active</span><b>94%</b></div><div class="track"><i style="width:94%;background:linear-gradient(90deg,var(--accent),var(--green))"></i></div></div>
+            <div class="barrow"><div class="bl"><span>Maintenance</span><b>3%</b></div><div class="track"><i style="width:3%;background:var(--amber)"></i></div></div>
+            <div class="barrow"><div class="bl"><span>Storage</span><b>3%</b></div><div class="track"><i style="width:3%;background:var(--slate)"></i></div></div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+  const rows = [
+    { id:'OPUS-COMP-7491', name:"Sarah's MacBook Pro 16\"", ico:'i-computer', type:'Computer', sn:'SNP-350081', model:'Apple MBP 16"', who:'Sarah J.', wi:'SJ', loc:'NY HQ', status:['deployed','Deployed'], sync:'09/12/2023' },
+    { id:'OPUS-COMP-7492', name:"Michael's Dell XPS 15", ico:'i-computer', type:'Computer', sn:'E8E630008', model:'Dell XPS 15', who:'Michael R.', wi:'MR', loc:'Remote', status:['maintenance','Maintenance'], sync:'09/12/2023' },
+    { id:'OPUS-PRNT-7493', name:'Marketing Printer-HQ', ico:'i-printer', type:'Printer', sn:'VNC3K12345', model:'HP LaserJet M611', who:'Facilities', wi:'', loc:'NY HQ', status:['online','Online'], sync:'09/12/2023' },
+    { id:'OPUS-MON-7494', name:"Priya's Studio Display", ico:'i-monitor', type:'Monitor', sn:'C07ZW2AB', model:'Apple Studio 5K', who:'Priya R.', wi:'PR', loc:'SF HQ', status:['deployed','Deployed'], sync:'09/11/2023' },
+    { id:'OPUS-PHN-7495', name:'Field iPhone 15 Pro', ico:'i-phone', type:'Phone', sn:'DX4Q9F7G', model:'iPhone 15 Pro', who:'Pool', wi:'', loc:'SF Cage 01', status:['storage','Storage'], sync:'09/10/2023' },
+    { id:'OPUS-COMP-7496', name:"David's Latitude 7440", ico:'i-computer', type:'Computer', sn:'7KJ2QN3', model:'Dell Latitude', who:'David V.', wi:'DV', loc:'AUS Field', status:['deployed','Deployed'], sync:'09/12/2023' },
+  ];
+  document.getElementById('rows').innerHTML = rows.map(r=>`
+    <tr>
+      <td><span class="aid">${r.id}</span></td>
+      <td><div class="named"><span class="tico"><svg class="ic" style="width:16px;height:16px"><use href="#${r.ico}"/></svg></span><b>${r.name}</b></div></td>
+      <td class="muted">${r.type}</td>
+      <td class="mono">${r.sn}</td>
+      <td class="muted">${r.model}</td>
+      <td><span class="assigned"><span class="av ${r.wi?'':'pool'}">${r.wi||'··'}</span>${r.who}</span></td>
+      <td class="muted">${r.loc}</td>
+      <td><span class="stat ${r.status[0]}"><span class="d"></span>${r.status[1]}</span></td>
+      <td class="muted num">${r.sync}</td>
+      <td><svg class="ic rowmore" style="width:16px;height:16px"><use href="#i-dots"/></svg></td>
+    </tr>`).join('');
+
+  const root = document.documentElement;
+  document.getElementById('theme').addEventListener('click', ()=>{
+    root.setAttribute('data-theme', root.getAttribute('data-theme')==='light'?'dark':'light');
+  });
+</script>
