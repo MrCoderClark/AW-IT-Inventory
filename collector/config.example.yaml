@@ -1,0 +1,41 @@
+# OPUS collector config. Copy to config.yaml and adjust.
+# Passwords are NOT stored here — each profile names an env var (see .env).
+
+networks:
+  - 192.168.70.0/24   # domain (incl. printers)
+  - 192.168.72.0/24   # workgroup
+
+ports:
+  winrm: 5985
+  smb: 445
+  printer: 9100
+
+snmp_community: public
+
+# WinRM local-admin credential profiles. `username` uses `.\name` for a local
+# account. Secrets come from the named environment variable.
+profiles:
+  - id: win10-infotech
+    username: ".\\infotech"
+    password_env: PW_WIN10_INFOTECH
+  - id: wg-intech
+    username: ".\\Intech"
+    password_env: PW_WG_INTECH
+  - id: ad-infotech
+    username: ".\\Infotech"
+    password_env: PW_AD_INFOTECH
+
+# Which profiles to try per host, in order (first that authenticates wins).
+rules:
+  - match: { subnet: 192.168.72.0/24 }   # workgroup
+    try: [wg-intech, win10-infotech]
+  - match: { subnet: 192.168.70.0/24 }   # domain
+    try: [ad-infotech, win10-infotech]
+  - match: { any: true }                 # fallback: try everything
+    try: [ad-infotech, win10-infotech, wg-intech]
+
+concurrency: 64
+connect_timeout: 0.6
+winrm_timeout: 25
+snmp_timeout: 2.0
+output_dir: out
