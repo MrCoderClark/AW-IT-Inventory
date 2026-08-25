@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -133,15 +134,21 @@ export function TopBar() {
             </span>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel className="truncate font-normal">
-              <span className="block text-sm font-semibold">{displayName}</span>
-              <span className="block text-xs text-muted-foreground">
-                {user.email}
-              </span>
-            </DropdownMenuLabel>
+            <DropdownMenuGroup>
+              <DropdownMenuLabel className="font-normal">
+                <span className="block truncate text-sm font-semibold">
+                  {displayName}
+                </span>
+                <span className="block truncate text-xs text-muted-foreground">
+                  {user.email}
+                </span>
+              </DropdownMenuLabel>
+            </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>Profile</DropdownMenuItem>
-            <DropdownMenuItem>Preferences</DropdownMenuItem>
+            <DropdownMenuGroup>
+              <DropdownMenuItem>Profile</DropdownMenuItem>
+              <DropdownMenuItem>Preferences</DropdownMenuItem>
+            </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onClick={signOut}>
               Sign out
