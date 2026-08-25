@@ -8,6 +8,14 @@ export const AUTH_API_URL = (
   process.env.AUTH_API_URL ?? "http://127.0.0.1:8000"
 ).replace(/\/$/, "");
 
+// Expected `iss` claim / JWKS location for local token verification. AUTH_ISSUER
+// must match aw-auth's AUTH_ISSUER. Defaults to AUTH_API_URL when unset.
+export const AUTH_ISSUER = (
+  process.env.AUTH_ISSUER ?? AUTH_API_URL
+).replace(/\/$/, "");
+
+export const JWKS_URI = `${AUTH_API_URL}/.well-known/jwks.json`;
+
 export const ACCESS_COOKIE = "opus_access";
 export const REFRESH_COOKIE = "opus_refresh";
 
