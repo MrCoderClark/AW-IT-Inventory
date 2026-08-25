@@ -152,6 +152,27 @@ SPECTACULAR_SETTINGS = {
     "SERVE_INCLUDE_SCHEMA": False,
 }
 
+# --- Token signing: RS256 when keys exist, else HS256 (dev) -----------------
+# Public issuer URL — becomes the `iss` claim and the OIDC discovery issuer.
+AUTH_ISSUER = env("AUTH_ISSUER", default="http://127.0.0.1:8000")
+SIMPLE_JWT["ISSUER"] = AUTH_ISSUER
+
+JWT_PRIVATE_KEY_PATH = env(
+    "JWT_PRIVATE_KEY_PATH", default=str(BASE_DIR / "keys" / "private.pem")
+)
+JWT_PUBLIC_KEY_PATH = env(
+    "JWT_PUBLIC_KEY_PATH", default=str(BASE_DIR / "keys" / "public.pem")
+)
+
+_priv = Path(JWT_PRIVATE_KEY_PATH)
+_pub = Path(JWT_PUBLIC_KEY_PATH)
+if _priv.exists() and _pub.exists():
+    # Asymmetric signing: clients verify locally via JWKS (see accounts.jwks).
+    SIMPLE_JWT["ALGORITHM"] = "RS256"
+    SIMPLE_JWT["SIGNING_KEY"] = _priv.read_text()
+    SIMPLE_JWT["VERIFYING_KEY"] = _pub.read_text()
+# else: keep HS256 (SECRET_KEY) for dev until `manage.py generate_keys` is run.
+
 # --- CORS -------------------------------------------------------------------
 CORS_ALLOWED_ORIGINS = env.list(
     "CORS_ALLOWED_ORIGINS", default=["http://localhost:3000"]
