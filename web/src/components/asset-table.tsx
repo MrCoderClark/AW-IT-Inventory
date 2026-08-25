@@ -1,10 +1,12 @@
 "use client";
 
 import * as React from "react";
+import { usePathname, useRouter } from "next/navigation";
 import {
   type ColumnDef,
   type SortingState,
   type ColumnFiltersState,
+  type RowData,
   flexRender,
   getCoreRowModel,
   getFilteredRowModel,
@@ -56,6 +58,13 @@ import {
   type AssetStatus,
 } from "@/lib/data";
 import { cn } from "@/lib/utils";
+
+declare module "@tanstack/react-table" {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  interface TableMeta<TData extends RowData> {
+    openAsset: (id: string) => void;
+  }
+}
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", {
@@ -197,7 +206,7 @@ const columns: ColumnDef<Asset>[] = [
   {
     id: "actions",
     header: "",
-    cell: ({ row }) => (
+    cell: ({ row, table }) => (
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
@@ -220,7 +229,11 @@ const columns: ColumnDef<Asset>[] = [
           >
             Copy asset ID
           </DropdownMenuItem>
-          <DropdownMenuItem>View details</DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => table.options.meta?.openAsset(row.original.id)}
+          >
+            View details
+          </DropdownMenuItem>
           <DropdownMenuItem>Reassign</DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive">Retire asset</DropdownMenuItem>
@@ -231,6 +244,11 @@ const columns: ColumnDef<Asset>[] = [
 ];
 
 export function AssetTable() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const openAsset = (id: string) =>
+    router.push(`${pathname}?asset=${encodeURIComponent(id)}`, { scroll: false });
+
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
     [],
@@ -241,6 +259,7 @@ export function AssetTable() {
     data: ASSETS,
     columns,
     state: { sorting, columnFilters, globalFilter },
+    meta: { openAsset },
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onGlobalFilterChange: setGlobalFilter,
@@ -355,9 +374,20 @@ export function AssetTable() {
           <TableBody>
             {table.getRowModel().rows.length ? (
               table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id} className="whitespace-nowrap">
+                <TableRow
+                  key={row.id}
+                  className="cursor-pointer whitespace-nowrap"
+                  onClick={() => openAsset(row.original.id)}
+                >
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
+                    <TableCell
+                      key={cell.id}
+                      onClick={
+                        cell.column.id === "actions"
+                          ? (e) => e.stopPropagation()
+                          : undefined
+                      }
+                    >
                       {flexRender(
                         cell.column.columnDef.cell,
                         cell.getContext(),

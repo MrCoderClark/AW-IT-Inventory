@@ -1,9 +1,11 @@
+import { Suspense } from "react";
 import { ChevronDown } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { KpiCard } from "@/components/kpi-card";
 import { AssetTable } from "@/components/asset-table";
+import { AssetDetailDrawer } from "@/components/asset-detail-drawer";
 import { DonutChart } from "@/components/charts/donut-chart";
 import { StatusBars } from "@/components/charts/status-bars";
 import { KPIS, DISTRIBUTION, STATUS_BREAKDOWN } from "@/lib/data";
@@ -54,6 +56,10 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </section>
+
+      <Suspense fallback={null}>
+        <AssetDetailDrawer />
+      </Suspense>
     </div>
   );
 }
