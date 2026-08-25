@@ -61,6 +61,7 @@ class OpusTokenObtainPairSerializer(TokenObtainPairSerializer):
     def get_token(cls, user):
         token = super().get_token(user)
         token["email"] = user.email
+        token["name"] = user.full_name
         token["roles"] = list(user.roles.values_list("name", flat=True))
         token["perms"] = sorted(user.get_permission_codes())
         return token
