@@ -26,8 +26,19 @@ copy .env.example .env          # then fill in the local-admin passwords
 ```bash
 uv run python main.py scan                         # full scan of configured networks
 uv run python main.py scan --network 192.168.72.0/24 --limit 20   # small test
+
+# Specific hosts (IPs and/or CIDRs) — repeatable and/or comma-separated:
+uv run python main.py scan --target 192.168.72.10,192.168.72.20,192.168.70.5
+uv run python main.py scan --target 192.168.72.10 --target 192.168.70.0/28
+
+# From a file (one IP/CIDR per line, # comments allowed):
+uv run python main.py scan --targets-file hosts.txt
+
 uv run python main.py scan --no-printers           # Windows only
 ```
+
+`--target` / `--targets-file` override the `networks:` in `config.yaml`; a bare
+IP is treated as a single host.
 
 Output: a table summary in the console + `out/<run_id>.json`.
 

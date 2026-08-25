@@ -18,6 +18,7 @@ import datetime
 import sys
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 from rich.console import Console
 
@@ -36,6 +37,33 @@ def _now() -> str:
     return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
 
 
+def _collect_targets(args: argparse.Namespace) -> list[str]:
+    """Merge --target (repeatable/comma-separated), --targets-file and --network
+    into an ordered, de-duplicated list of IPs/CIDRs."""
+    targets: list[str] = []
+    for value in args.target or []:
+        targets += [x.strip() for x in value.split(",") if x.strip()]
+    if args.targets_file:
+        path = Path(args.targets_file)
+        if not path.exists():
+            console.print(f"[yellow]targets-file not found:[/yellow] {path}")
+        else:
+            for line in path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    targets.append(line)
+    if args.network:  # backward-compatible single target
+        targets.append(args.network)
+
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for t in targets:
+        if t not in seen:
+            seen.add(t)
+            ordered.append(t)
+    return ordered
+
+
 def run_scan(args: argparse.Namespace) -> int:
     try:
         config = load_config(args.config)
@@ -46,10 +74,14 @@ def run_scan(args: argparse.Namespace) -> int:
         )
         return 2
 
-    if args.network:
-        config.networks = [args.network]
+    targets = _collect_targets(args)
+    if targets:
+        config.networks = targets
     if not config.networks:
-        console.print("[red]No networks configured.[/red] Set `networks:` in config.yaml.")
+        console.print(
+            "[red]No targets.[/red] Use --target / --targets-file, or set "
+            "`networks:` in config.yaml."
+        )
         return 2
 
     run_id = datetime.datetime.now().strftime("%Y%m%dT%H%M%S") + "-" + uuid.uuid4().hex[:6]
@@ -144,7 +176,21 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command")
     scan = sub.add_parser("scan", help="Discover and scan the fleet (dry-run)")
     scan.add_argument("--config", default="config.yaml")
-    scan.add_argument("--network", help="Override networks (e.g. 192.168.72.0/24)")
+    scan.add_argument(
+        "--target",
+        action="append",
+        metavar="IP|CIDR",
+        help="Scan specific target(s): an IP or CIDR. Repeatable and/or "
+        "comma-separated. Overrides config networks.",
+    )
+    scan.add_argument(
+        "--targets-file",
+        metavar="PATH",
+        help="File with one IP/CIDR per line (# comments allowed).",
+    )
+    scan.add_argument(
+        "--network", help="Single IP/CIDR to scan (alias of --target)."
+    )
     scan.add_argument("--limit", type=int, help="Cap number of IPs probed (testing)")
     scan.add_argument("--no-windows", action="store_true")
     scan.add_argument("--no-printers", action="store_true")
