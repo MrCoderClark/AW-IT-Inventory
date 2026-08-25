@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { NAV_PRIMARY, NAV_ASSETS, NAV_MANAGE, type NavItem } from "@/lib/data";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useHasPermission } from "@/components/user-provider";
 
 function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   const Icon = item.icon;
@@ -49,6 +50,10 @@ function Section({ label, items, pathname }: { label?: string; items: NavItem[];
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const canAdmin = useHasPermission("user:admin");
+  const manageItems = canAdmin
+    ? NAV_MANAGE
+    : NAV_MANAGE.filter((item) => item.href !== "/admin");
   return (
     <aside className="hidden w-60 shrink-0 flex-col border-r bg-sidebar md:flex">
       {/* Wordmark */}
@@ -75,7 +80,7 @@ export function AppSidebar() {
         <nav className="pb-4">
           <Section items={NAV_PRIMARY} pathname={pathname} />
           <Section label="Assets" items={NAV_ASSETS} pathname={pathname} />
-          <Section label="Manage" items={NAV_MANAGE} pathname={pathname} />
+          <Section label="Manage" items={manageItems} pathname={pathname} />
         </nav>
       </ScrollArea>
 
