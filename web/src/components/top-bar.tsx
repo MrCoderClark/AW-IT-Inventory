@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { Bell, Mail, Menu, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ import {
 } from "@/components/ui/sheet";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { OPEN_COMMAND_EVENT } from "@/components/command-palette";
+import { useUser } from "@/components/user-provider";
 import { NAV_PRIMARY, NAV_ASSETS, NAV_MANAGE } from "@/lib/data";
 import Link from "next/link";
 
@@ -28,7 +30,25 @@ function openCommand() {
   window.dispatchEvent(new Event(OPEN_COMMAND_EVENT));
 }
 
+function initialsOf(name: string, email: string): string {
+  const base = name.trim() || email;
+  const parts = base.split(/[\s@._-]+/).filter(Boolean);
+  return (parts[0]?.[0] ?? "?").concat(parts[1]?.[0] ?? "").toUpperCase();
+}
+
 export function TopBar() {
+  const router = useRouter();
+  const user = useUser();
+  const displayName = user.full_name.trim() || user.email;
+  const roleLabel = user.roles[0] ?? (user.is_staff ? "Staff" : "Member");
+  const initials = initialsOf(user.full_name, user.email);
+
+  async function signOut() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.replace("/login");
+    router.refresh();
+  }
+
   return (
     <header className="sticky top-0 z-30 flex items-center gap-3 border-b bg-background/80 px-4 py-3 backdrop-blur md:px-6">
       {/* Mobile nav */}
@@ -100,22 +120,32 @@ export function TopBar() {
           >
             <Avatar className="size-9">
               <AvatarFallback className="bg-primary font-bold text-primary-foreground">
-                SJ
+                {initials}
               </AvatarFallback>
             </Avatar>
-            <span className="hidden text-left leading-tight sm:block">
-              <span className="block text-sm font-semibold">Sarah Jenkins</span>
-              <span className="block text-xs text-muted-foreground">IT Director</span>
+            <span className="hidden max-w-40 text-left leading-tight sm:block">
+              <span className="block truncate text-sm font-semibold">
+                {displayName}
+              </span>
+              <span className="block text-xs text-muted-foreground">
+                {roleLabel}
+              </span>
             </span>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-52">
-            <DropdownMenuLabel>My account</DropdownMenuLabel>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuLabel className="truncate font-normal">
+              <span className="block text-sm font-semibold">{displayName}</span>
+              <span className="block text-xs text-muted-foreground">
+                {user.email}
+              </span>
+            </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem>Profile</DropdownMenuItem>
             <DropdownMenuItem>Preferences</DropdownMenuItem>
-            <DropdownMenuItem>Admin console</DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive">Sign out</DropdownMenuItem>
+            <DropdownMenuItem variant="destructive" onClick={signOut}>
+              Sign out
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
