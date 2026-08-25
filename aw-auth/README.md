@@ -15,8 +15,24 @@ Runnable auth core:
 - **OpenAPI** at `/v1/schema` and Swagger UI at `/v1/docs`
 - Dev uses **SQLite** (no infra); set `DATABASE_URL` for Postgres
 
-> Later steps on this service: RS256 signing + JWKS, refresh-token reuse detection,
-> TOTP MFA, service accounts / client-credentials (for the collector), OIDC.
+> Later steps on this service: refresh-token reuse detection, TOTP MFA,
+> service accounts / client-credentials (for the collector), full OIDC.
+
+## RS256 + JWKS (token verification for any app)
+
+Generate an RSA keypair once; the service then signs with **RS256** and publishes
+its public key so clients verify tokens locally (no `/me` round-trip):
+
+```bash
+uv run python manage.py generate_keys   # writes keys/private.pem + keys/public.pem (gitignored)
+# restart the server so RS256 activates
+```
+
+- **JWKS:** `GET /.well-known/jwks.json` — the public key as a JWK (with a `kid`)
+- **Discovery:** `GET /.well-known/openid-configuration`
+- Access tokens are signed RS256 and carry that `kid` in the header, so both
+  `jose` (JS) and `PyJWKClient` (Python) can select the key and verify.
+- Without keys the service stays on HS256 (dev) and JWKS returns `{"keys": []}`.
 
 ## Run it (uv)
 
