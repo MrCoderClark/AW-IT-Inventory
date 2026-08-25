@@ -25,6 +25,10 @@ staticfiles/
 *.pem
 *.key
 
+# Collector: local config + scan reports (may contain internal host data)
+collector/config.yaml
+collector/out/
+
 # Logs & caches
 *.log
 npm-debug.log*
