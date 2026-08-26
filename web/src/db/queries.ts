@@ -2,9 +2,14 @@ import "server-only";
 
 import { asc, eq, sql } from "drizzle-orm";
 
-import type { Asset, AssetStatus, AssetType } from "@/lib/data";
+import type {
+  Asset,
+  AssetStatus,
+  AssetType,
+  MachineSummary,
+} from "@/lib/data";
 import { db } from "./index";
-import { assets, people } from "./schema";
+import { assets, machines, people } from "./schema";
 
 function toDateStr(value: Date | string | null): string {
   if (!value) return "";
@@ -77,6 +82,50 @@ export async function getAssets(): Promise<Asset[]> {
     .leftJoin(people, eq(assets.assigneeId, people.id))
     .orderBy(asc(assets.tag));
   return rows.map(toAsset);
+}
+
+/** Latest live-scan summary per matched asset, keyed by asset tag. */
+export async function getMachineSummaries(): Promise<
+  Record<string, MachineSummary>
+> {
+  const rows = await db
+    .select({
+      tag: assets.tag,
+      lastSeenAt: machines.lastSeenAt,
+      osName: machines.osName,
+      osVersion: machines.osVersion,
+      hardware: machines.hardware,
+      health: machines.health,
+      status: machines.lastScanStatus,
+    })
+    .from(machines)
+    .innerJoin(assets, eq(machines.assetId, assets.id));
+
+  const map: Record<string, MachineSummary> = {};
+  for (const r of rows) {
+    const hw = (r.hardware ?? {}) as Record<string, unknown>;
+    const health = (r.health ?? {}) as Record<string, unknown>;
+    const freeMap = health.free_disk_gb as Record<string, number> | undefined;
+    const firstFree =
+      freeMap && typeof freeMap === "object"
+        ? Number(Object.values(freeMap)[0])
+        : null;
+
+    map[r.tag] = {
+      lastSeen: r.lastSeenAt ? toDateStr(r.lastSeenAt) : "",
+      osName: (r.osName ?? (health.os_name as string) ?? "") || "",
+      osVersion: (r.osVersion ?? (health.os_version as string) ?? "") || "",
+      cpu: (hw.cpu as string) ?? "",
+      ramGb: typeof hw.ram_gb === "number" ? (hw.ram_gb as number) : null,
+      freeDiskGb: Number.isFinite(firstFree) ? firstFree : null,
+      uptimeHours:
+        typeof health.uptime_hours === "number"
+          ? (health.uptime_hours as number)
+          : null,
+      status: r.status ?? "ok",
+    };
+  }
+  return map;
 }
 
 export interface DashboardStats {

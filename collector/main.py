@@ -27,6 +27,7 @@ from collect_windows import collect_windows
 from config import load_config
 from creds import resolve_profiles
 from discovery import discover
+from ingest import post_scan
 from models import HostResult, RunReport
 from report import print_summary, write_report
 
@@ -168,6 +169,25 @@ def run_scan(args: argparse.Namespace) -> int:
     )
     saved = write_report(report, config)
     print_summary(report, saved)
+
+    if args.ingest:
+        try:
+            console.print("\n[bold]Ingesting[/bold] to the inventory API …")
+            result = post_scan(config, report)
+            console.print(
+                f"  [green]ingested[/green] — matched: {result.get('matched')} · "
+                f"discovered: {result.get('discovered')} · "
+                f"upserted: {result.get('upserted')} · skipped: {result.get('skipped')}"
+            )
+        except Exception as e:  # noqa: BLE001
+            console.print(f"  [red]ingest failed:[/red] {e}")
+            return 1
+    else:
+        console.print(
+            "\n[dim]dry-run — JSON only. Re-run with --ingest to post to the "
+            "inventory API.[/dim]"
+        )
+
     return 0
 
 
@@ -194,6 +214,11 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument("--limit", type=int, help="Cap number of IPs probed (testing)")
     scan.add_argument("--no-windows", action="store_true")
     scan.add_argument("--no-printers", action="store_true")
+    scan.add_argument(
+        "--ingest",
+        action="store_true",
+        help="POST results to the inventory API (default is dry-run to JSON).",
+    )
     scan.set_defaults(func=run_scan)
     return parser
 

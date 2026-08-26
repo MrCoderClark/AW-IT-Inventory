@@ -15,15 +15,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { StatusBadge } from "@/components/status-badge";
-import { TYPE_ICON, type Asset } from "@/lib/data";
+import { TYPE_ICON, type Asset, type MachineSummary } from "@/lib/data";
 import { cn } from "@/lib/utils";
-
-/* Deterministic pseudo-metrics so the mock health looks stable per asset. */
-function hashPct(seed: string, min = 8, max = 92) {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
-  return min + (h % (max - min));
-}
 
 function fmt(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", {
@@ -42,26 +35,6 @@ function Field({ label, value, mono }: { label: string; value: string; mono?: bo
       <p className={cn("mt-1 truncate text-sm", mono && "font-mono text-[13px]")}>
         {value}
       </p>
-    </div>
-  );
-}
-
-function HealthRing({ pct, label }: { pct: number; label: string }) {
-  return (
-    <div className="flex flex-col items-center gap-2">
-      <div
-        className="relative size-20 rounded-full"
-        style={{
-          background: `conic-gradient(var(--primary) ${pct}%, var(--muted) 0)`,
-        }}
-      >
-        <div className="absolute inset-[9px] grid place-content-center rounded-full bg-card text-center">
-          <span className="text-base font-bold tabular-nums">{pct}%</span>
-        </div>
-      </div>
-      <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-        {label}
-      </span>
     </div>
   );
 }
@@ -95,17 +68,24 @@ function AuditTimeline({ asset }: { asset: Asset }) {
   );
 }
 
-export function AssetDetailDrawer({ assets }: { assets: Asset[] }) {
+export function AssetDetailDrawer({
+  assets,
+  machines,
+}: {
+  assets: Asset[];
+  machines: Record<string, MachineSummary>;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const id = searchParams.get("asset");
   const asset = id ? assets.find((a) => a.id === id) ?? null : null;
+  const machine = asset ? machines[asset.id] : undefined;
 
   const close = () => router.push(pathname, { scroll: false });
 
   const showHealth = asset
-    ? asset.type === "Computer" || asset.type === "Printer"
+    ? asset.type === "Computer" || asset.type === "Printer" || Boolean(machine)
     : false;
   const Icon = asset ? TYPE_ICON[asset.type] : null;
 
@@ -165,26 +145,54 @@ export function AssetDetailDrawer({ assets }: { assets: Asset[] }) {
                 <Field label="Cost Center" value={asset.costCenter} mono />
               </div>
 
-              {/* Live-scan health (mock) */}
+              {/* Live-scan data from the collector */}
               {showHealth && (
                 <>
                   <Separator />
                   <div>
                     <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Live scan · via collector · 02:00
+                      Live scan
+                      {machine?.lastSeen ? ` · last seen ${machine.lastSeen}` : ""}
                     </p>
-                    <div className="flex items-center justify-around rounded-xl border bg-card p-4">
-                      <HealthRing pct={hashPct(asset.serial + "d")} label="Disk" />
-                      <HealthRing pct={hashPct(asset.serial + "r")} label="RAM" />
-                      <div className="flex flex-col items-center gap-2">
-                        <span className="text-base font-bold tabular-nums">
-                          {hashPct(asset.serial + "u", 1, 40)}d
-                        </span>
-                        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                          Uptime
-                        </span>
+                    {machine ? (
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-xl border bg-card p-4">
+                        <Field
+                          label="OS"
+                          value={
+                            [machine.osName, machine.osVersion]
+                              .filter(Boolean)
+                              .join(" ") || "—"
+                          }
+                        />
+                        <Field label="CPU" value={machine.cpu || "—"} />
+                        <Field
+                          label="RAM"
+                          value={machine.ramGb != null ? `${machine.ramGb} GB` : "—"}
+                        />
+                        <Field
+                          label="Free disk"
+                          value={
+                            machine.freeDiskGb != null
+                              ? `${machine.freeDiskGb} GB`
+                              : "—"
+                          }
+                        />
+                        <Field
+                          label="Uptime"
+                          value={
+                            machine.uptimeHours != null
+                              ? `${machine.uptimeHours} h`
+                              : "—"
+                          }
+                        />
+                        <Field label="Scan status" value={machine.status || "—"} />
                       </div>
-                    </div>
+                    ) : (
+                      <p className="rounded-xl border border-dashed bg-card/50 p-4 text-sm text-muted-foreground">
+                        No scan data yet — run the collector with{" "}
+                        <span className="font-mono">--ingest</span>.
+                      </p>
+                    )}
                   </div>
                 </>
               )}

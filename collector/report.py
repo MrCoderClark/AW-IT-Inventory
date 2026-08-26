@@ -69,6 +69,3 @@ def print_summary(report: RunReport, saved_to: Path) -> None:
 
     console.print(table)
     console.print(f"\nReport written to [bold]{saved_to}[/bold]")
-    console.print(
-        "[dim]dry-run: ingest to the inventory API is not wired up yet.[/dim]"
-    )
