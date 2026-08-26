@@ -12,8 +12,8 @@ import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose";
 import { AUTH_ISSUER, JWKS_URI } from "./config";
 import type { AuthUser } from "./types";
 
-// Module-level singleton: caches keys across requests.
-const jwks = createRemoteJWKSet(new URL(JWKS_URI));
+// Module-level singleton: caches keys across requests (shared with service.ts).
+export const jwks = createRemoteJWKSet(new URL(JWKS_URI));
 
 function asStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
