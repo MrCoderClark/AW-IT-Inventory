@@ -8,11 +8,19 @@ import { AssetTable } from "@/components/asset-table";
 import { AssetDetailDrawer } from "@/components/asset-detail-drawer";
 import { DonutChart } from "@/components/charts/donut-chart";
 import { StatusBars } from "@/components/charts/status-bars";
-import { getAssets, getDashboardStats } from "@/db/queries";
+import {
+  getAssets,
+  getDashboardStats,
+  getMachineSummaries,
+} from "@/db/queries";
 import type { Kpi, Slice } from "@/lib/data";
 
 export default async function DashboardPage() {
-  const [assets, stats] = await Promise.all([getAssets(), getDashboardStats()]);
+  const [assets, stats, machines] = await Promise.all([
+    getAssets(),
+    getDashboardStats(),
+    getMachineSummaries(),
+  ]);
   const t = stats.byType;
   const s = stats.byStatus;
   const total = stats.total || 1;
@@ -96,7 +104,7 @@ export default async function DashboardPage() {
       </section>
 
       <Suspense fallback={null}>
-        <AssetDetailDrawer assets={assets} />
+        <AssetDetailDrawer assets={assets} machines={machines} />
       </Suspense>
     </div>
   );

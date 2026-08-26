@@ -39,3 +39,9 @@ connect_timeout: 0.6
 winrm_timeout: 25
 snmp_timeout: 2.0
 output_dir: out
+
+# Ingest (used with `scan --ingest`). Credentials come from .env
+# (OPUS_CLIENT_ID / OPUS_CLIENT_SECRET) — created via aw-auth's
+# `create_service_account`.
+auth_url: http://127.0.0.1:8000      # aw-auth
+ingest_url: http://localhost:3000    # web app

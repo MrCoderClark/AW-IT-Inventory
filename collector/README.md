@@ -40,6 +40,24 @@ uv run python main.py scan --no-printers           # Windows only
 `--target` / `--targets-file` override the `networks:` in `config.yaml`; a bare
 IP is treated as a single host.
 
+### Ingest to the inventory
+
+By default `scan` is **dry-run** (writes JSON only). Add `--ingest` to also POST
+the run to the web app, which reconciles machines to assets by serial:
+
+```bash
+uv run python main.py scan --target 192.168.72.172 --ingest
+```
+
+Setup (once):
+1. In aw-auth, create a service account and copy its credentials:
+   `uv run python manage.py create_service_account collector --scopes ingest:write asset:read`
+2. Put them in the collector's `.env`: `OPUS_CLIENT_ID` / `OPUS_CLIENT_SECRET`.
+3. Set `auth_url` (aw-auth) and `ingest_url` (web app) in `config.yaml`.
+
+The collector fetches a short-lived service token (client-credentials) and POSTs
+to `ingest_url/api/ingest/scan` with `Authorization: Bearer …`.
+
 Output: a table summary in the console + `out/<run_id>.json`.
 
 ## Endpoint prerequisites (for WinRM to succeed)

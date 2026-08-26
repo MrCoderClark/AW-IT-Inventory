@@ -54,9 +54,23 @@ class Config(BaseModel):
     snmp_timeout: float = 2.0
     output_dir: str = "out"
 
+    # Ingest (used with `scan --ingest`). Secrets come from env.
+    auth_url: str = "http://127.0.0.1:8000"
+    ingest_url: str = "http://localhost:3000"
+    client_id_env: str = "OPUS_CLIENT_ID"
+    client_secret_env: str = "OPUS_CLIENT_SECRET"
+
     @property
     def profiles_by_id(self) -> dict[str, CredentialProfile]:
         return {p.id: p for p in self.profiles}
+
+    @property
+    def client_id(self) -> str:
+        return os.environ.get(self.client_id_env, "")
+
+    @property
+    def client_secret(self) -> str:
+        return os.environ.get(self.client_secret_env, "")
 
 
 def load_env(path: Path | None = None) -> None:

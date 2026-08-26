@@ -113,6 +113,18 @@ export interface Slice {
   colorVar: string;
 }
 
+/* Live-scan summary for an asset, sourced from the machines table (collector). */
+export interface MachineSummary {
+  lastSeen: string;
+  osName: string;
+  osVersion: string;
+  cpu: string;
+  ramGb: number | null;
+  freeDiskGb: number | null;
+  uptimeHours: number | null;
+  status: string;
+}
+
 /* ---------------- Sample fleet (DB seed source) ----------------
    Consumed by src/db/seed.ts to populate Postgres. The UI reads assets from
    the database, not from this array. */
