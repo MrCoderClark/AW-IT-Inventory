@@ -54,6 +54,7 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Everything except the login page, auth API, Next internals and static files.
-  matcher: ["/((?!login|api/auth|_next/static|_next/image|favicon.ico).*)"],
+  // Protect pages only. All /api routes (auth, assets, ingest) self-authenticate,
+  // so the proxy must not redirect them to /login.
+  matcher: ["/((?!login|api|_next/static|_next/image|favicon.ico).*)"],
 };
