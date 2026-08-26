@@ -15,7 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { StatusBadge } from "@/components/status-badge";
-import { ASSETS, TYPE_ICON, type Asset } from "@/lib/data";
+import { TYPE_ICON, type Asset } from "@/lib/data";
 import { cn } from "@/lib/utils";
 
 /* Deterministic pseudo-metrics so the mock health looks stable per asset. */
@@ -95,12 +95,12 @@ function AuditTimeline({ asset }: { asset: Asset }) {
   );
 }
 
-export function AssetDetailDrawer() {
+export function AssetDetailDrawer({ assets }: { assets: Asset[] }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const id = searchParams.get("asset");
-  const asset = id ? ASSETS.find((a) => a.id === id) ?? null : null;
+  const asset = id ? assets.find((a) => a.id === id) ?? null : null;
 
   const close = () => router.push(pathname, { scroll: false });
 
