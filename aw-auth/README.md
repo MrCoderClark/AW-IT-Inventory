@@ -90,6 +90,27 @@ curl -X POST http://127.0.0.1:8000/v1/auth/login \
 curl http://127.0.0.1:8000/v1/auth/me -H "Authorization: Bearer <ACCESS>"
 ```
 
+## Service accounts (machine identity)
+
+Machine clients (e.g. the collector) authenticate with the **client-credentials
+grant** and receive a short-lived RS256 access token carrying **scopes** instead
+of user roles.
+
+```bash
+# create one (prints client_id + secret once)
+uv run python manage.py create_service_account collector --scopes ingest:write asset:read
+
+# exchange credentials for a token
+curl -X POST http://127.0.0.1:8000/v1/auth/token/client \
+  -H "Content-Type: application/json" \
+  -d '{"client_id":"svc_…","client_secret":"…"}'
+# -> { "access": "<jwt>", "token_type": "Bearer", "expires_in": 900 }
+```
+
+The token has `typ=service` and a `scopes` claim; resource servers (the web
+ingest API) verify it via JWKS and check for the required scope. Manage/disable
+accounts in the Django admin.
+
 ## Config
 
 Copy `.env.example` to `.env` and adjust. Key vars: `SECRET_KEY`, `DEBUG`,

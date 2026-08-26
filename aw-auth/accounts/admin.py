@@ -3,7 +3,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.forms import ReadOnlyPasswordHashField
 
-from .models import User
+from .models import ServiceAccount, User
 
 
 class UserCreationForm(forms.ModelForm):
@@ -81,3 +81,15 @@ class UserAdmin(BaseUserAdmin):
             },
         ),
     )
+
+
+@admin.register(ServiceAccount)
+class ServiceAccountAdmin(admin.ModelAdmin):
+    list_display = ("name", "client_id", "scopes", "is_active", "last_used_at")
+    search_fields = ("name", "client_id")
+    readonly_fields = ("secret_hash", "created_at", "last_used_at", "created_by")
+    # Secrets are only shown once, at creation via `manage.py create_service_account`.
+
+    @admin.display(boolean=True, description="active")
+    def is_active(self, obj: ServiceAccount) -> bool:
+        return obj.is_active
