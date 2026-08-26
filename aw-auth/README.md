@@ -48,6 +48,31 @@ uv run python manage.py runserver
 - Admin:    http://127.0.0.1:8000/admin/
 - Docs:     http://127.0.0.1:8000/v1/docs
 
+`runserver` is for **development only**.
+
+## Run in production (granian)
+
+[granian](https://github.com/emmett-framework/granian) is a fast, modern,
+cross-platform WSGI/ASGI server. Static files (incl. the admin) are served by
+WhiteNoise, so no separate static server is needed.
+
+```bash
+# 1) set DEBUG=False and a real SECRET_KEY + ALLOWED_HOSTS in .env
+# 2) collect static assets (WhiteNoise serves these when DEBUG=False)
+uv run python manage.py collectstatic --noinput
+
+# 3) serve (WSGI)
+uv run granian --interface wsgi config.wsgi:application \
+  --host 0.0.0.0 --port 8000 --workers 2 --blocking-threads 8
+```
+
+- `ALLOWED_HOSTS` must include the host you reach it on (e.g. `127.0.0.1`, the
+  server's IP/hostname).
+- `--workers` ~ CPU cores; `--blocking-threads` caps the per-worker pool (WSGI
+  is blocking). Without these, granian warns about a very large default thread
+  pool. Add `--reload` for a prod-like local run with restarts.
+- This is the command the Dockerfile will use in the on-prem deployment.
+
 ## Quick smoke test
 
 ```bash

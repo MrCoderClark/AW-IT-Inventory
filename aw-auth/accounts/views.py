@@ -36,7 +36,13 @@ class MeView(generics.RetrieveAPIView):
 
 
 class LogoutView(APIView):
-    """Blacklist a refresh token to end the session."""
+    """Blacklist a refresh token to end the session.
+
+    AllowAny: presenting a refresh token you already hold is enough to revoke
+    it, and logout must work even after the access token has expired.
+    """
+
+    permission_classes = [permissions.AllowAny]
 
     @extend_schema(request=None, responses={205: None})
     def post(self, request):
