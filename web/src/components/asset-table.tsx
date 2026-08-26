@@ -51,7 +51,6 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { StatusBadge } from "@/components/status-badge";
 import {
-  ASSETS,
   STATUS_META,
   TYPE_ICON,
   type Asset,
@@ -243,7 +242,7 @@ const columns: ColumnDef<Asset>[] = [
   },
 ];
 
-export function AssetTable() {
+export function AssetTable({ assets }: { assets: Asset[] }) {
   const router = useRouter();
   const pathname = usePathname();
   const openAsset = (id: string) =>
@@ -256,7 +255,7 @@ export function AssetTable() {
   const [globalFilter, setGlobalFilter] = React.useState("");
 
   const table = useReactTable({
-    data: ASSETS,
+    data: assets,
     columns,
     state: { sorting, columnFilters, globalFilter },
     meta: { openAsset },

@@ -104,25 +104,8 @@ export interface Kpi {
   icon: LucideIcon;
 }
 
-export const KPIS: Kpi[] = [
-  {
-    label: "Total IT Assets",
-    value: 351,
-    sub: "vs last quarter",
-    delta: 4.2,
-    icon: LayoutDashboard,
-  },
-  { label: "Computers", value: 101, sub: "28 newly deployed", icon: Cpu },
-  { label: "Monitors", value: 200, sub: "19 activated this week", icon: Monitor },
-  {
-    label: "Printers / Phones",
-    value: 50,
-    sub: "12 available in pool",
-    icon: Smartphone,
-  },
-];
-
-/* ---------------- Charts ---------------- */
+/* KPI values/distribution/status are computed from the database at request
+   time (see src/db/queries.ts and the dashboard page). */
 
 export interface Slice {
   label: string;
@@ -130,21 +113,9 @@ export interface Slice {
   colorVar: string;
 }
 
-export const DISTRIBUTION: Slice[] = [
-  { label: "Monitors", value: 200, colorVar: "var(--chart-2)" },
-  { label: "Computers", value: 101, colorVar: "var(--chart-1)" },
-  { label: "Phones", value: 40, colorVar: "var(--chart-4)" },
-  { label: "Printers", value: 10, colorVar: "var(--chart-3)" },
-];
-
-export const STATUS_BREAKDOWN: { label: string; pct: number; colorVar: string }[] =
-  [
-    { label: "Active", pct: 88, colorVar: "var(--status-deployed)" },
-    { label: "Maintenance", pct: 5, colorVar: "var(--status-maintenance)" },
-    { label: "Storage", pct: 7, colorVar: "var(--status-storage)" },
-  ];
-
-/* ---------------- Assets (dummy) ---------------- */
+/* ---------------- Sample fleet (DB seed source) ----------------
+   Consumed by src/db/seed.ts to populate Postgres. The UI reads assets from
+   the database, not from this array. */
 
 export const ASSETS: Asset[] = [
   {

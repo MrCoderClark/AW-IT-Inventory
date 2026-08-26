@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Cpu, LayoutDashboard, Monitor, Smartphone } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -8,14 +8,55 @@ import { AssetTable } from "@/components/asset-table";
 import { AssetDetailDrawer } from "@/components/asset-detail-drawer";
 import { DonutChart } from "@/components/charts/donut-chart";
 import { StatusBars } from "@/components/charts/status-bars";
-import { KPIS, DISTRIBUTION, STATUS_BREAKDOWN } from "@/lib/data";
+import { getAssets, getDashboardStats } from "@/db/queries";
+import type { Kpi, Slice } from "@/lib/data";
 
-export default function DashboardPage() {
-  const totalAssets = DISTRIBUTION.reduce((a, s) => a + s.value, 0);
+export default async function DashboardPage() {
+  const [assets, stats] = await Promise.all([getAssets(), getDashboardStats()]);
+  const t = stats.byType;
+  const s = stats.byStatus;
+  const total = stats.total || 1;
+
+  const kpis: Kpi[] = [
+    { label: "Total IT Assets", value: stats.total, sub: "across the fleet", icon: LayoutDashboard },
+    { label: "Computers", value: t.Computer ?? 0, sub: "deployed & pool", icon: Cpu },
+    { label: "Monitors", value: t.Monitor ?? 0, sub: "displays", icon: Monitor },
+    {
+      label: "Printers / Phones",
+      value: (t.Printer ?? 0) + (t.Phone ?? 0),
+      sub: "peripherals",
+      icon: Smartphone,
+    },
+  ];
+
+  const distribution: Slice[] = [
+    { label: "Monitors", value: t.Monitor ?? 0, colorVar: "var(--chart-2)" },
+    { label: "Computers", value: t.Computer ?? 0, colorVar: "var(--chart-1)" },
+    { label: "Phones", value: t.Phone ?? 0, colorVar: "var(--chart-4)" },
+    { label: "Printers", value: t.Printer ?? 0, colorVar: "var(--chart-3)" },
+    { label: "Network", value: t.Network ?? 0, colorVar: "var(--chart-5)" },
+  ].filter((slice) => slice.value > 0);
+
+  const statusBreakdown = [
+    {
+      label: "Active",
+      pct: Math.round((((s.deployed ?? 0) + (s.online ?? 0)) / total) * 100),
+      colorVar: "var(--status-deployed)",
+    },
+    {
+      label: "Maintenance",
+      pct: Math.round(((s.maintenance ?? 0) / total) * 100),
+      colorVar: "var(--status-maintenance)",
+    },
+    {
+      label: "Storage",
+      pct: Math.round(((s.storage ?? 0) / total) * 100),
+      colorVar: "var(--status-storage)",
+    },
+  ];
 
   return (
     <div className="mx-auto flex max-w-[1400px] flex-col gap-6">
-      {/* Page head */}
       <div className="flex flex-wrap items-center gap-4">
         <h1 className="text-2xl font-medium tracking-tight md:text-[26px]">
           IT Asset Management:{" "}
@@ -27,24 +68,21 @@ export default function DashboardPage() {
         </Button>
       </div>
 
-      {/* KPIs */}
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {KPIS.map((kpi) => (
+        {kpis.map((kpi) => (
           <KpiCard key={kpi.label} kpi={kpi} />
         ))}
       </section>
 
-      {/* Inventory table */}
-      <AssetTable />
+      <AssetTable assets={assets} />
 
-      {/* Analytics */}
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Asset Distribution</CardTitle>
           </CardHeader>
           <CardContent>
-            <DonutChart data={DISTRIBUTION} total={totalAssets} />
+            <DonutChart data={distribution} total={stats.total} />
           </CardContent>
         </Card>
         <Card>
@@ -52,13 +90,13 @@ export default function DashboardPage() {
             <CardTitle>Asset Status</CardTitle>
           </CardHeader>
           <CardContent>
-            <StatusBars data={STATUS_BREAKDOWN} />
+            <StatusBars data={statusBreakdown} />
           </CardContent>
         </Card>
       </section>
 
       <Suspense fallback={null}>
-        <AssetDetailDrawer />
+        <AssetDetailDrawer assets={assets} />
       </Suspense>
     </div>
   );

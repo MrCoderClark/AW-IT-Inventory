@@ -18,14 +18,15 @@ import {
   NAV_PRIMARY,
   NAV_ASSETS,
   NAV_MANAGE,
-  ASSETS,
   TYPE_ICON,
+  type Asset,
 } from "@/lib/data";
 
 export const OPEN_COMMAND_EVENT = "opus:open-command";
 
 export function CommandPalette() {
   const [open, setOpen] = React.useState(false);
+  const [assets, setAssets] = React.useState<Asset[]>([]);
   const router = useRouter();
   const { setTheme, resolvedTheme } = useTheme();
 
@@ -44,6 +45,21 @@ export function CommandPalette() {
       window.removeEventListener(OPEN_COMMAND_EVENT, onOpen);
     };
   }, []);
+
+  // Load assets lazily the first time the palette opens.
+  React.useEffect(() => {
+    if (!open || assets.length) return;
+    let active = true;
+    fetch("/api/assets")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => {
+        if (active) setAssets(data);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [open, assets.length]);
 
   const go = (href: string) => {
     setOpen(false);
@@ -77,7 +93,7 @@ export function CommandPalette() {
         <CommandSeparator />
 
         <CommandGroup heading="Assets">
-          {ASSETS.slice(0, 8).map((a) => {
+          {assets.slice(0, 8).map((a) => {
             const Icon = TYPE_ICON[a.type];
             return (
               <CommandItem
