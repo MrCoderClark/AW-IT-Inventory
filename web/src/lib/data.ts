@@ -11,6 +11,7 @@ import {
   FileText,
   Settings,
   ScanLine,
+  HelpCircle,
 } from "lucide-react";
 
 /* ---------------- Types ---------------- */
@@ -65,6 +66,63 @@ export const TYPE_ICON: Record<AssetType, LucideIcon> = {
   Phone: Smartphone,
   Network: Network,
 };
+
+/* ---------------- Discovered devices (scan inbox) ---------------- */
+
+/* A scanned machine kind (collector `device_type`) and how it maps into
+   managed inventory when quick-created. */
+export const KIND_META: Record<
+  string,
+  { label: string; icon: LucideIcon; type: AssetType }
+> = {
+  windows: { label: "Windows", icon: Cpu, type: "Computer" },
+  printer: { label: "Printer", icon: Printer, type: "Printer" },
+  unknown: { label: "Unknown", icon: HelpCircle, type: "Computer" },
+};
+
+export function kindMeta(kind: string) {
+  return KIND_META[kind] ?? KIND_META.unknown;
+}
+
+/* A ranked suggestion of the existing asset a discovered device probably is. */
+export interface DeviceSuggestion {
+  assetId: string; // uuid, used to link
+  tag: string; // human key, shown to the admin
+  name: string;
+  type: AssetType;
+  serial: string;
+  reason: string; // why it was suggested, e.g. "Exact serial match"
+  strength: "exact" | "strong" | "weak";
+}
+
+/* A scanned machine with no managed asset yet — a row in the inbox. */
+export interface DiscoveredDevice {
+  id: string; // machine uuid
+  hostname: string;
+  ip: string;
+  subnet: string;
+  kind: string; // windows | printer | unknown
+  os: string; // osName + osVersion, combined
+  serial: string;
+  spec: string; // short hardware summary (cpu · ram), when scanned
+  lastSeen: string; // ISO date
+  ignored: boolean; // true when dismissed from the active inbox
+  suggestions: DeviceSuggestion[];
+}
+
+/* Minimal asset shape for the manual "link to existing asset" picker. */
+export interface LinkAsset {
+  id: string; // uuid
+  tag: string;
+  name: string;
+  type: AssetType;
+  serial: string;
+}
+
+/* Result of an inbox write action (link / create / ignore / restore). */
+export type ActionResult =
+  | { ok: true; message: string; tag?: string }
+  | { ok: false; error: string };
 
 /* ---------------- Navigation ---------------- */
 

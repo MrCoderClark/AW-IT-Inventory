@@ -1,6 +1,6 @@
 import "server-only";
 
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 import { db } from "./index";
 import { assets, machines } from "./schema";
@@ -110,12 +110,19 @@ export async function ingestScan(payload: IngestPayload): Promise<IngestResult> 
       lastSeenAt: now,
     };
 
+    // On re-scan, refresh the scan fields but never move a row backward: keep an
+    // existing (manually linked or previously matched) assetId, and never touch
+    // ignoredAt. A serial match still fills in assetId for a row that was unlinked.
     await db
       .insert(machines)
       .values(row)
       .onConflictDoUpdate({
         target: machines.matchKey,
-        set: { ...row, updatedAt: now },
+        set: {
+          ...row,
+          assetId: sql`coalesce(${machines.assetId}, ${assetId})`,
+          updatedAt: now,
+        },
       });
     result.upserted += 1;
 
