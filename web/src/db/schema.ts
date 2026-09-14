@@ -79,6 +79,9 @@ export const machines = pgTable("machines", {
   credentialProfile: text("credential_profile"),
   lastScanStatus: text("last_scan_status"),
   lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+  // Discovered-devices inbox: null = active (in the inbox), set = dismissed.
+  // Never touched by the ingest upsert, so ignore survives re-scans.
+  ignoredAt: timestamp("ignored_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),
