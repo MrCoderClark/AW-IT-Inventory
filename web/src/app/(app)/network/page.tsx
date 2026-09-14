@@ -1,6 +1,6 @@
 import { Lock } from "lucide-react";
 
-import { AssetTable, columnsFor } from "@/components/asset-table";
+import { AssetTable } from "@/components/asset-table";
 import { PagePlaceholder } from "@/components/page-placeholder";
 import { getAssetsByType } from "@/db/queries";
 import { hasPermission, requireUser } from "@/lib/auth/session";
@@ -24,7 +24,7 @@ export default async function Page() {
     <AssetTable
       assets={assets}
       config={{
-        columns: columnsFor("Network"),
+        type: "Network",
         title: "Network",
         emptyMessage: "No network gear yet.",
       }}

@@ -20,10 +20,12 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
   }
 
   const { id } = await params;
-  const asset = await getAssetById(id);
+  // Both key off the same route tag, so fetch them together.
+  const [asset, machine] = await Promise.all([
+    getAssetById(id),
+    getMachineSummary(id),
+  ]);
   if (!asset) notFound();
-
-  const machine = await getMachineSummary(asset.id);
 
   return <AssetDetail asset={asset} machine={machine} />;
 }

@@ -99,7 +99,7 @@ export function CommandPalette() {
               <CommandItem
                 key={a.id}
                 value={`${a.id} ${a.name} ${a.serial} ${a.assignee?.name ?? ""}`}
-                onSelect={() => go(`/assets/${a.id}`)}
+                onSelect={() => go(`/assets/${encodeURIComponent(a.id)}`)}
               >
                 <Icon />
                 <span className="font-medium">{a.name}</span>

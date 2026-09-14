@@ -255,7 +255,7 @@ const actionsColumn: ColumnDef<Asset> = {
 };
 
 /** The dashboard's all-types column set (includes the Type column). */
-export const allColumns: ColumnDef<Asset>[] = [
+const allColumns: ColumnDef<Asset>[] = [
   idColumn,
   nameColumn,
   typeColumn,
@@ -270,7 +270,7 @@ export const allColumns: ColumnDef<Asset>[] = [
 
 /** Per-category column sets. Already scoped to one type, so no Type column;
    columns that don't apply to a category are dropped (kept pragmatic). */
-export function columnsFor(type: AssetType): ColumnDef<Asset>[] {
+function columnsFor(type: AssetType): ColumnDef<Asset>[] {
   switch (type) {
     case "Computer":
       return [
@@ -322,7 +322,10 @@ export function columnsFor(type: AssetType): ColumnDef<Asset>[] {
 }
 
 export type AssetTableConfig = {
-  columns: ColumnDef<Asset>[];
+  /** The category this table is scoped to. Omit for the all-types dashboard
+     view. Passed as a plain string so the config is serializable from a
+     server component; the client picks the matching column set below. */
+  type?: AssetType;
   showTypeFilter?: boolean;
   title?: string;
   emptyMessage?: string;
@@ -335,7 +338,11 @@ export function AssetTable({
   assets: Asset[];
   config: AssetTableConfig;
 }) {
-  const { columns, showTypeFilter = false, title, emptyMessage } = config;
+  const { type, showTypeFilter = false, title, emptyMessage } = config;
+  const columns = React.useMemo(
+    () => (type ? columnsFor(type) : allColumns),
+    [type],
+  );
   const router = useRouter();
   const openAsset = (id: string) =>
     router.push(`/assets/${encodeURIComponent(id)}`);
@@ -362,8 +369,12 @@ export function AssetTable({
     initialState: { pagination: { pageSize: 8 } },
   });
 
-  const typeFilter =
-    (table.getColumn("type")?.getFilterValue() as string) ?? "all";
+  // Only the all-types view has a `type` column; looking it up otherwise
+  // makes TanStack log "Column with id 'type' does not exist". The value is
+  // only used by the type filter, which shows only when that column exists.
+  const typeFilter = showTypeFilter
+    ? ((table.getColumn("type")?.getFilterValue() as string) ?? "all")
+    : "all";
   const statusFilter =
     (table.getColumn("status")?.getFilterValue() as string) ?? "all";
 

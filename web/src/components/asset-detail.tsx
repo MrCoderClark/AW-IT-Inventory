@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, Copy, Pencil, Printer, UserCog } from "lucide-react";
 import { toast } from "sonner";
 
@@ -72,15 +72,23 @@ export function AssetDetail({
   const showHealth =
     asset.type === "Computer" || asset.type === "Printer" || Boolean(machine);
 
+  const router = useRouter();
+  // Return to wherever the user came from (a category page), falling back to
+  // the dashboard on a direct load or refresh with no in-app history.
+  const goBack = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) router.back();
+    else router.push("/dashboard");
+  };
+
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
-      <Link
-        href="/dashboard"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+      <button
+        onClick={goBack}
+        className="inline-flex items-center gap-1.5 self-start text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="size-4" />
         Back to inventory
-      </Link>
+      </button>
 
       {/* Header */}
       <div className="flex flex-col gap-3">

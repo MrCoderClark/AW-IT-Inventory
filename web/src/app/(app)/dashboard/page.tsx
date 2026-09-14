@@ -3,7 +3,7 @@ import { ChevronDown, Cpu, LayoutDashboard, Monitor, Smartphone } from "lucide-r
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { KpiCard } from "@/components/kpi-card";
-import { AssetTable, allColumns } from "@/components/asset-table";
+import { AssetTable } from "@/components/asset-table";
 import { DonutChart } from "@/components/charts/donut-chart";
 import { StatusBars } from "@/components/charts/status-bars";
 import { getAssets, getDashboardStats } from "@/db/queries";
@@ -75,10 +75,7 @@ export default async function DashboardPage() {
         ))}
       </section>
 
-      <AssetTable
-        assets={assets}
-        config={{ columns: allColumns, showTypeFilter: true }}
-      />
+      <AssetTable assets={assets} config={{ showTypeFilter: true }} />
 
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
