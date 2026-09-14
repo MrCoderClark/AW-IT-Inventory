@@ -38,6 +38,7 @@ Scan the fleet → authenticate as a service account → ingest → reconcile �
 ### Web UI ✅
 | Phase | Branch | What shipped |
 |---|---|---|
+| Discovered-devices inbox | `feat/discovered-devices-inbox` | `/scans` inbox: lists unmatched machines with up-to-3 ranked asset suggestions; link / quick-create / ignore / restore via `asset:write`-gated Server Actions; one nullable `machines.ignoredAt` column (ignore survives re-scans) |
 | Asset detail | `feat/asset-detail` | URL-driven side drawer (metadata, health, audit, actions); clickable rows + ⌘K deep-link |
 | Dashboard | `feat/ui-dashboard` | Next.js + Tailwind v4 + shadcn (Nova); sidebar/top bar, ⌘K palette, theme toggle, KPI cards, TanStack table, charts |
 
@@ -49,7 +50,6 @@ Scan the fleet → authenticate as a service account → ingest → reconcile �
 
 ## Next / backlog 🔜
 
-- **Discovered-devices inbox** — UI to review unmatched machines and link/create assets.
 - **Category list views** — real Computers/Monitors/Printers/Phones/Network tables (replace placeholders).
 - **Add/Edit asset form** — create/edit from the UI.
 - **Docker Compose** — package web + aw-auth + collector for on-prem deploy.
