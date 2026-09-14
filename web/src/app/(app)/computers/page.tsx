@@ -1,12 +1,33 @@
-import { Cpu } from "lucide-react";
-import { PagePlaceholder } from "@/components/page-placeholder";
+import { Lock } from "lucide-react";
 
-export default function Page() {
+import { AssetTable, columnsFor } from "@/components/asset-table";
+import { PagePlaceholder } from "@/components/page-placeholder";
+import { getAssetsByType } from "@/db/queries";
+import { hasPermission, requireUser } from "@/lib/auth/session";
+
+export default async function Page() {
+  const user = await requireUser();
+
+  if (!hasPermission(user, "asset:read")) {
+    return (
+      <PagePlaceholder
+        title="Computers"
+        description="You don't have permission to view assets. Ask an admin for the asset:read role."
+        icon={Lock}
+      />
+    );
+  }
+
+  const assets = await getAssetsByType("Computer");
+
   return (
-    <PagePlaceholder
-      title="Computers"
-      description="A filtered view of every computer, with per-machine hardware and health from the collector. Building this next."
-      icon={Cpu}
+    <AssetTable
+      assets={assets}
+      config={{
+        columns: columnsFor("Computer"),
+        title: "Computers",
+        emptyMessage: "No computers yet.",
+      }}
     />
   );
 }

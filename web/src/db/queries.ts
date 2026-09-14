@@ -87,6 +87,37 @@ export async function getAssets(): Promise<Asset[]> {
   return rows.map(toAsset);
 }
 
+/** Assets of a single category, for the per-type list pages. */
+export async function getAssetsByType(type: AssetType): Promise<Asset[]> {
+  const rows = await db
+    .select(assetSelect)
+    .from(assets)
+    .leftJoin(people, eq(assets.assigneeId, people.id))
+    .where(eq(assets.type, type))
+    .orderBy(asc(assets.tag));
+  return rows.map(toAsset);
+}
+
+/** One asset by its human tag (the UI `id`), or null if none matches. */
+export async function getAssetById(id: string): Promise<Asset | null> {
+  const rows = await db
+    .select(assetSelect)
+    .from(assets)
+    .leftJoin(people, eq(assets.assigneeId, people.id))
+    .where(eq(assets.tag, id))
+    .limit(1);
+  const row = rows[0];
+  return row ? toAsset(row) : null;
+}
+
+/** Latest live-scan summary for one asset tag, or undefined when unmatched. */
+export async function getMachineSummary(
+  id: string,
+): Promise<MachineSummary | undefined> {
+  const summaries = await getMachineSummaries();
+  return summaries[id];
+}
+
 /** Latest live-scan summary per matched asset, keyed by asset tag. */
 export async function getMachineSummaries(): Promise<
   Record<string, MachineSummary>
