@@ -78,13 +78,90 @@ function toAsset(r: Row): Asset {
   };
 }
 
-export async function getAssets(): Promise<Asset[]> {
-  const rows = await db
+/** Shared asset select + people join; callers add their own where/order/limit. */
+function selectAssets() {
+  return db
     .select(assetSelect)
     .from(assets)
-    .leftJoin(people, eq(assets.assigneeId, people.id))
+    .leftJoin(people, eq(assets.assigneeId, people.id));
+}
+
+export async function getAssets(): Promise<Asset[]> {
+  const rows = await selectAssets().orderBy(asc(assets.tag));
+  return rows.map(toAsset);
+}
+
+/** Assets of a single category, for the per-type list pages. */
+export async function getAssetsByType(type: AssetType): Promise<Asset[]> {
+  const rows = await selectAssets()
+    .where(eq(assets.type, type))
     .orderBy(asc(assets.tag));
   return rows.map(toAsset);
+}
+
+/** One asset by its human tag (the UI `id`), or null if none matches. */
+export async function getAssetById(id: string): Promise<Asset | null> {
+  const rows = await selectAssets().where(eq(assets.tag, id)).limit(1);
+  const row = rows[0];
+  return row ? toAsset(row) : null;
+}
+
+const machineSummarySelect = {
+  tag: assets.tag,
+  lastSeenAt: machines.lastSeenAt,
+  osName: machines.osName,
+  osVersion: machines.osVersion,
+  hardware: machines.hardware,
+  health: machines.health,
+  status: machines.lastScanStatus,
+};
+
+type MachineSummaryRow = {
+  tag: string;
+  lastSeenAt: Date | string | null;
+  osName: string | null;
+  osVersion: string | null;
+  hardware: unknown;
+  health: unknown;
+  status: string | null;
+};
+
+function toMachineSummary(r: MachineSummaryRow): MachineSummary {
+  const hw = (r.hardware ?? {}) as Record<string, unknown>;
+  const health = (r.health ?? {}) as Record<string, unknown>;
+  const freeMap = health.free_disk_gb as Record<string, number> | undefined;
+  const firstFree =
+    freeMap && typeof freeMap === "object"
+      ? Number(Object.values(freeMap)[0])
+      : null;
+
+  return {
+    lastSeen: r.lastSeenAt ? toDateStr(r.lastSeenAt) : "",
+    osName: (r.osName ?? (health.os_name as string) ?? "") || "",
+    osVersion: (r.osVersion ?? (health.os_version as string) ?? "") || "",
+    cpu: (hw.cpu as string) ?? "",
+    ramGb: typeof hw.ram_gb === "number" ? (hw.ram_gb as number) : null,
+    freeDiskGb: Number.isFinite(firstFree) ? firstFree : null,
+    uptimeHours:
+      typeof health.uptime_hours === "number"
+        ? (health.uptime_hours as number)
+        : null,
+    status: r.status ?? "ok",
+  };
+}
+
+/** Latest live-scan summary for one asset tag, or undefined when unmatched.
+   A scoped query (one row), not a full-fleet scan filtered in Node. */
+export async function getMachineSummary(
+  id: string,
+): Promise<MachineSummary | undefined> {
+  const rows = await db
+    .select(machineSummarySelect)
+    .from(machines)
+    .innerJoin(assets, eq(machines.assetId, assets.id))
+    .where(eq(assets.tag, id))
+    .limit(1);
+  return rows[0] ? toMachineSummary(rows[0]) : undefined;
 }
 
 /** Latest live-scan summary per matched asset, keyed by asset tag. */
@@ -92,41 +169,13 @@ export async function getMachineSummaries(): Promise<
   Record<string, MachineSummary>
 > {
   const rows = await db
-    .select({
-      tag: assets.tag,
-      lastSeenAt: machines.lastSeenAt,
-      osName: machines.osName,
-      osVersion: machines.osVersion,
-      hardware: machines.hardware,
-      health: machines.health,
-      status: machines.lastScanStatus,
-    })
+    .select(machineSummarySelect)
     .from(machines)
     .innerJoin(assets, eq(machines.assetId, assets.id));
 
   const map: Record<string, MachineSummary> = {};
   for (const r of rows) {
-    const hw = (r.hardware ?? {}) as Record<string, unknown>;
-    const health = (r.health ?? {}) as Record<string, unknown>;
-    const freeMap = health.free_disk_gb as Record<string, number> | undefined;
-    const firstFree =
-      freeMap && typeof freeMap === "object"
-        ? Number(Object.values(freeMap)[0])
-        : null;
-
-    map[r.tag] = {
-      lastSeen: r.lastSeenAt ? toDateStr(r.lastSeenAt) : "",
-      osName: (r.osName ?? (health.os_name as string) ?? "") || "",
-      osVersion: (r.osVersion ?? (health.os_version as string) ?? "") || "",
-      cpu: (hw.cpu as string) ?? "",
-      ramGb: typeof hw.ram_gb === "number" ? (hw.ram_gb as number) : null,
-      freeDiskGb: Number.isFinite(firstFree) ? firstFree : null,
-      uptimeHours:
-        typeof health.uptime_hours === "number"
-          ? (health.uptime_hours as number)
-          : null,
-      status: r.status ?? "ok",
-    };
+    map[r.tag] = toMachineSummary(r);
   }
   return map;
 }

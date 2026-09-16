@@ -1,25 +1,18 @@
-import { Suspense } from "react";
 import { ChevronDown, Cpu, LayoutDashboard, Monitor, Smartphone } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { KpiCard } from "@/components/kpi-card";
 import { AssetTable } from "@/components/asset-table";
-import { AssetDetailDrawer } from "@/components/asset-detail-drawer";
 import { DonutChart } from "@/components/charts/donut-chart";
 import { StatusBars } from "@/components/charts/status-bars";
-import {
-  getAssets,
-  getDashboardStats,
-  getMachineSummaries,
-} from "@/db/queries";
+import { getAssets, getDashboardStats } from "@/db/queries";
 import type { Kpi, Slice } from "@/lib/data";
 
 export default async function DashboardPage() {
-  const [assets, stats, machines] = await Promise.all([
+  const [assets, stats] = await Promise.all([
     getAssets(),
     getDashboardStats(),
-    getMachineSummaries(),
   ]);
   const t = stats.byType;
   const s = stats.byStatus;
@@ -82,7 +75,7 @@ export default async function DashboardPage() {
         ))}
       </section>
 
-      <AssetTable assets={assets} />
+      <AssetTable assets={assets} config={{ showTypeFilter: true }} />
 
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
@@ -102,10 +95,6 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
       </section>
-
-      <Suspense fallback={null}>
-        <AssetDetailDrawer assets={assets} machines={machines} />
-      </Suspense>
     </div>
   );
 }

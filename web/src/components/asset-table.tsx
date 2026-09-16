@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import {
   type ColumnDef,
   type SortingState,
@@ -55,6 +55,7 @@ import {
   TYPE_ICON,
   type Asset,
   type AssetStatus,
+  type AssetType,
 } from "@/lib/data";
 import { cn } from "@/lib/utils";
 
@@ -91,162 +92,260 @@ function SortHeader({
   );
 }
 
-const columns: ColumnDef<Asset>[] = [
-  {
-    accessorKey: "id",
-    header: ({ column }) => (
-      <SortHeader
-        label="Asset ID"
-        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-      />
-    ),
-    cell: ({ row }) => (
-      <span className="font-mono text-[13px] font-semibold">{row.original.id}</span>
-    ),
+/* ---------------- Column definitions ----------------
+   Defined once, keyed by id; `columnsFor(type)` picks the order per category
+   and the dashboard uses the full `allColumns` set (with the Type column). */
+
+const idColumn: ColumnDef<Asset> = {
+  accessorKey: "id",
+  header: ({ column }) => (
+    <SortHeader
+      label="Asset ID"
+      onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+    />
+  ),
+  cell: ({ row }) => (
+    <span className="font-mono text-[13px] font-semibold">{row.original.id}</span>
+  ),
+};
+
+const nameColumn: ColumnDef<Asset> = {
+  accessorKey: "name",
+  header: ({ column }) => (
+    <SortHeader
+      label="Asset Name"
+      onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+    />
+  ),
+  cell: ({ row }) => {
+    const Icon = TYPE_ICON[row.original.type];
+    return (
+      <div className="flex items-center gap-3">
+        <span className="grid size-8 shrink-0 place-items-center rounded-lg border bg-muted text-muted-foreground">
+          <Icon className="size-4" />
+        </span>
+        <span className="font-medium">{row.original.name}</span>
+      </div>
+    );
   },
-  {
-    accessorKey: "name",
-    header: ({ column }) => (
-      <SortHeader
-        label="Asset Name"
-        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-      />
-    ),
-    cell: ({ row }) => {
-      const Icon = TYPE_ICON[row.original.type];
-      return (
-        <div className="flex items-center gap-3">
-          <span className="grid size-8 shrink-0 place-items-center rounded-lg border bg-muted text-muted-foreground">
-            <Icon className="size-4" />
-          </span>
-          <span className="font-medium">{row.original.name}</span>
-        </div>
-      );
-    },
+};
+
+const typeColumn: ColumnDef<Asset> = {
+  accessorKey: "type",
+  header: "Type",
+  cell: ({ row }) => (
+    <span className="text-muted-foreground">{row.original.type}</span>
+  ),
+  filterFn: "equals",
+};
+
+const serialColumn: ColumnDef<Asset> = {
+  accessorKey: "serial",
+  header: "Serial Number",
+  cell: ({ row }) => (
+    <span className="font-mono text-xs text-muted-foreground">
+      {row.original.serial}
+    </span>
+  ),
+};
+
+const modelColumn: ColumnDef<Asset> = {
+  accessorKey: "model",
+  header: "Model",
+  cell: ({ row }) => (
+    <span className="text-muted-foreground">{row.original.model}</span>
+  ),
+};
+
+const assigneeColumn: ColumnDef<Asset> = {
+  id: "assignee",
+  accessorFn: (a) => a.assignee?.name ?? "Pool",
+  header: "Assigned To",
+  cell: ({ row }) => {
+    const a = row.original.assignee;
+    return (
+      <div className="flex items-center gap-2.5">
+        <Avatar className="size-7">
+          <AvatarFallback
+            className={cn(
+              "text-[10px] font-bold",
+              a
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground",
+            )}
+          >
+            {a ? a.initials : "··"}
+          </AvatarFallback>
+        </Avatar>
+        <span className={cn(!a && "text-muted-foreground")}>
+          {a ? a.name : "Pool"}
+        </span>
+      </div>
+    );
   },
-  {
-    accessorKey: "type",
-    header: "Type",
-    cell: ({ row }) => (
-      <span className="text-muted-foreground">{row.original.type}</span>
-    ),
-    filterFn: "equals",
-  },
-  {
-    accessorKey: "serial",
-    header: "Serial Number",
-    cell: ({ row }) => (
-      <span className="font-mono text-xs text-muted-foreground">
-        {row.original.serial}
-      </span>
-    ),
-  },
-  {
-    accessorKey: "model",
-    header: "Model",
-    cell: ({ row }) => (
-      <span className="text-muted-foreground">{row.original.model}</span>
-    ),
-  },
-  {
-    id: "assignee",
-    accessorFn: (a) => a.assignee?.name ?? "Pool",
-    header: "Assigned To",
-    cell: ({ row }) => {
-      const a = row.original.assignee;
-      return (
-        <div className="flex items-center gap-2.5">
-          <Avatar className="size-7">
-            <AvatarFallback
-              className={cn(
-                "text-[10px] font-bold",
-                a
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground",
-              )}
-            >
-              {a ? a.initials : "··"}
-            </AvatarFallback>
-          </Avatar>
-          <span className={cn(!a && "text-muted-foreground")}>
-            {a ? a.name : "Pool"}
-          </span>
-        </div>
-      );
-    },
-  },
-  {
-    accessorKey: "location",
-    header: "Location",
-    cell: ({ row }) => (
-      <span className="text-muted-foreground">{row.original.location}</span>
-    ),
-  },
-  {
-    accessorKey: "status",
-    header: "Status",
-    cell: ({ row }) => <StatusBadge status={row.original.status} />,
-    filterFn: "equals",
-  },
-  {
-    accessorKey: "lastSync",
-    header: ({ column }) => (
-      <SortHeader
-        label="Last Sync"
-        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-      />
-    ),
-    cell: ({ row }) => (
-      <span className="text-muted-foreground tabular-nums">
-        {fmtDate(row.original.lastSync)}
-      </span>
-    ),
-  },
-  {
-    id: "actions",
-    header: "",
-    cell: ({ row, table }) => (
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-8 text-muted-foreground"
-              aria-label={`Actions for ${row.original.id}`}
-            />
-          }
+};
+
+const locationColumn: ColumnDef<Asset> = {
+  accessorKey: "location",
+  header: "Location",
+  cell: ({ row }) => (
+    <span className="text-muted-foreground">{row.original.location}</span>
+  ),
+};
+
+const statusColumn: ColumnDef<Asset> = {
+  accessorKey: "status",
+  header: "Status",
+  cell: ({ row }) => <StatusBadge status={row.original.status} />,
+  filterFn: "equals",
+};
+
+const lastSyncColumn: ColumnDef<Asset> = {
+  accessorKey: "lastSync",
+  header: ({ column }) => (
+    <SortHeader
+      label="Last Sync"
+      onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+    />
+  ),
+  cell: ({ row }) => (
+    <span className="text-muted-foreground tabular-nums">
+      {fmtDate(row.original.lastSync)}
+    </span>
+  ),
+};
+
+const actionsColumn: ColumnDef<Asset> = {
+  id: "actions",
+  header: "",
+  cell: ({ row, table }) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8 text-muted-foreground"
+            aria-label={`Actions for ${row.original.id}`}
+          />
+        }
+      >
+        <MoreHorizontal className="size-4" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-44">
+        <DropdownMenuItem
+          onClick={() => {
+            navigator.clipboard?.writeText(row.original.id);
+            toast.success("Asset ID copied", { description: row.original.id });
+          }}
         >
-          <MoreHorizontal className="size-4" />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-44">
-          <DropdownMenuItem
-            onClick={() => {
-              navigator.clipboard?.writeText(row.original.id);
-              toast.success("Asset ID copied", { description: row.original.id });
-            }}
-          >
-            Copy asset ID
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => table.options.meta?.openAsset(row.original.id)}
-          >
-            View details
-          </DropdownMenuItem>
-          <DropdownMenuItem>Reassign</DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive">Retire asset</DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    ),
-  },
+          Copy asset ID
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => table.options.meta?.openAsset(row.original.id)}
+        >
+          View details
+        </DropdownMenuItem>
+        <DropdownMenuItem>Reassign</DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem variant="destructive">Retire asset</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  ),
+};
+
+/** The dashboard's all-types column set (includes the Type column). */
+const allColumns: ColumnDef<Asset>[] = [
+  idColumn,
+  nameColumn,
+  typeColumn,
+  serialColumn,
+  modelColumn,
+  assigneeColumn,
+  locationColumn,
+  statusColumn,
+  lastSyncColumn,
+  actionsColumn,
 ];
 
-export function AssetTable({ assets }: { assets: Asset[] }) {
+/** Per-category column sets. Already scoped to one type, so no Type column;
+   columns that don't apply to a category are dropped (kept pragmatic). */
+function columnsFor(type: AssetType): ColumnDef<Asset>[] {
+  switch (type) {
+    case "Computer":
+      return [
+        idColumn,
+        nameColumn,
+        modelColumn,
+        serialColumn,
+        assigneeColumn,
+        locationColumn,
+        statusColumn,
+        lastSyncColumn,
+        actionsColumn,
+      ];
+    case "Printer":
+      return [
+        idColumn,
+        nameColumn,
+        modelColumn,
+        serialColumn,
+        locationColumn,
+        statusColumn,
+        lastSyncColumn,
+        actionsColumn,
+      ];
+    case "Network":
+      return [
+        idColumn,
+        nameColumn,
+        modelColumn,
+        serialColumn,
+        locationColumn,
+        statusColumn,
+        actionsColumn,
+      ];
+    case "Monitor":
+    case "Phone":
+    default:
+      return [
+        idColumn,
+        nameColumn,
+        modelColumn,
+        serialColumn,
+        assigneeColumn,
+        locationColumn,
+        statusColumn,
+        actionsColumn,
+      ];
+  }
+}
+
+export type AssetTableConfig = {
+  /** The category this table is scoped to. Omit for the all-types dashboard
+     view. Passed as a plain string so the config is serializable from a
+     server component; the client picks the matching column set below. */
+  type?: AssetType;
+  showTypeFilter?: boolean;
+  title?: string;
+  emptyMessage?: string;
+};
+
+export function AssetTable({
+  assets,
+  config,
+}: {
+  assets: Asset[];
+  config: AssetTableConfig;
+}) {
+  const { type, showTypeFilter = false, title, emptyMessage } = config;
+  const columns = React.useMemo(
+    () => (type ? columnsFor(type) : allColumns),
+    [type],
+  );
   const router = useRouter();
-  const pathname = usePathname();
   const openAsset = (id: string) =>
-    router.push(`${pathname}?asset=${encodeURIComponent(id)}`, { scroll: false });
+    router.push(`/assets/${encodeURIComponent(id)}`);
 
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
@@ -270,12 +369,16 @@ export function AssetTable({ assets }: { assets: Asset[] }) {
     initialState: { pagination: { pageSize: 8 } },
   });
 
-  const typeFilter =
-    (table.getColumn("type")?.getFilterValue() as string) ?? "all";
+  // Only the all-types view has a `type` column; looking it up otherwise
+  // makes TanStack log "Column with id 'type' does not exist". The value is
+  // only used by the type filter, which shows only when that column exists.
+  const typeFilter = showTypeFilter
+    ? ((table.getColumn("type")?.getFilterValue() as string) ?? "all")
+    : "all";
   const statusFilter =
     (table.getColumn("status")?.getFilterValue() as string) ?? "all";
 
-  return (
+  const card = (
     <div className="rounded-xl border bg-card">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2.5 border-b p-4">
@@ -289,24 +392,26 @@ export function AssetTable({ assets }: { assets: Asset[] }) {
           />
         </div>
 
-        <Select
-          value={typeFilter}
-          onValueChange={(v) =>
-            table.getColumn("type")?.setFilterValue(v === "all" ? undefined : v)
-          }
-        >
-          <SelectTrigger className="w-[140px]">
-            <SelectValue placeholder="Asset Type" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Types</SelectItem>
-            <SelectItem value="Computer">Computer</SelectItem>
-            <SelectItem value="Monitor">Monitor</SelectItem>
-            <SelectItem value="Printer">Printer</SelectItem>
-            <SelectItem value="Phone">Phone</SelectItem>
-            <SelectItem value="Network">Network</SelectItem>
-          </SelectContent>
-        </Select>
+        {showTypeFilter && (
+          <Select
+            value={typeFilter}
+            onValueChange={(v) =>
+              table.getColumn("type")?.setFilterValue(v === "all" ? undefined : v)
+            }
+          >
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="Asset Type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              <SelectItem value="Computer">Computer</SelectItem>
+              <SelectItem value="Monitor">Monitor</SelectItem>
+              <SelectItem value="Printer">Printer</SelectItem>
+              <SelectItem value="Phone">Phone</SelectItem>
+              <SelectItem value="Network">Network</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
 
         <Select
           value={statusFilter}
@@ -401,7 +506,9 @@ export function AssetTable({ assets }: { assets: Asset[] }) {
                   colSpan={columns.length}
                   className="h-24 text-center text-muted-foreground"
                 >
-                  No assets match your filters.
+                  {assets.length === 0
+                    ? emptyMessage ?? "No assets yet."
+                    : "No assets match your filters."}
                 </TableCell>
               </TableRow>
             )}
@@ -414,7 +521,8 @@ export function AssetTable({ assets }: { assets: Asset[] }) {
         <p className="text-sm text-muted-foreground">
           {table.getFilteredRowModel().rows.length} asset
           {table.getFilteredRowModel().rows.length === 1 ? "" : "s"} ·{" "}
-          {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
+          {table.getState().pagination.pageIndex + 1} of{" "}
+          {Math.max(table.getPageCount(), 1)}
         </p>
         <div className="flex gap-2">
           <Button
@@ -435,6 +543,15 @@ export function AssetTable({ assets }: { assets: Asset[] }) {
           </Button>
         </div>
       </div>
+    </div>
+  );
+
+  if (!title) return card;
+
+  return (
+    <div className="mx-auto flex max-w-[1400px] flex-col gap-6">
+      <h1 className="text-2xl font-extrabold tracking-tight">{title}</h1>
+      {card}
     </div>
   );
 }
