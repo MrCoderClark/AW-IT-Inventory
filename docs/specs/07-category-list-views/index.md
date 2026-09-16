@@ -1,7 +1,7 @@
 # 07. Category list views + asset detail page
 
 **Date**: 2026-09-14
-**Status**: In Progress
+**Status**: Accepted
 
 > Decision history (Context, Options considered, Rationale) lives in
 > [rationale.md](./rationale.md). Verification steps in [verify.md](./verify.md).
