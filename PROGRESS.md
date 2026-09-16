@@ -38,6 +38,7 @@ Scan the fleet → authenticate as a service account → ingest → reconcile �
 ### Web UI ✅
 | Phase | Branch | What shipped |
 |---|---|---|
+| Category list views | `feat/category-list-views` | Real per-type tables (Computers/Monitors/Printers/Phones/Network) on one config-driven `AssetTable`; dedicated `/assets/[id]` detail page replaces the side drawer (`?asset=` retired); `asset:read`-gated; Vitest + Testing Library suite |
 | Discovered-devices inbox | `feat/discovered-devices-inbox` | `/scans` inbox: lists unmatched machines with up-to-3 ranked asset suggestions; link / quick-create / ignore / restore via `asset:write`-gated Server Actions; one nullable `machines.ignoredAt` column (ignore survives re-scans) |
 | Asset detail | `feat/asset-detail` | URL-driven side drawer (metadata, health, audit, actions); clickable rows + ⌘K deep-link |
 | Dashboard | `feat/ui-dashboard` | Next.js + Tailwind v4 + shadcn (Nova); sidebar/top bar, ⌘K palette, theme toggle, KPI cards, TanStack table, charts |
@@ -50,7 +51,6 @@ Scan the fleet → authenticate as a service account → ingest → reconcile �
 
 ## Next / backlog 🔜
 
-- **Category list views** — real Computers/Monitors/Printers/Phones/Network tables (replace placeholders).
 - **Add/Edit asset form** — create/edit from the UI.
 - **Docker Compose** — package web + aw-auth + collector for on-prem deploy.
 - **Schedule the collector** — periodic scans.

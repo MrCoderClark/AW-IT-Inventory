@@ -50,6 +50,7 @@ npm run dev                     # dev server (Turbopack)
 npm run db:push                 # apply Drizzle schema
 npm run db:seed                 # seed sample fleet
 npm run db:studio               # inspect DB
+npm test                        # run the Vitest suite (web)
 
 # aw-auth (in aw-auth/)  — uv-managed
 uv run python manage.py runserver          # dev
