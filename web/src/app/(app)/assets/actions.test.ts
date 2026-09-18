@@ -112,6 +112,21 @@ describe("createAsset (AC-2, AC-6, AC-8)", () => {
     expect(h.db.insert).not.toHaveBeenCalled();
   });
 
+  it("returns a clean error (not a crash) when the assignee was deleted mid-flight", async () => {
+    // Postgres FK violation: assigneeId points at a since-deleted person.
+    h.returning.mockRejectedValue({ code: "23503" });
+
+    const res = await createAsset({
+      ...validInput,
+      assigneeId: "550e8400-e29b-41d4-a716-446655440000",
+    });
+
+    expect(res).toEqual({
+      ok: false,
+      error: "That assignee no longer exists. Refresh and try again.",
+    });
+  });
+
   it("forbids a caller without asset:write and does not write (AC-6)", async () => {
     h.hasPermission.mockReturnValue(false);
 
@@ -167,6 +182,20 @@ describe("updateAsset (AC-3, AC-6, AC-7)", () => {
 
     expect(res.ok).toBe(false);
     expect(h.db.update).not.toHaveBeenCalled();
+  });
+
+  it("returns a clean error (not a crash) when the assignee was deleted mid-flight", async () => {
+    h.returning.mockRejectedValue({ code: "23503" });
+
+    const res = await updateAsset("OPUS-MON-ABC12", {
+      ...validInput,
+      assigneeId: "550e8400-e29b-41d4-a716-446655440000",
+    });
+
+    expect(res).toEqual({
+      ok: false,
+      error: "That assignee no longer exists. Refresh and try again.",
+    });
   });
 
   it("forbids a caller without asset:write (AC-6)", async () => {

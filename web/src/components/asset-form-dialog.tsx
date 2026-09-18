@@ -218,6 +218,10 @@ export function AssetFormDialog({
                   <SelectValue placeholder="Available (unassigned)" />
                 </SelectTrigger>
                 <SelectContent>
+                  {/* Empty string is the "unassigned" sentinel; the schema
+                     coerces it to null. Safe here because assigneeId is a UUID,
+                     so "" is never a real value. Don't copy value="" into a
+                     select whose domain could include an empty string. */}
                   <SelectItem value="">Available (unassigned)</SelectItem>
                   {people.map((p) => (
                     <SelectItem key={p.id} value={p.id}>

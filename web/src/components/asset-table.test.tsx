@@ -154,3 +154,59 @@ describe("AssetTable row navigation", () => {
     expect(pushMock).toHaveBeenCalledWith("/assets/OPUS-COMP-7499");
   });
 });
+
+describe("AssetTable write gate (New asset)", () => {
+  // covers: AC-6 (the New asset control is hidden without asset:write; the
+  // default renderTable helper passes no canWrite, i.e. false)
+  it("hides the New asset button by default (no asset:write)", () => {
+    renderTable([makeAsset()], { type: "Computer" });
+    expect(
+      screen.queryByRole("button", { name: /New asset/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  // covers: AC-1, AC-6 (a writer sees New asset; it opens the create dialog with
+  // the category's type pre-selected via presetType={config.type})
+  it("shows New asset for a writer and opens the dialog with the category type pre-selected", async () => {
+    const user = userEvent.setup();
+    render(
+      <AssetTable
+        assets={[]}
+        config={{ type: "Monitor", emptyMessage: "No monitors yet." }}
+        canWrite
+        people={[]}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /New asset/i }));
+
+    // The create dialog is open (its submit button is unique to it)...
+    expect(
+      await screen.findByRole("button", { name: /Create asset/i }),
+    ).toBeInTheDocument();
+    // ...and the Type trigger shows this category, pre-selected (AC-1).
+    expect(screen.getByText("Monitor")).toBeInTheDocument();
+  });
+
+  // covers: AC-1 (the all-types dashboard view has no category, so the create
+  // form opens with no type pre-selected and the user must choose one)
+  it("opens the dialog with no type pre-selected on the all-types view", async () => {
+    const user = userEvent.setup();
+    render(
+      <AssetTable
+        assets={[]}
+        config={{ showTypeFilter: true }}
+        canWrite
+        people={[]}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /New asset/i }));
+
+    expect(
+      await screen.findByRole("button", { name: /Create asset/i }),
+    ).toBeInTheDocument();
+    // No preset: the Type trigger shows its placeholder, not a category.
+    expect(screen.getByText("Choose a type")).toBeInTheDocument();
+  });
+});

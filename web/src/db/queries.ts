@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { and, asc, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 
 import type {
@@ -113,12 +114,15 @@ export interface Person {
   initials: string;
 }
 
-export async function getPeople(): Promise<Person[]> {
+/** Wrapped in React.cache so the 5 category pages + dashboard + detail page
+   that each load people (when the user can write) dedupe to one query per
+   request instead of a round trip apiece. */
+export const getPeople = cache(async function getPeople(): Promise<Person[]> {
   return db
     .select({ id: people.id, name: people.name, initials: people.initials })
     .from(people)
     .orderBy(asc(people.name));
-}
+});
 
 /**
  * The current assignee id for one asset tag, so the edit form can pre-select

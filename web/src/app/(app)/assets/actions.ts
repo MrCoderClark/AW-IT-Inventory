@@ -15,6 +15,23 @@ const FORBIDDEN: ActionResult = {
   error: "You don't have permission to do that.",
 };
 
+const ASSIGNEE_GONE: ActionResult = {
+  ok: false,
+  error: "That assignee no longer exists. Refresh and try again.",
+};
+
+/** Postgres foreign-key violation (e.g. assigneeId points at a since-deleted
+   person). The schema only checks assigneeId is a well-formed UUID, so a stale
+   id survives validation and surfaces here at write time. */
+function isForeignKeyViolation(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code?: unknown }).code === "23503"
+  );
+}
+
 /** Gate every write action on `asset:write`, server-side. */
 async function requireWrite(): Promise<boolean> {
   const user = await getCurrentUser();
@@ -49,28 +66,33 @@ export async function createAsset(raw: unknown): Promise<ActionResult> {
   const now = new Date();
 
   let created: { tag: string } | undefined;
-  for (let attempt = 0; attempt < 6 && !created; attempt++) {
-    const inserted = await db
-      .insert(assets)
-      .values({
-        tag: generateTag(input.type),
-        name: input.name,
-        type: input.type,
-        status: input.status,
-        serial: input.serial,
-        model: input.model,
-        assigneeId: input.assigneeId,
-        location: input.location,
-        vendor: input.vendor,
-        spec: input.spec,
-        costCenter: input.costCenter,
-        purchaseDate: input.purchaseDate,
-        warrantyUntil: input.warrantyUntil,
-        updatedAt: now,
-      })
-      .onConflictDoNothing({ target: assets.tag })
-      .returning({ tag: assets.tag });
-    created = inserted[0];
+  try {
+    for (let attempt = 0; attempt < 6 && !created; attempt++) {
+      const inserted = await db
+        .insert(assets)
+        .values({
+          tag: generateTag(input.type),
+          name: input.name,
+          type: input.type,
+          status: input.status,
+          serial: input.serial,
+          model: input.model,
+          assigneeId: input.assigneeId,
+          location: input.location,
+          vendor: input.vendor,
+          spec: input.spec,
+          costCenter: input.costCenter,
+          purchaseDate: input.purchaseDate,
+          warrantyUntil: input.warrantyUntil,
+          updatedAt: now,
+        })
+        .onConflictDoNothing({ target: assets.tag })
+        .returning({ tag: assets.tag });
+      created = inserted[0];
+    }
+  } catch (err) {
+    if (isForeignKeyViolation(err)) return ASSIGNEE_GONE;
+    throw err;
   }
   if (!created)
     return { ok: false, error: "Couldn't generate a unique tag. Try again." };
@@ -97,24 +119,30 @@ export async function updateAsset(
   const input = parsed.data;
   const now = new Date();
 
-  const updated = await db
-    .update(assets)
-    .set({
-      name: input.name,
-      status: input.status,
-      serial: input.serial,
-      model: input.model,
-      assigneeId: input.assigneeId,
-      location: input.location,
-      vendor: input.vendor,
-      spec: input.spec,
-      costCenter: input.costCenter,
-      purchaseDate: input.purchaseDate,
-      warrantyUntil: input.warrantyUntil,
-      updatedAt: now,
-    })
-    .where(eq(assets.tag, tag))
-    .returning({ type: assets.type });
+  let updated: { type: string }[];
+  try {
+    updated = await db
+      .update(assets)
+      .set({
+        name: input.name,
+        status: input.status,
+        serial: input.serial,
+        model: input.model,
+        assigneeId: input.assigneeId,
+        location: input.location,
+        vendor: input.vendor,
+        spec: input.spec,
+        costCenter: input.costCenter,
+        purchaseDate: input.purchaseDate,
+        warrantyUntil: input.warrantyUntil,
+        updatedAt: now,
+      })
+      .where(eq(assets.tag, tag))
+      .returning({ type: assets.type });
+  } catch (err) {
+    if (isForeignKeyViolation(err)) return ASSIGNEE_GONE;
+    throw err;
+  }
 
   if (!updated.length)
     return { ok: false, error: "That asset no longer exists." };
