@@ -4,6 +4,7 @@ import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   type ColumnDef,
+  type Row,
   type SortingState,
   type ColumnFiltersState,
   type RowData,
@@ -62,7 +63,15 @@ import {
   type AssetType,
   type LocationOption,
 } from "@/lib/data";
+import { TYPE_FIELDS } from "@/lib/asset-fields";
 import { cn } from "@/lib/utils";
+
+/** Whether a type is ever assigned to a person. Printers and network gear are
+   shared infrastructure (the form hides Assignee for them), so on a mixed-type
+   table their Assigned To cell shows "not applicable", not "Pool". */
+function typeTakesAssignee(type: AssetType): boolean {
+  return !TYPE_FIELDS[type].hiddenShared.includes("assigneeId");
+}
 
 declare module "@tanstack/react-table" {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -72,11 +81,53 @@ declare module "@tanstack/react-table" {
 }
 
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-US", {
     month: "short",
     day: "2-digit",
     year: "numeric",
   });
+}
+
+/** Lowercase and drop every separator, so a search matches regardless of
+   punctuation or case (e.g. "aa-bb-cc" and "AA:BB:CC" both find the same MAC,
+   and "5551234567" finds "(555) 123-4567"). Spec 10 AC-5. */
+function normalizeSearch(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+/** Everything about an asset a search should match, including the type-specific
+   identifiers carried on `search` (IP, IMEI, phone, MAC). */
+function assetHaystack(a: Asset): string {
+  return [
+    a.id,
+    a.name,
+    a.type,
+    a.serial,
+    a.model,
+    a.assignee?.name,
+    a.location,
+    a.vendor,
+    a.costCenter,
+    a.spec,
+    a.status,
+    a.search,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+/** Global search over the whole asset, separator- and case-insensitive. */
+function assetGlobalFilter(
+  row: Row<Asset>,
+  _columnId: string,
+  filterValue: string,
+): boolean {
+  const q = normalizeSearch(String(filterValue ?? ""));
+  if (!q) return true;
+  return normalizeSearch(assetHaystack(row.original)).includes(q);
 }
 
 function SortHeader({
@@ -164,10 +215,15 @@ const modelColumn: ColumnDef<Asset> = {
 
 const assigneeColumn: ColumnDef<Asset> = {
   id: "assignee",
-  accessorFn: (a) => a.assignee?.name ?? "Pool",
+  accessorFn: (a) => (typeTakesAssignee(a.type) ? a.assignee?.name ?? "Pool" : ""),
   header: "Assigned To",
   cell: ({ row }) => {
-    const a = row.original.assignee;
+    const asset = row.original;
+    // Printers / network gear aren't assigned to a person.
+    if (!typeTakesAssignee(asset.type)) {
+      return <span className="text-muted-foreground">—</span>;
+    }
+    const a = asset.assignee;
     return (
       <div className="flex items-center gap-2.5">
         <Avatar className="size-7">
@@ -195,6 +251,42 @@ const locationColumn: ColumnDef<Asset> = {
   header: "Location",
   cell: ({ row }) => (
     <span className="text-muted-foreground">{row.original.location}</span>
+  ),
+};
+
+/* Type-specific identifier columns (spec 10), shown only on the category page
+   for the type that has them. */
+
+const ipColumn: ColumnDef<Asset> = {
+  id: "ip",
+  accessorFn: (a) => a.ip ?? "",
+  header: "IP Address",
+  cell: ({ row }) => (
+    <span className="font-mono text-xs text-muted-foreground">
+      {row.original.ip || "—"}
+    </span>
+  ),
+};
+
+const macColumn: ColumnDef<Asset> = {
+  id: "mac",
+  accessorFn: (a) => a.mac ?? "",
+  header: "MAC",
+  cell: ({ row }) => (
+    <span className="font-mono text-xs text-muted-foreground">
+      {row.original.mac || "—"}
+    </span>
+  ),
+};
+
+const phoneColumn: ColumnDef<Asset> = {
+  id: "phoneNumber",
+  accessorFn: (a) => a.phoneNumber ?? "",
+  header: "Phone",
+  cell: ({ row }) => (
+    <span className="text-muted-foreground">
+      {row.original.phoneNumber || "—"}
+    </span>
   ),
 };
 
@@ -295,6 +387,7 @@ function columnsFor(type: AssetType): ColumnDef<Asset>[] {
         nameColumn,
         modelColumn,
         serialColumn,
+        ipColumn,
         locationColumn,
         statusColumn,
         lastSyncColumn,
@@ -306,12 +399,25 @@ function columnsFor(type: AssetType): ColumnDef<Asset>[] {
         nameColumn,
         modelColumn,
         serialColumn,
+        ipColumn,
+        macColumn,
+        locationColumn,
+        statusColumn,
+        actionsColumn,
+      ];
+    case "Phone":
+      return [
+        idColumn,
+        nameColumn,
+        modelColumn,
+        serialColumn,
+        phoneColumn,
+        assigneeColumn,
         locationColumn,
         statusColumn,
         actionsColumn,
       ];
     case "Monitor":
-    case "Phone":
     default:
       return [
         idColumn,
@@ -366,10 +472,15 @@ export function AssetTable({
     title,
     emptyMessage,
   } = config;
-  const columns = React.useMemo(
-    () => (type ? columnsFor(type) : allColumns),
-    [type],
-  );
+  const columns = React.useMemo(() => {
+    if (type) return columnsFor(type);
+    // Mixed-type view (dashboard, a location page): drop Assigned To when nothing
+    // shown is ever assigned to a person (e.g. a location holding only printers).
+    const anyAssignee = assets.some((a) => typeTakesAssignee(a.type));
+    return anyAssignee
+      ? allColumns
+      : allColumns.filter((c) => c.id !== "assignee");
+  }, [type, assets]);
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -408,7 +519,7 @@ export function AssetTable({
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onGlobalFilterChange: setGlobalFilter,
-    globalFilterFn: "includesString",
+    globalFilterFn: assetGlobalFilter,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),

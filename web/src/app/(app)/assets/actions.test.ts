@@ -12,13 +12,20 @@ const h = vi.hoisted(() => {
   chain.set = vi.fn(() => chain);
   chain.where = vi.fn(() => chain);
   chain.onConflictDoNothing = vi.fn(() => chain);
+  // The detail upsert ends the chain and is awaited (spec 10).
+  chain.onConflictDoUpdate = vi.fn(() => Promise.resolve([]));
   chain.returning = vi.fn(() => returning());
 
-  const db = {
+  const db: Record<string, unknown> = {
     insert: vi.fn(() => chain),
     update: vi.fn(() => chain),
     delete: vi.fn(() => chain),
   };
+  // createAsset / updateAsset now run inside one transaction; the callback gets a
+  // tx with the same chainable insert/update as the top-level db.
+  db.transaction = vi.fn(
+    async (cb: (tx: unknown) => unknown) => cb(db),
+  );
   const getCurrentUser = vi.fn();
   const hasPermission = vi.fn();
   const revalidatePath = vi.fn();
@@ -73,7 +80,8 @@ describe("createAsset (AC-2, AC-6, AC-8)", () => {
       message: "Created OPUS-MON-ABC12.",
       tag: "OPUS-MON-ABC12",
     });
-    expect(h.db.insert).toHaveBeenCalledTimes(1);
+    // Two inserts now: the asset row, then its per-type detail row (spec 10).
+    expect(h.db.insert).toHaveBeenCalledTimes(2);
   });
 
   it("generates a tag whose prefix agrees with the type (AC-8)", async () => {

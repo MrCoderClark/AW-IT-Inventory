@@ -1,8 +1,12 @@
 import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
+  boolean,
   date,
+  index,
+  integer,
   jsonb,
+  numeric,
   pgEnum,
   pgTable,
   text,
@@ -129,7 +133,95 @@ export const machines = pgTable("machines", {
     .notNull(),
 });
 
+// Per-type detail tables (spec 10). Each is 1:1 with an asset: `assetId` is both
+// the primary key and a foreign key to `assets.id` with `onDelete: cascade`, so a
+// detail row is created on first save and removed when its asset is deleted. Only
+// the asset's own type ever has a row here. All fields are nullable except a
+// printer's `ipAddress`, which a printer must have.
+
+export const computerDetails = pgTable("computer_details", {
+  assetId: uuid("asset_id")
+    .primaryKey()
+    .references(() => assets.id, { onDelete: "cascade" }),
+  formFactor: text("form_factor"), // laptop | desktop | all-in-one | tower
+  operatingSystem: text("operating_system"),
+  cpu: text("cpu"),
+  ramGb: integer("ram_gb"),
+  storage: text("storage"),
+});
+
+export const monitorDetails = pgTable("monitor_details", {
+  assetId: uuid("asset_id")
+    .primaryKey()
+    .references(() => assets.id, { onDelete: "cascade" }),
+  sizeInches: numeric("size_inches"),
+  resolution: text("resolution"),
+  panelType: text("panel_type"), // IPS | VA | OLED | TN
+  refreshHz: integer("refresh_hz"),
+  ports: text("ports"),
+  isCurved: boolean("is_curved"),
+});
+
+export const printerDetails = pgTable(
+  "printer_details",
+  {
+    assetId: uuid("asset_id")
+      .primaryKey()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    ipAddress: text("ip_address").notNull(), // required for printers
+    colorMode: text("color_mode"), // mono | color
+    isDuplex: boolean("is_duplex"),
+    pageCount: integer("page_count"),
+    connection: text("connection"), // network | USB
+    mgmtUrl: text("mgmt_url"),
+  },
+  (t) => [index("printer_details_ip_idx").on(t.ipAddress)],
+);
+
+export const phoneDetails = pgTable(
+  "phone_details",
+  {
+    assetId: uuid("asset_id")
+      .primaryKey()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    imei: text("imei"),
+    phoneNumber: text("phone_number"),
+    carrier: text("carrier"),
+    storageGb: integer("storage_gb"),
+    os: text("os"), // iOS | Android
+    plan: text("plan"),
+  },
+  (t) => [
+    index("phone_details_imei_idx").on(t.imei),
+    index("phone_details_number_idx").on(t.phoneNumber),
+  ],
+);
+
+export const networkDetails = pgTable(
+  "network_details",
+  {
+    assetId: uuid("asset_id")
+      .primaryKey()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    ipAddress: text("ip_address"),
+    macAddress: text("mac_address"),
+    deviceRole: text("device_role"), // switch | router | access-point | firewall
+    portCount: integer("port_count"),
+    firmware: text("firmware"),
+    mgmtUrl: text("mgmt_url"),
+  },
+  (t) => [
+    index("network_details_ip_idx").on(t.ipAddress),
+    index("network_details_mac_idx").on(t.macAddress),
+  ],
+);
+
 export type AssetRow = typeof assets.$inferSelect;
 export type PersonRow = typeof people.$inferSelect;
 export type MachineRow = typeof machines.$inferSelect;
 export type LocationRow = typeof locations.$inferSelect;
+export type ComputerDetailsRow = typeof computerDetails.$inferSelect;
+export type MonitorDetailsRow = typeof monitorDetails.$inferSelect;
+export type PrinterDetailsRow = typeof printerDetails.$inferSelect;
+export type PhoneDetailsRow = typeof phoneDetails.$inferSelect;
+export type NetworkDetailsRow = typeof networkDetails.$inferSelect;
