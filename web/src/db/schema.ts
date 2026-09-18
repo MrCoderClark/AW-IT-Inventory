@@ -1,10 +1,13 @@
+import { sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   date,
   jsonb,
   pgEnum,
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -30,6 +33,37 @@ export const people = pgTable("people", {
   email: text("email"),
 });
 
+// A node in the location tree (adjacency list). `parentId` null = a top-level
+// location; otherwise it points at its parent. Depth is unbounded. Devices are
+// assigned to a *leaf* (a row that is nobody's parent) via `assets.locationId`.
+export const locations = pgTable(
+  "locations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    // Self-FK. `restrict` so a parent can't be deleted out from under its
+    // children (the delete action blocks until empty before we get here).
+    parentId: uuid("parent_id").references((): AnyPgColumn => locations.id, {
+      onDelete: "restrict",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    // Siblings can't share a name. Postgres treats NULLs as distinct, so this
+    // constraint covers the non-null-parent case only...
+    uniqueIndex("locations_parent_name_uq").on(t.parentId, t.name),
+    // ...and this partial index covers two top-level locations sharing a name.
+    uniqueIndex("locations_root_name_uq")
+      .on(t.name)
+      .where(sql`${t.parentId} is null`),
+  ],
+);
+
 export const assets = pgTable("assets", {
   id: uuid("id").primaryKey().defaultRandom(),
   tag: text("tag").notNull().unique(), // human key, e.g. OPUS-COMP-7491
@@ -40,7 +74,12 @@ export const assets = pgTable("assets", {
   assigneeId: uuid("assignee_id").references(() => people.id, {
     onDelete: "set null",
   }),
-  location: text("location"),
+  // Nullable FK to a *leaf* location (the leaf-only rule is an app invariant the
+  // asset actions enforce; a plain FK can't express it). `restrict` so a
+  // location holding devices can't be deleted until they're reassigned.
+  locationId: uuid("location_id").references(() => locations.id, {
+    onDelete: "restrict",
+  }),
   status: assetStatus("status").notNull(),
   lastSync: timestamp("last_sync", { withTimezone: true }),
   vendor: text("vendor"),
@@ -93,3 +132,4 @@ export const machines = pgTable("machines", {
 export type AssetRow = typeof assets.$inferSelect;
 export type PersonRow = typeof people.$inferSelect;
 export type MachineRow = typeof machines.$inferSelect;
+export type LocationRow = typeof locations.$inferSelect;

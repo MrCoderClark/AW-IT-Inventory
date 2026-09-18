@@ -44,6 +44,17 @@ const nullableAssignee = z
     "Choose a valid assignee",
   );
 
+/** Optional location: "" / absent → null (No location), otherwise a uuid. The
+   leaf-only rule (the id must reference a leaf) is checked in the action, since
+   the schema can't see the tree. */
+const nullableLocation = z
+  .union([z.string(), z.null(), z.undefined()])
+  .transform((v) => (v == null || v.trim() === "" ? null : v.trim()))
+  .refine(
+    (v) => v === null || z.string().uuid().safeParse(v).success,
+    "Choose a valid location",
+  );
+
 /** Optional date: "" / absent → null, otherwise a YYYY-MM-DD string. */
 const nullableDate = z
   .union([z.string(), z.null(), z.undefined()])
@@ -58,7 +69,7 @@ export const assetInputSchema = z
     serial: nullableText,
     model: nullableText,
     assigneeId: nullableAssignee,
-    location: nullableText,
+    locationId: nullableLocation,
     vendor: nullableText,
     spec: nullableText,
     costCenter: nullableText,
@@ -86,7 +97,7 @@ export interface AssetFormValues {
   serial: string;
   model: string;
   assigneeId: string;
-  location: string;
+  locationId: string;
   vendor: string;
   spec: string;
   costCenter: string;
@@ -101,7 +112,7 @@ export const EMPTY_ASSET_FORM: AssetFormValues = {
   serial: "",
   model: "",
   assigneeId: "",
-  location: "",
+  locationId: "",
   vendor: "",
   spec: "",
   costCenter: "",

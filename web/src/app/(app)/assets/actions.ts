@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 
 import { db } from "@/db/index";
 import { assets } from "@/db/schema";
+import { locationLeafStatus } from "@/db/queries";
 import { getCurrentUser, hasPermission } from "@/lib/auth/session";
 import { assetInputSchema, firstError } from "@/lib/asset-schema";
 import type { ActionResult, AssetType } from "@/lib/data";
@@ -20,9 +21,20 @@ const ASSIGNEE_GONE: ActionResult = {
   error: "That assignee no longer exists. Refresh and try again.",
 };
 
+const LOCATION_GONE: ActionResult = {
+  ok: false,
+  error: "That location no longer exists. Refresh and try again.",
+};
+
+const LOCATION_NOT_LEAF: ActionResult = {
+  ok: false,
+  error:
+    "Assign to a specific location (one with no children). Pick a leaf, or reorganize the tree first.",
+};
+
 /** Postgres foreign-key violation (e.g. assigneeId points at a since-deleted
-   person). The schema only checks assigneeId is a well-formed UUID, so a stale
-   id survives validation and surfaces here at write time. */
+   person). The schema only checks the id is a well-formed UUID, so a stale id
+   survives validation and surfaces here at write time. */
 function isForeignKeyViolation(err: unknown): boolean {
   return (
     typeof err === "object" &&
@@ -30,6 +42,29 @@ function isForeignKeyViolation(err: unknown): boolean {
     "code" in err &&
     (err as { code?: unknown }).code === "23503"
   );
+}
+
+/** Which foreign key a 23503 violation is about, from the constraint name, so a
+   since-deleted assignee and a since-deleted location get distinct messages. */
+function fkViolationResult(err: unknown): ActionResult | null {
+  if (!isForeignKeyViolation(err)) return null;
+  const constraint = String(
+    (err as { constraint_name?: unknown }).constraint_name ?? "",
+  );
+  if (constraint.includes("location")) return LOCATION_GONE;
+  if (constraint.includes("assignee")) return ASSIGNEE_GONE;
+  // Unknown FK: default to the assignee message (the pre-existing behavior).
+  return ASSIGNEE_GONE;
+}
+
+/** Re-check that a chosen location is still an assignable leaf. Returns an error
+   result to short-circuit the action, or null when the id is fine (or null). */
+async function checkLeaf(locationId: string | null): Promise<ActionResult | null> {
+  if (!locationId) return null;
+  const status = await locationLeafStatus(locationId);
+  if (status === "missing") return LOCATION_GONE;
+  if (status === "parent") return LOCATION_NOT_LEAF;
+  return null;
 }
 
 /** Gate every write action on `asset:write`, server-side. */
@@ -65,6 +100,9 @@ export async function createAsset(raw: unknown): Promise<ActionResult> {
   const input = parsed.data;
   const now = new Date();
 
+  const leafError = await checkLeaf(input.locationId);
+  if (leafError) return leafError;
+
   let created: { tag: string } | undefined;
   try {
     for (let attempt = 0; attempt < 6 && !created; attempt++) {
@@ -78,7 +116,7 @@ export async function createAsset(raw: unknown): Promise<ActionResult> {
           serial: input.serial,
           model: input.model,
           assigneeId: input.assigneeId,
-          location: input.location,
+          locationId: input.locationId,
           vendor: input.vendor,
           spec: input.spec,
           costCenter: input.costCenter,
@@ -91,7 +129,8 @@ export async function createAsset(raw: unknown): Promise<ActionResult> {
       created = inserted[0];
     }
   } catch (err) {
-    if (isForeignKeyViolation(err)) return ASSIGNEE_GONE;
+    const fk = fkViolationResult(err);
+    if (fk) return fk;
     throw err;
   }
   if (!created)
@@ -119,6 +158,9 @@ export async function updateAsset(
   const input = parsed.data;
   const now = new Date();
 
+  const leafError = await checkLeaf(input.locationId);
+  if (leafError) return leafError;
+
   let updated: { type: string }[];
   try {
     updated = await db
@@ -129,7 +171,7 @@ export async function updateAsset(
         serial: input.serial,
         model: input.model,
         assigneeId: input.assigneeId,
-        location: input.location,
+        locationId: input.locationId,
         vendor: input.vendor,
         spec: input.spec,
         costCenter: input.costCenter,
@@ -140,7 +182,8 @@ export async function updateAsset(
       .where(eq(assets.tag, tag))
       .returning({ type: assets.type });
   } catch (err) {
-    if (isForeignKeyViolation(err)) return ASSIGNEE_GONE;
+    const fk = fkViolationResult(err);
+    if (fk) return fk;
     throw err;
   }
 

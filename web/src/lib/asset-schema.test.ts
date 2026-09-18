@@ -22,7 +22,7 @@ const VALID: AssetFormValues = {
   serial: "",
   model: "",
   assigneeId: "",
-  location: "",
+  locationId: "",
   vendor: "",
   spec: "",
   costCenter: "",
@@ -76,7 +76,7 @@ describe("assetInputSchema — blank optional fields become null (AC-4)", () => 
     if (!r.success) return;
     expect(r.data.serial).toBeNull();
     expect(r.data.model).toBeNull();
-    expect(r.data.location).toBeNull();
+    expect(r.data.locationId).toBeNull();
     expect(r.data.vendor).toBeNull();
     expect(r.data.spec).toBeNull();
     expect(r.data.costCenter).toBeNull();

@@ -36,7 +36,8 @@ export interface Asset {
   serial: string;
   model: string;
   assignee: Assignee | null; // null = unassigned / pool
-  location: string;
+  location: string; // full path of the assigned leaf, e.g. "New York / Bronx"; "" = none
+  locationId: string | null; // the assigned leaf's id, for the subtree filter
   status: AssetStatus;
   lastSync: string; // ISO date
   // richer fields for the detail drawer (later)
@@ -124,6 +125,34 @@ export type ActionResult =
   | { ok: true; message: string; tag?: string }
   | { ok: false; error: string };
 
+/* ---------------- Locations (the location tree) ---------------- */
+
+/* A node in the location tree, rendered nested on /locations. `deviceCount` is
+   the number of devices assigned directly to this node (only ever non-zero on a
+   leaf, since assignment is leaf-only). */
+export interface LocationNode {
+  id: string;
+  name: string;
+  parentId: string | null;
+  deviceCount: number;
+  children: LocationNode[];
+}
+
+/* A flat location row for the pickers and the list filter. `path` is the full
+   ancestry ("New York / Bronx"), `depth` the tree level (0 = top), `isLeaf`
+   whether it has no children (only leaves are assignable). */
+export interface LocationOption {
+  id: string;
+  name: string;
+  parentId: string | null;
+  path: string;
+  depth: number;
+  isLeaf: boolean;
+}
+
+/** Join two location names into a display path. */
+export const LOCATION_PATH_SEP = " / ";
+
 /* ---------------- Navigation ---------------- */
 
 export interface NavItem {
@@ -185,9 +214,13 @@ export interface MachineSummary {
 
 /* ---------------- Sample fleet (DB seed source) ----------------
    Consumed by src/db/seed.ts to populate Postgres. The UI reads assets from
-   the database, not from this array. */
+   the database, not from this array. `locationId` is DB-assigned (the tree
+   didn't exist when this data was written), so the seed shape omits it; the
+   free-text `location` is kept for reference but no longer seeded (spec 09). */
 
-export const ASSETS: Asset[] = [
+export type SampleAsset = Omit<Asset, "locationId">;
+
+export const ASSETS: SampleAsset[] = [
   {
     id: "OPUS-COMP-7491",
     name: "Sarah's MacBook Pro 16\"",

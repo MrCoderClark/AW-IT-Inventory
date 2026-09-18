@@ -31,7 +31,11 @@ import {
   fieldErrors,
   type AssetFormValues,
 } from "@/lib/asset-schema";
-import { STATUS_META, type AssetType } from "@/lib/data";
+import {
+  STATUS_META,
+  type AssetType,
+  type LocationOption,
+} from "@/lib/data";
 import { cn } from "@/lib/utils";
 
 export interface PersonOption {
@@ -41,11 +45,30 @@ export interface PersonOption {
 
 type FieldErrors = Partial<Record<keyof AssetFormValues, string>>;
 
+/**
+ * Fields that don't apply to a given asset type, so the form hides them (and
+ * clears them on submit). Mirrors the per-type columns in the asset table:
+ * printers and network gear are shared infrastructure, not assigned to a
+ * person. This is the no-schema adaptation; genuinely type-specific *new*
+ * fields (IP, duplex, IMEI, resolution…) are a separate, architected feature.
+ */
+const HIDDEN_FIELDS: Partial<
+  Record<AssetType, ReadonlyArray<keyof AssetFormValues>>
+> = {
+  Printer: ["assigneeId"],
+  Network: ["assigneeId"],
+};
+
+function hiddenFieldsFor(type: AssetType | ""): Set<keyof AssetFormValues> {
+  return new Set(type ? HIDDEN_FIELDS[type] ?? [] : []);
+}
+
 export function AssetFormDialog({
   open,
   onOpenChange,
   mode,
   people,
+  locations = [],
   presetType,
   editTag,
   initial,
@@ -55,6 +78,8 @@ export function AssetFormDialog({
   onOpenChange: (open: boolean) => void;
   mode: "create" | "edit";
   people: PersonOption[];
+  /** Assignable leaf locations for the location picker, by full path. */
+  locations?: LocationOption[];
   /** Create mode: pre-select the type (a category page). */
   presetType?: AssetType;
   /** Edit mode: the immutable tag being edited. */
@@ -66,6 +91,10 @@ export function AssetFormDialog({
   const [values, setValues] = React.useState<AssetFormValues>(EMPTY_ASSET_FORM);
   const [errors, setErrors] = React.useState<FieldErrors>({});
   const [isPending, startTransition] = React.useTransition();
+
+  // Fields not shown for the current type; hidden in the UI and cleared on submit
+  // so a type switch can't leave a stray value (e.g. an assignee on a printer).
+  const hidden = hiddenFieldsFor(values.type);
 
   // Reset the form each time the dialog opens, to the edit values or a fresh
   // create form (with the category's type pre-selected).
@@ -94,7 +123,11 @@ export function AssetFormDialog({
   }
 
   function submit() {
-    const parsed = assetInputSchema.safeParse(values);
+    // Drop any values for fields hidden by the chosen type before validating.
+    const cleaned: AssetFormValues = { ...values };
+    for (const key of hidden) cleaned[key] = "";
+
+    const parsed = assetInputSchema.safeParse(cleaned);
     if (!parsed.success) {
       setErrors(fieldErrors(parsed.error));
       return;
@@ -102,8 +135,8 @@ export function AssetFormDialog({
     startTransition(async () => {
       const res =
         mode === "edit" && editTag
-          ? await updateAsset(editTag, values)
-          : await createAsset(values);
+          ? await updateAsset(editTag, cleaned)
+          : await createAsset(cleaned);
       if (res.ok) {
         toast.success(res.message);
         onOpenChange(false);
@@ -209,28 +242,30 @@ export function AssetFormDialog({
               </Select>
             </Field>
 
-            <Field label="Assignee">
-              <Select
-                value={values.assigneeId}
-                onValueChange={(v) => set("assigneeId", v ?? "")}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Available (unassigned)" />
-                </SelectTrigger>
-                <SelectContent>
-                  {/* Empty string is the "unassigned" sentinel; the schema
-                     coerces it to null. Safe here because assigneeId is a UUID,
-                     so "" is never a real value. Don't copy value="" into a
-                     select whose domain could include an empty string. */}
-                  <SelectItem value="">Available (unassigned)</SelectItem>
-                  {people.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
+            {!hidden.has("assigneeId") && (
+              <Field label="Assignee">
+                <Select
+                  value={values.assigneeId}
+                  onValueChange={(v) => set("assigneeId", v ?? "")}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Available (unassigned)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {/* Empty string is the "unassigned" sentinel; the schema
+                       coerces it to null. Safe here because assigneeId is a UUID,
+                       so "" is never a real value. Don't copy value="" into a
+                       select whose domain could include an empty string. */}
+                    <SelectItem value="">Available (unassigned)</SelectItem>
+                    {people.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            )}
 
             <Field label="Serial">
               <Input
@@ -248,11 +283,27 @@ export function AssetFormDialog({
             </Field>
 
             <Field label="Location">
-              <Input
-                value={values.location}
-                onChange={(e) => set("location", e.target.value)}
-                placeholder="e.g. SF — HQ — L4"
-              />
+              <Select
+                value={values.locationId}
+                onValueChange={(v) => set("locationId", v ?? "")}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="No location" />
+                </SelectTrigger>
+                <SelectContent>
+                  {/* "" is the "No location" sentinel; the schema coerces it to
+                     null. Only leaves are listed — assignment is leaf-only. */}
+                  <SelectItem value="">No location</SelectItem>
+                  {locations.map((loc) => (
+                    <SelectItem key={loc.id} value={loc.id}>
+                      {loc.path}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {locations.length === 0 && (
+                <Hint>No leaf locations yet — add them on the Locations page.</Hint>
+              )}
             </Field>
 
             <Field label="Vendor">

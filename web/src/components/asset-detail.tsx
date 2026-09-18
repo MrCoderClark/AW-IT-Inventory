@@ -32,6 +32,7 @@ import {
   TYPE_ICON,
   type Asset,
   type AssetType,
+  type LocationOption,
   type MachineSummary,
 } from "@/lib/data";
 import type { AssetFormValues } from "@/lib/asset-schema";
@@ -104,6 +105,7 @@ export function AssetDetail({
   machine,
   canWrite = false,
   people = [],
+  locations = [],
   assigneeId = null,
 }: {
   asset: Asset;
@@ -112,6 +114,8 @@ export function AssetDetail({
   canWrite?: boolean;
   /** People for the assignee picker in the edit form. */
   people?: PersonOption[];
+  /** Assignable leaf locations for the location picker in the edit form. */
+  locations?: LocationOption[];
   /** The asset's current assignee id, to pre-select in the edit form. */
   assigneeId?: string | null;
 }) {
@@ -140,7 +144,7 @@ export function AssetDetail({
     serial: asset.serial,
     model: asset.model,
     assigneeId: assigneeId ?? "",
-    location: asset.location,
+    locationId: asset.locationId ?? "",
     vendor: asset.vendor,
     spec: asset.spec,
     costCenter: asset.costCenter,
@@ -294,6 +298,7 @@ export function AssetDetail({
           onOpenChange={setEditOpen}
           mode="edit"
           people={people}
+          locations={locations}
           editTag={asset.id}
           initial={editValues}
         />
