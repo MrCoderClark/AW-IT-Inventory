@@ -7,7 +7,8 @@ import { db } from "@/db/index";
 import { assets, machines } from "@/db/schema";
 import { getCurrentUser, hasPermission } from "@/lib/auth/session";
 import { kindMeta } from "@/lib/data";
-import type { ActionResult, AssetType } from "@/lib/data";
+import type { ActionResult } from "@/lib/data";
+import { generateTag } from "@/lib/tags";
 
 const FORBIDDEN: ActionResult = {
   ok: false,
@@ -18,20 +19,6 @@ const FORBIDDEN: ActionResult = {
 async function requireWrite(): Promise<boolean> {
   const user = await getCurrentUser();
   return hasPermission(user, "asset:write");
-}
-
-const TAG_PREFIX: Record<AssetType, string> = {
-  Computer: "COMP",
-  Monitor: "MON",
-  Printer: "PRNT",
-  Phone: "PHN",
-  Network: "NET",
-};
-
-/** OPUS-COMP-7F3K9 — prefix from the type, 5 random base36 chars. */
-function generateTag(type: AssetType): string {
-  const suffix = Math.random().toString(36).slice(2, 7).toUpperCase();
-  return `OPUS-${TAG_PREFIX[type]}-${suffix}`;
 }
 
 function specSummary(hardware: unknown): string | null {

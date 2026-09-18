@@ -1,17 +1,55 @@
 "use client";
 
+import * as React from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Copy, Pencil, Printer, UserCog } from "lucide-react";
+import {
+  ArrowLeft,
+  Copy,
+  Loader2,
+  Pencil,
+  Printer,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 
+import { deleteAsset } from "@/app/(app)/assets/actions";
+import {
+  AssetFormDialog,
+  type PersonOption,
+} from "@/components/asset-form-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { StatusBadge } from "@/components/status-badge";
-import { TYPE_ICON, type Asset, type MachineSummary } from "@/lib/data";
+import {
+  TYPE_ICON,
+  type Asset,
+  type AssetType,
+  type MachineSummary,
+} from "@/lib/data";
+import type { AssetFormValues } from "@/lib/asset-schema";
 import { cn } from "@/lib/utils";
 
-function fmt(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", {
+const TYPE_ROUTE: Record<AssetType, string> = {
+  Computer: "/computers",
+  Monitor: "/monitors",
+  Printer: "/printers",
+  Phone: "/phones",
+  Network: "/network",
+};
+
+function fmt(iso: string | Date | null | undefined) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-US", {
     year: "numeric",
     month: "short",
     day: "2-digit",
@@ -64,21 +102,64 @@ function AuditTimeline({ asset }: { asset: Asset }) {
 export function AssetDetail({
   asset,
   machine,
+  canWrite = false,
+  people = [],
+  assigneeId = null,
 }: {
   asset: Asset;
   machine?: MachineSummary;
+  /** Show the write controls (Edit / Delete) only for `asset:write` users. */
+  canWrite?: boolean;
+  /** People for the assignee picker in the edit form. */
+  people?: PersonOption[];
+  /** The asset's current assignee id, to pre-select in the edit form. */
+  assigneeId?: string | null;
 }) {
   const Icon = TYPE_ICON[asset.type];
   const showHealth =
     asset.type === "Computer" || asset.type === "Printer" || Boolean(machine);
 
   const router = useRouter();
+  const [editOpen, setEditOpen] = React.useState(false);
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const [isDeleting, startDelete] = React.useTransition();
+
   // Return to wherever the user came from (a category page), falling back to
   // the dashboard on a direct load or refresh with no in-app history.
   const goBack = () => {
     if (typeof window !== "undefined" && window.history.length > 1) router.back();
     else router.push("/dashboard");
   };
+
+  // Pre-fill the edit form from the current values (the display Asset carries
+  // everything as strings; the assignee id comes in separately).
+  const editValues: AssetFormValues = {
+    name: asset.name,
+    type: asset.type,
+    status: asset.status,
+    serial: asset.serial,
+    model: asset.model,
+    assigneeId: assigneeId ?? "",
+    location: asset.location,
+    vendor: asset.vendor,
+    spec: asset.spec,
+    costCenter: asset.costCenter,
+    purchaseDate: asset.purchaseDate,
+    warrantyUntil: asset.warrantyUntil,
+  };
+
+  function confirmDelete() {
+    startDelete(async () => {
+      const res = await deleteAsset(asset.id);
+      if (res.ok) {
+        setConfirmOpen(false);
+        toast.success(res.message);
+        router.push(TYPE_ROUTE[asset.type] ?? "/dashboard");
+      } else {
+        toast.error(res.error);
+      }
+    });
+  }
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
@@ -183,11 +264,11 @@ export function AssetDetail({
 
       {/* Actions */}
       <div className="grid max-w-md grid-cols-2 gap-2">
-        <Button
-          onClick={() => toast("Edit metadata", { description: "Form coming later." })}
-        >
-          <Pencil className="size-4" /> Edit
-        </Button>
+        {canWrite && (
+          <Button onClick={() => setEditOpen(true)}>
+            <Pencil className="size-4" /> Edit
+          </Button>
+        )}
         <Button
           variant="outline"
           onClick={() =>
@@ -196,16 +277,57 @@ export function AssetDetail({
         >
           <Printer className="size-4" /> Print label
         </Button>
-        <Button
-          variant="outline"
-          className="col-span-2"
-          onClick={() =>
-            toast("Reassign asset", { description: "Assignment flow coming later." })
-          }
-        >
-          <UserCog className="size-4" /> Reassign
-        </Button>
+        {canWrite && (
+          <Button
+            variant="destructive"
+            className="col-span-2"
+            onClick={() => setConfirmOpen(true)}
+          >
+            <Trash2 className="size-4" /> Delete asset
+          </Button>
+        )}
       </div>
+
+      {canWrite && (
+        <AssetFormDialog
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          mode="edit"
+          people={people}
+          editTag={asset.id}
+          initial={editValues}
+        />
+      )}
+
+      {/* Delete confirmation — an in-app dialog, never window.confirm. */}
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Delete this asset?</DialogTitle>
+            <DialogDescription>
+              {asset.name} ({asset.id}) will be permanently removed. A matched
+              machine returns to the discovered inbox. This can&apos;t be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setConfirmOpen(false)}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting && <Loader2 className="size-4 animate-spin" />}
+              Delete asset
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

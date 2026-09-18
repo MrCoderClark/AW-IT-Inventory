@@ -6,13 +6,17 @@ import { KpiCard } from "@/components/kpi-card";
 import { AssetTable } from "@/components/asset-table";
 import { DonutChart } from "@/components/charts/donut-chart";
 import { StatusBars } from "@/components/charts/status-bars";
-import { getAssets, getDashboardStats } from "@/db/queries";
+import { getAssets, getDashboardStats, getPeople } from "@/db/queries";
+import { hasPermission, requireUser } from "@/lib/auth/session";
 import type { Kpi, Slice } from "@/lib/data";
 
 export default async function DashboardPage() {
-  const [assets, stats] = await Promise.all([
+  const user = await requireUser();
+  const canWrite = hasPermission(user, "asset:write");
+  const [assets, stats, people] = await Promise.all([
     getAssets(),
     getDashboardStats(),
+    canWrite ? getPeople() : Promise.resolve([]),
   ]);
   const t = stats.byType;
   const s = stats.byStatus;
@@ -75,7 +79,12 @@ export default async function DashboardPage() {
         ))}
       </section>
 
-      <AssetTable assets={assets} config={{ showTypeFilter: true }} />
+      <AssetTable
+        assets={assets}
+        config={{ showTypeFilter: true }}
+        canWrite={canWrite}
+        people={people}
+      />
 
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>

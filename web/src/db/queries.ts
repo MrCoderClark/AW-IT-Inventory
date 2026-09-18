@@ -106,6 +106,36 @@ export async function getAssetById(id: string): Promise<Asset | null> {
   return row ? toAsset(row) : null;
 }
 
+/** People for the assignee picker on the asset form. */
+export interface Person {
+  id: string;
+  name: string;
+  initials: string;
+}
+
+export async function getPeople(): Promise<Person[]> {
+  return db
+    .select({ id: people.id, name: people.name, initials: people.initials })
+    .from(people)
+    .orderBy(asc(people.name));
+}
+
+/**
+ * The current assignee id for one asset tag, so the edit form can pre-select
+ * the right person (the display `Asset` only carries the assignee's name). Null
+ * when unassigned, undefined when the tag matches no asset.
+ */
+export async function getAssetAssigneeId(
+  tag: string,
+): Promise<string | null | undefined> {
+  const rows = await db
+    .select({ assigneeId: assets.assigneeId })
+    .from(assets)
+    .where(eq(assets.tag, tag))
+    .limit(1);
+  return rows.length ? rows[0].assigneeId : undefined;
+}
+
 const machineSummarySelect = {
   tag: assets.tag,
   lastSeenAt: machines.lastSeenAt,

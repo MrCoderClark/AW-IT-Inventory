@@ -3,7 +3,12 @@ import { Lock } from "lucide-react";
 
 import { AssetDetail } from "@/components/asset-detail";
 import { PagePlaceholder } from "@/components/page-placeholder";
-import { getAssetById, getMachineSummary } from "@/db/queries";
+import {
+  getAssetAssigneeId,
+  getAssetById,
+  getMachineSummary,
+  getPeople,
+} from "@/db/queries";
 import { hasPermission, requireUser } from "@/lib/auth/session";
 
 export default async function Page({ params }: PageProps<"/assets/[id]">) {
@@ -20,12 +25,23 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
   }
 
   const { id } = await params;
-  // Both key off the same route tag, so fetch them together.
-  const [asset, machine] = await Promise.all([
+  const canWrite = hasPermission(user, "asset:write");
+  // All key off the same route tag, so fetch them together.
+  const [asset, machine, assigneeId, people] = await Promise.all([
     getAssetById(id),
     getMachineSummary(id),
+    canWrite ? getAssetAssigneeId(id) : Promise.resolve(null),
+    canWrite ? getPeople() : Promise.resolve([]),
   ]);
   if (!asset) notFound();
 
-  return <AssetDetail asset={asset} machine={machine} />;
+  return (
+    <AssetDetail
+      asset={asset}
+      machine={machine}
+      canWrite={canWrite}
+      people={people}
+      assigneeId={assigneeId ?? null}
+    />
+  );
 }

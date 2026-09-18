@@ -24,6 +24,10 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import {
+  AssetFormDialog,
+  type PersonOption,
+} from "@/components/asset-form-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -334,9 +338,15 @@ export type AssetTableConfig = {
 export function AssetTable({
   assets,
   config,
+  canWrite = false,
+  people = [],
 }: {
   assets: Asset[];
   config: AssetTableConfig;
+  /** Show the write controls (New asset) only for `asset:write` users. */
+  canWrite?: boolean;
+  /** People for the assignee picker in the create form. */
+  people?: PersonOption[];
 }) {
   const { type, showTypeFilter = false, title, emptyMessage } = config;
   const columns = React.useMemo(
@@ -346,6 +356,8 @@ export function AssetTable({
   const router = useRouter();
   const openAsset = (id: string) =>
     router.push(`/assets/${encodeURIComponent(id)}`);
+
+  const [formOpen, setFormOpen] = React.useState(false);
 
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
@@ -435,9 +447,11 @@ export function AssetTable({
         </Select>
 
         <div className="ml-auto flex items-center gap-2">
-          <Button onClick={() => toast("Add Asset", { description: "Form coming in a later phase." })}>
-            <Plus className="size-4" /> Add Asset
-          </Button>
+          {canWrite && (
+            <Button onClick={() => setFormOpen(true)}>
+              <Plus className="size-4" /> New asset
+            </Button>
+          )}
           <Button
             variant="outline"
             onClick={() => toast.success("Export started", { description: "CSV of current view." })}
@@ -546,12 +560,29 @@ export function AssetTable({
     </div>
   );
 
-  if (!title) return card;
+  const dialog = canWrite ? (
+    <AssetFormDialog
+      open={formOpen}
+      onOpenChange={setFormOpen}
+      mode="create"
+      people={people}
+      presetType={type}
+    />
+  ) : null;
+
+  if (!title)
+    return (
+      <>
+        {card}
+        {dialog}
+      </>
+    );
 
   return (
     <div className="mx-auto flex max-w-[1400px] flex-col gap-6">
       <h1 className="text-2xl font-extrabold tracking-tight">{title}</h1>
       {card}
+      {dialog}
     </div>
   );
 }

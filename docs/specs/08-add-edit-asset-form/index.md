@@ -1,7 +1,7 @@
 # 08. Add / edit / delete asset form
 
 **Date**: 2026-09-16
-**Status**: Proposed
+**Status**: In Progress
 
 > Decision history (Context, Options considered, Rationale) lives in
 > [rationale.md](./rationale.md). Verification steps in [verify.md](./verify.md).
