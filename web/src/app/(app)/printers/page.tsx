@@ -2,7 +2,7 @@ import { Lock } from "lucide-react";
 
 import { AssetTable } from "@/components/asset-table";
 import { PagePlaceholder } from "@/components/page-placeholder";
-import { getAssetsByType } from "@/db/queries";
+import { getAssetsByType, getPeople } from "@/db/queries";
 import { hasPermission, requireUser } from "@/lib/auth/session";
 
 export default async function Page() {
@@ -18,7 +18,11 @@ export default async function Page() {
     );
   }
 
-  const assets = await getAssetsByType("Printer");
+  const canWrite = hasPermission(user, "asset:write");
+  const [assets, people] = await Promise.all([
+    getAssetsByType("Printer"),
+    canWrite ? getPeople() : Promise.resolve([]),
+  ]);
 
   return (
     <AssetTable
@@ -28,6 +32,8 @@ export default async function Page() {
         title: "Printers",
         emptyMessage: "No printers yet.",
       }}
+      canWrite={canWrite}
+      people={people}
     />
   );
 }

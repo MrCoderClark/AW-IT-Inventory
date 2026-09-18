@@ -13,6 +13,13 @@ vi.mock("next/navigation", () => ({
 vi.mock("sonner", () => ({
   toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }),
 }));
+// AssetTable pulls in AssetFormDialog, which imports the server-action module
+// (server-only + db client); mock it so the suite loads under jsdom.
+vi.mock("@/app/(app)/assets/actions", () => ({
+  createAsset: vi.fn(),
+  updateAsset: vi.fn(),
+  deleteAsset: vi.fn(),
+}));
 
 let seq = 0;
 function makeAsset(overrides: Partial<Asset> = {}): Asset {

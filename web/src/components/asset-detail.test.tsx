@@ -4,12 +4,19 @@ import { render, screen } from "@testing-library/react";
 import { AssetDetail } from "./asset-detail";
 import type { Asset, MachineSummary } from "@/lib/data";
 
-// Boundary mocks: a stub router for the back button, an inert sonner toast.
+// Boundary mocks: a stub router for the back button, an inert sonner toast,
+// and the server-action module (importing it for real would pull in
+// `server-only` + the db client, which don't load under jsdom).
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), back: vi.fn() }),
 }));
 vi.mock("sonner", () => ({
   toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }),
+}));
+vi.mock("@/app/(app)/assets/actions", () => ({
+  createAsset: vi.fn(),
+  updateAsset: vi.fn(),
+  deleteAsset: vi.fn(),
 }));
 
 function makeAsset(overrides: Partial<Asset> = {}): Asset {
@@ -78,6 +85,16 @@ describe("AssetDetail", () => {
     expect(screen.getByText("Apple Enterprise")).toBeInTheDocument();
   });
 
+  // covers: AC-4 (missing dates show a placeholder, never "Invalid Date")
+  it("renders a placeholder for empty purchase/warranty dates", () => {
+    render(
+      <AssetDetail
+        asset={makeAsset({ purchaseDate: "", warrantyUntil: "" })}
+      />,
+    );
+    expect(screen.queryByText(/Invalid Date/)).toBeNull();
+  });
+
   // covers: AC-4 (assignee falls back to a clear placeholder)
   it("shows an available label when no one is assigned", () => {
     render(<AssetDetail asset={makeAsset({ assignee: null })} />);
@@ -120,18 +137,25 @@ describe("AssetDetail", () => {
     expect(screen.getByText("Assigned to Sarah Jenkins")).toBeInTheDocument();
   });
 
-  // covers: AC-4 (actions and back navigation are present and named)
-  it("renders the back button and the placeholder action buttons", () => {
+  // covers: AC-6 (a read-only user sees no write controls)
+  it("hides the Edit and Delete controls without asset:write", () => {
     render(<AssetDetail asset={makeAsset()} />);
     expect(
       screen.getByRole("button", { name: /Back to inventory/i }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Edit/i })).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Print label/i }),
     ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Edit/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Delete asset/i })).toBeNull();
+  });
+
+  // covers: AC-3, AC-5, AC-6 (a writer sees Edit + Delete controls)
+  it("shows the Edit and Delete controls with asset:write", () => {
+    render(<AssetDetail asset={makeAsset()} canWrite />);
+    expect(screen.getByRole("button", { name: /Edit/i })).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /Reassign/i }),
+      screen.getByRole("button", { name: /Delete asset/i }),
     ).toBeInTheDocument();
   });
 });
