@@ -6,17 +6,27 @@ import { KpiCard } from "@/components/kpi-card";
 import { AssetTable } from "@/components/asset-table";
 import { DonutChart } from "@/components/charts/donut-chart";
 import { StatusBars } from "@/components/charts/status-bars";
-import { getAssets, getDashboardStats, getPeople } from "@/db/queries";
+import {
+  getAssets,
+  getDashboardStats,
+  getLocationOptions,
+  getPeople,
+} from "@/db/queries";
 import { hasPermission, requireUser } from "@/lib/auth/session";
 import type { Kpi, Slice } from "@/lib/data";
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: PageProps<"/dashboard">) {
   const user = await requireUser();
   const canWrite = hasPermission(user, "asset:write");
-  const [assets, stats, people] = await Promise.all([
-    getAssets(),
+  const { loc: rawLoc } = await searchParams;
+  const loc = typeof rawLoc === "string" ? rawLoc : undefined;
+  const [assets, stats, people, locations] = await Promise.all([
+    getAssets({ locationId: loc }),
     getDashboardStats(),
     canWrite ? getPeople() : Promise.resolve([]),
+    getLocationOptions(),
   ]);
   const t = stats.byType;
   const s = stats.byStatus;
@@ -84,6 +94,8 @@ export default async function DashboardPage() {
         config={{ showTypeFilter: true }}
         canWrite={canWrite}
         people={people}
+        locations={locations}
+        activeLocationId={loc}
       />
 
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">

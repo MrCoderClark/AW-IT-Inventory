@@ -46,7 +46,8 @@ async function main() {
       serial: a.serial,
       model: a.model,
       assigneeId: a.assignee ? idByName.get(a.assignee.name) ?? null : null,
-      location: a.location,
+      // Locations are now a managed tree (spec 09); seeded assets start with no
+      // location and are assigned on /locations + the asset form.
       status: a.status,
       lastSync: new Date(a.lastSync),
       vendor: a.vendor,

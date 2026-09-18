@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   type ColumnDef,
   type SortingState,
@@ -60,6 +60,7 @@ import {
   type Asset,
   type AssetStatus,
   type AssetType,
+  type LocationOption,
 } from "@/lib/data";
 import { cn } from "@/lib/utils";
 
@@ -331,6 +332,9 @@ export type AssetTableConfig = {
      server component; the client picks the matching column set below. */
   type?: AssetType;
   showTypeFilter?: boolean;
+  /** Hide the location filter (e.g. on a page already scoped to a location).
+     Defaults to shown when any locations exist. */
+  showLocationFilter?: boolean;
   title?: string;
   emptyMessage?: string;
 };
@@ -340,6 +344,8 @@ export function AssetTable({
   config,
   canWrite = false,
   people = [],
+  locations = [],
+  activeLocationId,
 }: {
   assets: Asset[];
   config: AssetTableConfig;
@@ -347,15 +353,44 @@ export function AssetTable({
   canWrite?: boolean;
   /** People for the assignee picker in the create form. */
   people?: PersonOption[];
+  /** The whole location tree as flat options: the filter lists all of them, the
+     create form lists only the leaves. */
+  locations?: LocationOption[];
+  /** The location currently filtering the list (from the `loc` URL param). */
+  activeLocationId?: string;
 }) {
-  const { type, showTypeFilter = false, title, emptyMessage } = config;
+  const {
+    type,
+    showTypeFilter = false,
+    showLocationFilter = true,
+    title,
+    emptyMessage,
+  } = config;
   const columns = React.useMemo(
     () => (type ? columnsFor(type) : allColumns),
     [type],
   );
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const openAsset = (id: string) =>
     router.push(`/assets/${encodeURIComponent(id)}`);
+
+  const leafLocations = React.useMemo(
+    () => locations.filter((l) => l.isLeaf),
+    [locations],
+  );
+
+  // The location filter is server-driven: it narrows the fetched set to the
+  // chosen location's subtree (a parent includes every descendant leaf) via the
+  // `loc` URL param, so the RSC re-queries. Search / status / type stay client-side.
+  function setLocationFilter(next: string | null) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (!next || next === "all") params.delete("loc");
+    else params.set("loc", next);
+    const qs = params.toString();
+    router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }
 
   const [formOpen, setFormOpen] = React.useState(false);
 
@@ -445,6 +480,25 @@ export function AssetTable({
             ))}
           </SelectContent>
         </Select>
+
+        {showLocationFilter && locations.length > 0 && (
+          <Select
+            value={activeLocationId ?? "all"}
+            onValueChange={setLocationFilter}
+          >
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="All Locations" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Locations</SelectItem>
+              {locations.map((loc) => (
+                <SelectItem key={loc.id} value={loc.id}>
+                  {loc.path}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
 
         <div className="ml-auto flex items-center gap-2">
           {canWrite && (
@@ -566,6 +620,7 @@ export function AssetTable({
       onOpenChange={setFormOpen}
       mode="create"
       people={people}
+      locations={leafLocations}
       presetType={type}
     />
   ) : null;

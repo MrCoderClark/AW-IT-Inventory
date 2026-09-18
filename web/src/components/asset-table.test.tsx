@@ -9,6 +9,8 @@ import type { Asset } from "@/lib/data";
 const { pushMock } = vi.hoisted(() => ({ pushMock: vi.fn() }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: pushMock }),
+  usePathname: () => "/computers",
+  useSearchParams: () => new URLSearchParams(),
 }));
 vi.mock("sonner", () => ({
   toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }),
@@ -32,6 +34,7 @@ function makeAsset(overrides: Partial<Asset> = {}): Asset {
     model: `Model ${seq}`,
     assignee: { name: `Person ${seq}`, initials: "PP" },
     location: "SF",
+    locationId: null,
     status: "deployed",
     lastSync: "2026-08-24",
     vendor: "Vendor",

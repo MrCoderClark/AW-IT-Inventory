@@ -2,10 +2,10 @@ import { Lock } from "lucide-react";
 
 import { AssetTable } from "@/components/asset-table";
 import { PagePlaceholder } from "@/components/page-placeholder";
-import { getAssetsByType, getPeople } from "@/db/queries";
+import { getAssetsByType, getLocationOptions, getPeople } from "@/db/queries";
 import { hasPermission, requireUser } from "@/lib/auth/session";
 
-export default async function Page() {
+export default async function Page({ searchParams }: PageProps<"/printers">) {
   const user = await requireUser();
 
   if (!hasPermission(user, "asset:read")) {
@@ -18,10 +18,13 @@ export default async function Page() {
     );
   }
 
+  const { loc: rawLoc } = await searchParams;
+  const loc = typeof rawLoc === "string" ? rawLoc : undefined;
   const canWrite = hasPermission(user, "asset:write");
-  const [assets, people] = await Promise.all([
-    getAssetsByType("Printer"),
+  const [assets, people, locations] = await Promise.all([
+    getAssetsByType("Printer", { locationId: loc }),
     canWrite ? getPeople() : Promise.resolve([]),
+    getLocationOptions(),
   ]);
 
   return (
@@ -34,6 +37,8 @@ export default async function Page() {
       }}
       canWrite={canWrite}
       people={people}
+      locations={locations}
+      activeLocationId={loc}
     />
   );
 }

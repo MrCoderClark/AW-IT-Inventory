@@ -1,9 +1,17 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ChevronDown, ChevronRight, MapPin, Settings2 } from "lucide-react";
 
-import { NAV_PRIMARY, NAV_ASSETS, NAV_MANAGE, type NavItem } from "@/lib/data";
+import {
+  NAV_PRIMARY,
+  NAV_ASSETS,
+  NAV_MANAGE,
+  type LocationNode,
+  type NavItem,
+} from "@/lib/data";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useHasPermission } from "@/components/user-provider";
@@ -48,7 +56,154 @@ function Section({ label, items, pathname }: { label?: string; items: NavItem[];
   );
 }
 
-export function AppSidebar() {
+/** A single node in the sidebar location tree: a link to its device page, plus
+   an expand toggle for its children. */
+function LocationNavNode({
+  node,
+  depth,
+  pathname,
+  collapsed,
+  onToggle,
+}: {
+  node: LocationNode;
+  depth: number;
+  pathname: string;
+  collapsed: Set<string>;
+  onToggle: (id: string) => void;
+}) {
+  const hasChildren = node.children.length > 0;
+  const isOpen = !collapsed.has(node.id);
+  const href = `/locations/${node.id}`;
+  const active = pathname === href;
+
+  return (
+    <div>
+      <div
+        className={cn(
+          "flex items-center gap-1 rounded-lg pr-2 text-sm transition-colors",
+          active
+            ? "bg-sidebar-accent text-sidebar-accent-foreground"
+            : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
+        )}
+        style={{ paddingLeft: `${depth * 14 + 4}px` }}
+      >
+        {hasChildren ? (
+          <button
+            onClick={() => onToggle(node.id)}
+            aria-label={isOpen ? "Collapse" : "Expand"}
+            className="grid size-5 shrink-0 place-items-center rounded hover:text-foreground"
+          >
+            {isOpen ? (
+              <ChevronDown className="size-3.5" />
+            ) : (
+              <ChevronRight className="size-3.5" />
+            )}
+          </button>
+        ) : (
+          <span className="size-5 shrink-0" />
+        )}
+        <Link
+          href={href}
+          aria-current={active ? "page" : undefined}
+          className="flex min-w-0 flex-1 items-center gap-2 py-1.5 font-medium"
+        >
+          <MapPin className="size-3.5 shrink-0" />
+          <span className="truncate">{node.name}</span>
+          {node.deviceCount > 0 && (
+            <span className="ml-auto shrink-0 text-[10px] tabular-nums text-muted-foreground/70">
+              {node.deviceCount}
+            </span>
+          )}
+        </Link>
+      </div>
+      {hasChildren && isOpen && (
+        <div>
+          {node.children.map((child) => (
+            <LocationNavNode
+              key={child.id}
+              node={child}
+              depth={depth + 1}
+              pathname={pathname}
+              collapsed={collapsed}
+              onToggle={onToggle}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The collapsible Locations section: navigate the tree to filter devices by a
+   location's subtree, with a gear link to the management page. */
+function LocationsNav({
+  tree,
+  pathname,
+}: {
+  tree: LocationNode[];
+  pathname: string;
+}) {
+  const [open, setOpen] = React.useState(true);
+  const [collapsed, setCollapsed] = React.useState<Set<string>>(new Set());
+
+  const toggle = (id: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  return (
+    <div className="px-3">
+      <div className="flex items-center justify-between pb-2 pt-4 pl-3 pr-1">
+        <button
+          onClick={() => setOpen((o) => !o)}
+          className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70 hover:text-muted-foreground"
+        >
+          {open ? (
+            <ChevronDown className="size-3" />
+          ) : (
+            <ChevronRight className="size-3" />
+          )}
+          Locations
+        </button>
+        <Link
+          href="/locations"
+          title="Manage locations"
+          aria-label="Manage locations"
+          className={cn(
+            "grid size-6 place-items-center rounded-md text-muted-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
+            pathname === "/locations" && "bg-sidebar-accent text-sidebar-accent-foreground",
+          )}
+        >
+          <Settings2 className="size-4" />
+        </Link>
+      </div>
+      {open &&
+        (tree.length > 0 ? (
+          <div className="grid gap-0.5">
+            {tree.map((node) => (
+              <LocationNavNode
+                key={node.id}
+                node={node}
+                depth={0}
+                pathname={pathname}
+                collapsed={collapsed}
+                onToggle={toggle}
+              />
+            ))}
+          </div>
+        ) : (
+          <p className="px-3 py-1 text-xs text-muted-foreground/70">
+            No locations yet.
+          </p>
+        ))}
+    </div>
+  );
+}
+
+export function AppSidebar({ locations = [] }: { locations?: LocationNode[] }) {
   const pathname = usePathname();
   const canAdmin = useHasPermission("user:admin");
   const manageItems = canAdmin
@@ -80,6 +235,7 @@ export function AppSidebar() {
         <nav className="pb-4">
           <Section items={NAV_PRIMARY} pathname={pathname} />
           <Section label="Assets" items={NAV_ASSETS} pathname={pathname} />
+          <LocationsNav tree={locations} pathname={pathname} />
           <Section label="Manage" items={manageItems} pathname={pathname} />
         </nav>
       </ScrollArea>

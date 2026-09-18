@@ -29,7 +29,7 @@ const filledValues: AssetFormValues = {
   serial: "SN-123",
   model: "Dell U2723",
   assigneeId: "",
-  location: "SF — HQ",
+  locationId: "",
   vendor: "Dell",
   spec: "4K",
   costCenter: "ENG",

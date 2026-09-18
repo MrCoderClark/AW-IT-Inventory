@@ -31,6 +31,11 @@ vi.mock("@/lib/auth/session", () => ({
   hasPermission: h.hasPermission,
 }));
 vi.mock("next/cache", () => ({ revalidatePath: h.revalidatePath }));
+// queries.ts is a `server-only` module; mock the one helper the actions use for
+// the leaf check (default: the chosen location is an assignable leaf).
+vi.mock("@/db/queries", () => ({
+  locationLeafStatus: vi.fn(async () => "leaf" as const),
+}));
 
 import { createAsset, updateAsset, deleteAsset } from "./actions";
 
@@ -41,7 +46,7 @@ const validInput = {
   serial: "",
   model: "",
   assigneeId: "",
-  location: "",
+  locationId: "",
   vendor: "",
   spec: "",
   costCenter: "",
