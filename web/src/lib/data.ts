@@ -46,6 +46,15 @@ export interface Asset {
   warrantyUntil: string;
   costCenter: string;
   spec: string;
+  // Extra searchable identifiers from the type detail tables (IP, phone, IMEI,
+  // MAC), so the search bar and list search match them (spec 10). Optional
+  // because the sample seed data predates the detail tables.
+  search?: string;
+  // Type-specific identifiers surfaced as per-category table columns (spec 10);
+  // only the fields for the row's own type are set.
+  ip?: string; // printer or network IP
+  mac?: string; // network MAC
+  phoneNumber?: string; // phone number
 }
 
 /* ---------------- Status metadata ---------------- */

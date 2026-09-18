@@ -36,7 +36,24 @@ import {
   type MachineSummary,
 } from "@/lib/data";
 import type { AssetFormValues } from "@/lib/asset-schema";
+import {
+  TYPE_FIELDS,
+  detailsToFormValues,
+  type TypeField,
+} from "@/lib/asset-fields";
 import { cn } from "@/lib/utils";
+
+/** Format one type-specific field's stored value for the detail page. */
+function fmtDetail(
+  field: TypeField,
+  row: Record<string, unknown> | null,
+): string {
+  if (!row) return "—";
+  const v = row[field.key];
+  if (v == null || v === "") return "—";
+  if (field.bool) return v === true ? "Yes" : v === false ? "No" : "—";
+  return String(v);
+}
 
 const TYPE_ROUTE: Record<AssetType, string> = {
   Computer: "/computers",
@@ -106,6 +123,7 @@ export function AssetDetail({
   canWrite = false,
   people = [],
   locations = [],
+  details = null,
   assigneeId = null,
 }: {
   asset: Asset;
@@ -116,6 +134,8 @@ export function AssetDetail({
   people?: PersonOption[];
   /** Assignable leaf locations for the location picker in the edit form. */
   locations?: LocationOption[];
+  /** The asset's type-specific detail row, for display and the edit prefill. */
+  details?: Record<string, unknown> | null;
   /** The asset's current assignee id, to pre-select in the edit form. */
   assigneeId?: string | null;
 }) {
@@ -151,6 +171,7 @@ export function AssetDetail({
     purchaseDate: asset.purchaseDate,
     warrantyUntil: asset.warrantyUntil,
   };
+  const editDetails = detailsToFormValues(asset.type, details);
 
   function confirmDelete() {
     startDelete(async () => {
@@ -204,14 +225,35 @@ export function AssetDetail({
       {/* Metadata */}
       <div className="grid grid-cols-2 gap-x-4 gap-y-4 rounded-xl border bg-card p-5 sm:grid-cols-3">
         <Field label="Model" value={asset.model} />
-        <Field label="Specification" value={asset.spec} mono />
-        <Field label="Assigned To" value={asset.assignee?.name ?? "— Available"} />
-        <Field label="Location" value={asset.location} />
+        <Field label="Serial" value={asset.serial || "—"} mono />
+        <Field label="Specification" value={asset.spec || "—"} mono />
+        {/* Printers / network gear aren't assigned to a person. */}
+        {!TYPE_FIELDS[asset.type].hiddenShared.includes("assigneeId") && (
+          <Field
+            label="Assigned To"
+            value={asset.assignee?.name ?? "— Available"}
+          />
+        )}
+        <Field label="Location" value={asset.location || "—"} />
         <Field label="Purchase Date" value={fmt(asset.purchaseDate)} mono />
         <Field label="Warranty Until" value={fmt(asset.warrantyUntil)} mono />
-        <Field label="Vendor" value={asset.vendor} />
-        <Field label="Cost Center" value={asset.costCenter} mono />
+        <Field label="Vendor" value={asset.vendor || "—"} />
+        <Field label="Cost Center" value={asset.costCenter || "—"} mono />
       </div>
+
+      {/* Type-specific details (spec 10) */}
+      {TYPE_FIELDS[asset.type].fields.length > 0 && (
+        <div>
+          <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            {asset.type} details
+          </p>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-4 rounded-xl border bg-card p-5 sm:grid-cols-3">
+            {TYPE_FIELDS[asset.type].fields.map((f) => (
+              <Field key={f.key} label={f.label} value={fmtDetail(f, details)} />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Live-scan data from the collector */}
       {showHealth && (
@@ -301,6 +343,7 @@ export function AssetDetail({
           locations={locations}
           editTag={asset.id}
           initial={editValues}
+          initialDetails={editDetails}
         />
       )}
 

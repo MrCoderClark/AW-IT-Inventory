@@ -6,6 +6,7 @@ import { PagePlaceholder } from "@/components/page-placeholder";
 import {
   getAssetAssigneeId,
   getAssetById,
+  getAssetDetails,
   getLeafLocationOptions,
   getMachineSummary,
   getPeople,
@@ -28,13 +29,15 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
   const { id } = await params;
   const canWrite = hasPermission(user, "asset:write");
   // All key off the same route tag, so fetch them together.
-  const [asset, machine, assigneeId, people, locations] = await Promise.all([
-    getAssetById(id),
-    getMachineSummary(id),
-    canWrite ? getAssetAssigneeId(id) : Promise.resolve(null),
-    canWrite ? getPeople() : Promise.resolve([]),
-    canWrite ? getLeafLocationOptions() : Promise.resolve([]),
-  ]);
+  const [asset, machine, assigneeId, people, locations, assetDetails] =
+    await Promise.all([
+      getAssetById(id),
+      getMachineSummary(id),
+      canWrite ? getAssetAssigneeId(id) : Promise.resolve(null),
+      canWrite ? getPeople() : Promise.resolve([]),
+      canWrite ? getLeafLocationOptions() : Promise.resolve([]),
+      getAssetDetails(id),
+    ]);
   if (!asset) notFound();
 
   return (
@@ -44,6 +47,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
       canWrite={canWrite}
       people={people}
       locations={locations}
+      details={assetDetails?.row ?? null}
       assigneeId={assigneeId ?? null}
     />
   );

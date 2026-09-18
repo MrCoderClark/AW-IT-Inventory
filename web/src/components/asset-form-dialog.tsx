@@ -32,6 +32,14 @@ import {
   type AssetFormValues,
 } from "@/lib/asset-schema";
 import {
+  TYPE_FIELDS,
+  detailsFieldErrors,
+  detailsSchemaFor,
+  emptyDetailsFor,
+  type DetailsFormValues,
+  type TypeField,
+} from "@/lib/asset-fields";
+import {
   STATUS_META,
   type AssetType,
   type LocationOption,
@@ -46,21 +54,12 @@ export interface PersonOption {
 type FieldErrors = Partial<Record<keyof AssetFormValues, string>>;
 
 /**
- * Fields that don't apply to a given asset type, so the form hides them (and
- * clears them on submit). Mirrors the per-type columns in the asset table:
- * printers and network gear are shared infrastructure, not assigned to a
- * person. This is the no-schema adaptation; genuinely type-specific *new*
- * fields (IP, duplex, IMEI, resolution…) are a separate, architected feature.
+ * Shared fields a type hides (e.g. Assignee for Printer / Network), from the
+ * per-type field registry (spec 10). Hidden in the UI and cleared on submit so a
+ * type switch can't leave a stray value (e.g. an assignee on a printer).
  */
-const HIDDEN_FIELDS: Partial<
-  Record<AssetType, ReadonlyArray<keyof AssetFormValues>>
-> = {
-  Printer: ["assigneeId"],
-  Network: ["assigneeId"],
-};
-
 function hiddenFieldsFor(type: AssetType | ""): Set<keyof AssetFormValues> {
-  return new Set(type ? HIDDEN_FIELDS[type] ?? [] : []);
+  return new Set(type ? TYPE_FIELDS[type].hiddenShared : []);
 }
 
 export function AssetFormDialog({
@@ -72,6 +71,7 @@ export function AssetFormDialog({
   presetType,
   editTag,
   initial,
+  initialDetails,
   onSuccess,
 }: {
   open: boolean;
@@ -86,28 +86,35 @@ export function AssetFormDialog({
   editTag?: string;
   /** Edit mode: the asset's current values, pre-filled into the form. */
   initial?: AssetFormValues;
+  /** Edit mode: the asset's current type-specific values, pre-filled. */
+  initialDetails?: DetailsFormValues;
   onSuccess?: () => void;
 }) {
   const [values, setValues] = React.useState<AssetFormValues>(EMPTY_ASSET_FORM);
   const [errors, setErrors] = React.useState<FieldErrors>({});
+  // Type-specific field values (all strings) and their inline errors.
+  const [details, setDetails] = React.useState<DetailsFormValues>({});
+  const [detailErrors, setDetailErrors] = React.useState<Record<string, string>>(
+    {},
+  );
   const [isPending, startTransition] = React.useTransition();
 
-  // Fields not shown for the current type; hidden in the UI and cleared on submit
-  // so a type switch can't leave a stray value (e.g. an assignee on a printer).
   const hidden = hiddenFieldsFor(values.type);
+  const typeFields = values.type ? TYPE_FIELDS[values.type].fields : [];
 
   // Reset the form each time the dialog opens, to the edit values or a fresh
   // create form (with the category's type pre-selected).
   React.useEffect(() => {
     if (!open) return;
     setErrors({});
+    setDetailErrors({});
     if (mode === "edit" && initial) {
       setValues(initial);
+      setDetails(initialDetails ?? emptyDetailsFor(initial.type as AssetType));
     } else {
-      setValues({
-        ...EMPTY_ASSET_FORM,
-        type: presetType ?? "",
-      });
+      const t = presetType ?? "";
+      setValues({ ...EMPTY_ASSET_FORM, type: t });
+      setDetails(t ? emptyDetailsFor(t) : {});
     }
     // initial/presetType are captured on open; re-running on their identity
     // would clobber in-progress edits.
@@ -122,21 +129,47 @@ export function AssetFormDialog({
     if (errors[key]) setErrors((e) => ({ ...e, [key]: undefined }));
   }
 
+  // Create mode only: switching type swaps the type-specific field set.
+  function setType(next: AssetType) {
+    set("type", next);
+    setDetails(emptyDetailsFor(next));
+    setDetailErrors({});
+  }
+
+  function setDetail(key: string, value: string) {
+    setDetails((d) => ({ ...d, [key]: value }));
+    if (detailErrors[key])
+      setDetailErrors((e) => {
+        const n = { ...e };
+        delete n[key];
+        return n;
+      });
+  }
+
   function submit() {
     // Drop any values for fields hidden by the chosen type before validating.
     const cleaned: AssetFormValues = { ...values };
     for (const key of hidden) cleaned[key] = "";
 
     const parsed = assetInputSchema.safeParse(cleaned);
-    if (!parsed.success) {
-      setErrors(fieldErrors(parsed.error));
-      return;
-    }
+    if (!parsed.success) setErrors(fieldErrors(parsed.error));
+
+    const detailsParsed = cleaned.type
+      ? detailsSchemaFor(cleaned.type).safeParse(details)
+      : null;
+    if (detailsParsed && !detailsParsed.success)
+      setDetailErrors(detailsFieldErrors(detailsParsed.error));
+
+    if (!parsed.success || (detailsParsed && !detailsParsed.success)) return;
+
+    // Submit the raw detail strings alongside the shared fields; the action
+    // re-parses both at the trust boundary.
+    const payload = { ...cleaned, details };
     startTransition(async () => {
       const res =
         mode === "edit" && editTag
-          ? await updateAsset(editTag, cleaned)
-          : await createAsset(cleaned);
+          ? await updateAsset(editTag, payload)
+          : await createAsset(payload);
       if (res.ok) {
         toast.success(res.message);
         onOpenChange(false);
@@ -199,7 +232,7 @@ export function AssetFormDialog({
             >
               <Select
                 value={values.type || null}
-                onValueChange={(v) => set("type", v as AssetType)}
+                onValueChange={(v) => setType(v as AssetType)}
                 disabled={mode === "edit"}
               >
                 <SelectTrigger
@@ -346,6 +379,22 @@ export function AssetFormDialog({
                 rows={2}
               />
             </Field>
+
+            {/* Type-specific fields, from the per-type registry (spec 10). */}
+            {typeFields.length > 0 && (
+              <div className="sm:col-span-2 mt-1 border-t pt-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                {values.type} details
+              </div>
+            )}
+            {typeFields.map((f) => (
+              <DetailField
+                key={f.key}
+                field={f}
+                value={details[f.key] ?? ""}
+                error={detailErrors[f.key]}
+                onChange={(v) => setDetail(f.key, v)}
+              />
+            ))}
           </div>
 
           <DialogFooter className="rounded-none border-0 bg-transparent p-4">
@@ -365,6 +414,59 @@ export function AssetFormDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Render one type-specific field from the registry: a select, or an input
+   (numeric for int/decimal). Its value and error are plain strings. */
+function DetailField({
+  field,
+  value,
+  error,
+  onChange,
+}: {
+  field: TypeField;
+  value: string;
+  error?: string;
+  onChange: (value: string) => void;
+}) {
+  if (field.kind === "select") {
+    return (
+      <Field label={field.label} required={field.required} error={error}>
+        <Select value={value} onValueChange={(v) => onChange(v ?? "")}>
+          <SelectTrigger className="w-full" aria-invalid={!!error}>
+            <SelectValue placeholder={`Choose ${field.label.toLowerCase()}`} />
+          </SelectTrigger>
+          <SelectContent>
+            {!field.required && <SelectItem value="">—</SelectItem>}
+            {field.options?.map((o) => (
+              <SelectItem key={o} value={o}>
+                {o}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+    );
+  }
+  const numeric = field.kind === "int" || field.kind === "decimal";
+  return (
+    <Field label={field.label} required={field.required} error={error}>
+      <Input
+        type={numeric ? "number" : "text"}
+        inputMode={
+          field.kind === "int"
+            ? "numeric"
+            : field.kind === "decimal"
+              ? "decimal"
+              : undefined
+        }
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={field.placeholder}
+        aria-invalid={!!error}
+      />
+    </Field>
   );
 }
 

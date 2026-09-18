@@ -16,7 +16,17 @@ import type {
 } from "@/lib/data";
 import { LOCATION_PATH_SEP } from "@/lib/data";
 import { db } from "./index";
-import { assets, locations, machines, people } from "./schema";
+import {
+  assets,
+  computerDetails,
+  locations,
+  machines,
+  monitorDetails,
+  networkDetails,
+  people,
+  phoneDetails,
+  printerDetails,
+} from "./schema";
 
 function toDateStr(value: Date | string | null): string {
   if (!value) return "";
@@ -41,6 +51,13 @@ const assetSelect = {
   spec: assets.spec,
   assigneeName: people.name,
   assigneeInitials: people.initials,
+  // Searchable identifiers from the type detail tables (only one type ever has a
+  // row per asset, so at most one set is non-null). See spec 10 AC-5.
+  printerIp: printerDetails.ipAddress,
+  phoneImei: phoneDetails.imei,
+  phoneNumber: phoneDetails.phoneNumber,
+  networkIp: networkDetails.ipAddress,
+  networkMac: networkDetails.macAddress,
 };
 
 type Row = {
@@ -59,6 +76,11 @@ type Row = {
   spec: string | null;
   assigneeName: string | null;
   assigneeInitials: string | null;
+  printerIp: string | null;
+  phoneImei: string | null;
+  phoneNumber: string | null;
+  networkIp: string | null;
+  networkMac: string | null;
 };
 
 /** Map a row to a display Asset. `pathById` resolves the assigned leaf's id to
@@ -82,15 +104,25 @@ function toAsset(r: Row, pathById: Map<string, string>): Asset {
     warrantyUntil: r.warrantyUntil ?? "",
     costCenter: r.costCenter ?? "",
     spec: r.spec ?? "",
+    search: [r.printerIp, r.phoneImei, r.phoneNumber, r.networkIp, r.networkMac]
+      .filter(Boolean)
+      .join(" "),
+    ip: r.printerIp ?? r.networkIp ?? "",
+    mac: r.networkMac ?? "",
+    phoneNumber: r.phoneNumber ?? "",
   };
 }
 
-/** Shared asset select + people join; callers add their own where/order/limit. */
+/** Shared asset select + people join + the detail tables that hold searchable
+   identifiers; callers add their own where/order/limit. */
 function selectAssets() {
   return db
     .select(assetSelect)
     .from(assets)
-    .leftJoin(people, eq(assets.assigneeId, people.id));
+    .leftJoin(people, eq(assets.assigneeId, people.id))
+    .leftJoin(printerDetails, eq(assets.id, printerDetails.assetId))
+    .leftJoin(phoneDetails, eq(assets.id, phoneDetails.assetId))
+    .leftJoin(networkDetails, eq(assets.id, networkDetails.assetId));
 }
 
 /** A location-filter option: restrict to assets in a chosen location's subtree
@@ -182,6 +214,51 @@ export async function getAssetAssigneeId(
     .where(eq(assets.tag, tag))
     .limit(1);
   return rows.length ? rows[0].assigneeId : undefined;
+}
+
+function detailTableFor(type: AssetType) {
+  switch (type) {
+    case "Computer":
+      return computerDetails;
+    case "Monitor":
+      return monitorDetails;
+    case "Printer":
+      return printerDetails;
+    case "Phone":
+      return phoneDetails;
+    case "Network":
+      return networkDetails;
+  }
+}
+
+export interface AssetDetails {
+  type: AssetType;
+  /** The type's detail row, or null when the asset has no detail row yet. */
+  row: Record<string, unknown> | null;
+}
+
+/**
+ * The type-specific detail row for one asset tag, plus the asset's type, for the
+ * edit prefill and the detail page. Null when the tag matches no asset; `row` is
+ * null when the asset exists but has no detail row yet (created on first edit).
+ */
+export async function getAssetDetails(tag: string): Promise<AssetDetails | null> {
+  const a = await db
+    .select({ id: assets.id, type: assets.type })
+    .from(assets)
+    .where(eq(assets.tag, tag))
+    .limit(1);
+  if (!a.length) return null;
+
+  const type = a[0].type as AssetType;
+  // The concrete table object is correct; the cast only satisfies the union type.
+  const table = detailTableFor(type) as typeof printerDetails;
+  const rows = await db
+    .select()
+    .from(table)
+    .where(eq(table.assetId, a[0].id))
+    .limit(1);
+  return { type, row: (rows[0] as Record<string, unknown>) ?? null };
 }
 
 const machineSummarySelect = {

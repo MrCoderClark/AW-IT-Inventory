@@ -98,7 +98,7 @@ export function CommandPalette() {
             return (
               <CommandItem
                 key={a.id}
-                value={`${a.id} ${a.name} ${a.serial} ${a.assignee?.name ?? ""}`}
+                value={`${a.id} ${a.name} ${a.serial} ${a.assignee?.name ?? ""} ${a.search ?? ""}`}
                 onSelect={() => go(`/assets/${encodeURIComponent(a.id)}`)}
               >
                 <Icon />
