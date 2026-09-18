@@ -1,7 +1,7 @@
 # 09. Hierarchical locations
 
 **Date**: 2026-09-18
-**Status**: In Progress
+**Status**: Accepted
 
 > Decision history (Context, Options considered, Rationale) lives in
 > [rationale.md](./rationale.md). Verification steps in [verify.md](./verify.md).
