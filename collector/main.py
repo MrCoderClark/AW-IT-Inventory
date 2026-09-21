@@ -262,8 +262,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     worker = sub.add_parser(
         "worker",
-        help="Run the long-running worker: drain manual scan jobs (spec 12). "
-        "The printer reachability scheduler is added in a later milestone.",
+        help="Run the long-running worker: drain manual scan jobs and run the "
+        "printer reachability schedule (spec 12).",
     )
     worker.add_argument("--config", default="config.yaml")
     worker.set_defaults(func=run_worker)

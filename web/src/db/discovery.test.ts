@@ -10,7 +10,7 @@ const { selectMock, fromMock, insertMock, valuesMock, onConflictMock } =
   vi.hoisted(() => {
     const fromMock = vi.fn();
     const selectMock = vi.fn(() => ({ from: fromMock }));
-    const onConflictMock = vi.fn(() => Promise.resolve());
+    const onConflictMock = vi.fn((_config?: unknown) => Promise.resolve());
     const valuesMock = vi.fn(() => ({ onConflictDoUpdate: onConflictMock }));
     const insertMock = vi.fn(() => ({ values: valuesMock }));
     return { selectMock, fromMock, insertMock, valuesMock, onConflictMock };

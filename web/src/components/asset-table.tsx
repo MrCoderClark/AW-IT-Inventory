@@ -61,6 +61,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { StatusBadge } from "@/components/status-badge";
+import { ReachabilityBadge } from "@/components/reachability-badge";
 import {
   STATUS_META,
   TYPE_ICON,
@@ -340,6 +341,16 @@ const phoneColumn: ColumnDef<Asset> = {
   ),
 };
 
+const reachabilityColumn: ColumnDef<Asset> = {
+  id: "reachability",
+  accessorFn: (a) => a.reachability?.state ?? "unknown",
+  header: "Reachability",
+  cell: ({ row }) => (
+    <ReachabilityBadge reachability={row.original.reachability} />
+  ),
+  filterFn: "equals",
+};
+
 const statusColumn: ColumnDef<Asset> = {
   accessorKey: "status",
   header: "Status",
@@ -416,6 +427,7 @@ const COLUMN_REGISTRY: Record<ColumnId, ColumnDef<Asset>> = {
   ip: ipColumn,
   mac: macColumn,
   phoneNumber: phoneColumn,
+  reachability: reachabilityColumn,
   actions: actionsColumn,
 };
 

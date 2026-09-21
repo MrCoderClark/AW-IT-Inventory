@@ -56,6 +56,28 @@ export interface Asset {
   ip?: string; // printer or network IP
   mac?: string; // network MAC
   phoneNumber?: string; // phone number
+  // Printer reachability rollup (spec 12), set only on printer rows that have a
+  // reachability status yet; absent means never checked.
+  reachability?: AssetReachability;
+}
+
+/* ---------------- Printer reachability (spec 12) ---------------- */
+
+export type ReachabilityState = "up" | "down" | "unknown";
+
+/** Current reachability rollup shown as a badge on printer rows / detail. */
+export interface AssetReachability {
+  state: ReachabilityState;
+  lastCheckedAt: string | null; // ISO
+  downSince: string | null; // ISO; set while down
+}
+
+/** One historical reachability check, for the printer detail page. */
+export interface ReachabilityCheck {
+  checkedAt: string; // ISO
+  reachable: boolean;
+  latencyMs: number | null;
+  method: "tcp" | "snmp";
 }
 
 /* ---------------- Status metadata ---------------- */

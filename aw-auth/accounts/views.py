@@ -9,11 +9,13 @@ from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from .models import ServiceAccount
+from .notifications import send_printer_alert
 from .serializers import (
     OpusTokenObtainPairSerializer,
     RegisterSerializer,
     UserSerializer,
 )
+from .service_auth import HasServiceScope
 
 
 class RegisterView(generics.CreateAPIView):
@@ -86,6 +88,34 @@ class ClientTokenView(APIView):
                 ),
             }
         )
+
+
+class PrinterAlertView(APIView):
+    """Email the admins when a printer goes down or recovers (spec 12, AC-7).
+
+    Called by web (which holds the reachability history and detects the
+    transition) with its `opus-web` service account. Requires a service token
+    carrying `notify:send`. aw-auth resolves "the admins" from RBAC and sends
+    through Resend. A send failure is reported so web can retry on the next check.
+    """
+
+    authentication_classes: list = []  # machine caller; token verified by scope
+    permission_classes = [HasServiceScope]
+    required_scope = "notify:send"
+
+    @extend_schema(request=None, responses={200: None})
+    def post(self, request):
+        printer = request.data.get("printer") or {}
+        event = request.data.get("event")
+        since = request.data.get("since")
+        if not isinstance(printer, dict) or event not in ("down", "up"):
+            return Response(
+                {"detail": "printer{name,ip} and event in {down,up} are required"},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+
+        sent = send_printer_alert(printer, event, since)
+        return Response({"ok": True, "sent": sent})
 
 
 class LogoutView(APIView):

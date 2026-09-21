@@ -10,6 +10,7 @@ import {
   getLeafLocationOptions,
   getMachineSummary,
   getPeople,
+  getPrinterReachability,
 } from "@/db/queries";
 import { hasPermission, requireUser } from "@/lib/auth/session";
 
@@ -29,8 +30,9 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
   const { id } = await params;
   const canWrite = hasPermission(user, "asset:write");
   const canScan = hasPermission(user, "scan:write");
-  // All key off the same route tag, so fetch them together.
-  const [asset, machine, assigneeId, people, locations, assetDetails] =
+  // All key off the same route tag, so fetch them together. Reachability returns
+  // null for non-printers (spec 12, AC-8).
+  const [asset, machine, assigneeId, people, locations, assetDetails, reachability] =
     await Promise.all([
       getAssetById(id),
       getMachineSummary(id),
@@ -38,6 +40,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
       canWrite ? getPeople() : Promise.resolve([]),
       canWrite ? getLeafLocationOptions() : Promise.resolve([]),
       getAssetDetails(id),
+      getPrinterReachability(id),
     ]);
   if (!asset) notFound();
 
@@ -51,6 +54,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
       locations={locations}
       details={assetDetails?.row ?? null}
       assigneeId={assigneeId ?? null}
+      reachability={reachability}
     />
   );
 }
