@@ -216,6 +216,29 @@ export const networkDetails = pgTable(
   ],
 );
 
+// Global, per-view table column layout (spec 11). One row per configurable view,
+// keyed by `column_view`; `columns` is an ordered array of stable column id
+// strings. Additive: no existing table is touched. NOT NULL is safe because the
+// table is brand new (no rows to backfill). Absent row = the view falls back to
+// the code-owned default columns, so behavior is unchanged until an admin saves.
+export const columnView = pgEnum("column_view", [
+  "computer",
+  "monitor",
+  "printer",
+  "phone",
+  "network",
+  "dashboard",
+  "location",
+]);
+
+export const tableColumnConfig = pgTable("table_column_config", {
+  viewKey: columnView("view_key").primaryKey(),
+  columns: jsonb("columns").$type<string[]>().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
 export type AssetRow = typeof assets.$inferSelect;
 export type PersonRow = typeof people.$inferSelect;
 export type MachineRow = typeof machines.$inferSelect;
@@ -225,3 +248,4 @@ export type MonitorDetailsRow = typeof monitorDetails.$inferSelect;
 export type PrinterDetailsRow = typeof printerDetails.$inferSelect;
 export type PhoneDetailsRow = typeof phoneDetails.$inferSelect;
 export type NetworkDetailsRow = typeof networkDetails.$inferSelect;
+export type TableColumnConfigRow = typeof tableColumnConfig.$inferSelect;

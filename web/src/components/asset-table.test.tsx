@@ -22,6 +22,12 @@ vi.mock("@/app/(app)/assets/actions", () => ({
   updateAsset: vi.fn(),
   deleteAsset: vi.fn(),
 }));
+// The column picker imports the columns Server Actions (server-only + db client)
+// the same way; mock it so the suite loads under jsdom (spec 11).
+vi.mock("@/app/(app)/columns-actions", () => ({
+  saveColumnConfig: vi.fn(),
+  resetColumnConfig: vi.fn(),
+}));
 
 let seq = 0;
 function makeAsset(overrides: Partial<Asset> = {}): Asset {

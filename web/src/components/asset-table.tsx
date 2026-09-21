@@ -17,6 +17,7 @@ import {
 } from "@tanstack/react-table";
 import {
   ArrowUpDown,
+  Columns3,
   Download,
   MoreHorizontal,
   Plus,
@@ -64,7 +65,23 @@ import {
   type LocationOption,
 } from "@/lib/data";
 import { TYPE_FIELDS } from "@/lib/asset-fields";
+import {
+  resolveColumns,
+  type ColumnId,
+  type ColumnView,
+} from "@/lib/table-columns";
+import { ColumnPickerDialog } from "@/components/column-picker-dialog";
 import { cn } from "@/lib/utils";
+
+/** Map a category's asset type to its column view (spec 11). The mixed views
+   (dashboard, location) are passed explicitly by their pages. */
+const TYPE_TO_VIEW: Record<AssetType, ColumnView> = {
+  Computer: "computer",
+  Monitor: "monitor",
+  Printer: "printer",
+  Phone: "phone",
+  Network: "network",
+};
 
 /** Whether a type is ever assigned to a person. Printers and network gear are
    shared infrastructure (the form hides Assignee for them), so on a mixed-type
@@ -149,8 +166,9 @@ function SortHeader({
 }
 
 /* ---------------- Column definitions ----------------
-   Defined once, keyed by id; `columnsFor(type)` picks the order per category
-   and the dashboard uses the full `allColumns` set (with the Type column). */
+   Defined once, then registered by stable id in `COLUMN_REGISTRY` below. The
+   render rule (`resolveColumns`, spec 11) picks which ids show and in what order
+   from the saved layout or the code defaults. */
 
 const idColumn: ColumnDef<Asset> = {
   accessorKey: "id",
@@ -351,92 +369,35 @@ const actionsColumn: ColumnDef<Asset> = {
   ),
 };
 
-/** The dashboard's all-types column set (includes the Type column). */
-const allColumns: ColumnDef<Asset>[] = [
-  idColumn,
-  nameColumn,
-  typeColumn,
-  serialColumn,
-  modelColumn,
-  assigneeColumn,
-  locationColumn,
-  statusColumn,
-  lastSyncColumn,
-  actionsColumn,
-];
-
-/** Per-category column sets. Already scoped to one type, so no Type column;
-   columns that don't apply to a category are dropped (kept pragmatic). */
-function columnsFor(type: AssetType): ColumnDef<Asset>[] {
-  switch (type) {
-    case "Computer":
-      return [
-        idColumn,
-        nameColumn,
-        modelColumn,
-        serialColumn,
-        assigneeColumn,
-        locationColumn,
-        statusColumn,
-        lastSyncColumn,
-        actionsColumn,
-      ];
-    case "Printer":
-      return [
-        idColumn,
-        nameColumn,
-        modelColumn,
-        serialColumn,
-        ipColumn,
-        locationColumn,
-        statusColumn,
-        lastSyncColumn,
-        actionsColumn,
-      ];
-    case "Network":
-      return [
-        idColumn,
-        nameColumn,
-        modelColumn,
-        serialColumn,
-        ipColumn,
-        macColumn,
-        locationColumn,
-        statusColumn,
-        actionsColumn,
-      ];
-    case "Phone":
-      return [
-        idColumn,
-        nameColumn,
-        modelColumn,
-        serialColumn,
-        phoneColumn,
-        assigneeColumn,
-        locationColumn,
-        statusColumn,
-        actionsColumn,
-      ];
-    case "Monitor":
-    default:
-      return [
-        idColumn,
-        nameColumn,
-        modelColumn,
-        serialColumn,
-        assigneeColumn,
-        locationColumn,
-        statusColumn,
-        actionsColumn,
-      ];
-  }
-}
+/** Every column, keyed by its stable id (spec 11). The render rule in
+   `resolveColumns` picks the ids and order; this maps each id to its cell. */
+const COLUMN_REGISTRY: Record<ColumnId, ColumnDef<Asset>> = {
+  id: idColumn,
+  name: nameColumn,
+  type: typeColumn,
+  serial: serialColumn,
+  model: modelColumn,
+  assignee: assigneeColumn,
+  location: locationColumn,
+  status: statusColumn,
+  lastSync: lastSyncColumn,
+  ip: ipColumn,
+  mac: macColumn,
+  phoneNumber: phoneColumn,
+  actions: actionsColumn,
+};
 
 export type AssetTableConfig = {
   /** The category this table is scoped to. Omit for the all-types dashboard
-     view. Passed as a plain string so the config is serializable from a
-     server component; the client picks the matching column set below. */
+     view. Still used for the create form's preset type and (when `view` is
+     omitted) to derive the column view. */
   type?: AssetType;
+  /** The configurable column view this table renders (spec 11). Defaults to the
+     category's view, or `dashboard` for the mixed all-types view. */
+  view?: ColumnView;
+  /** The saved column layout for this view (`null` = none, use code defaults).
+     Serializable so it passes from the RSC. */
+  columnOrder?: string[] | null;
   showTypeFilter?: boolean;
   /** Hide the location filter (e.g. on a page already scoped to a location).
      Defaults to shown when any locations exist. */
@@ -449,6 +410,7 @@ export function AssetTable({
   assets,
   config,
   canWrite = false,
+  canConfigureColumns = false,
   people = [],
   locations = [],
   activeLocationId,
@@ -457,6 +419,8 @@ export function AssetTable({
   config: AssetTableConfig;
   /** Show the write controls (New asset) only for `asset:write` users. */
   canWrite?: boolean;
+  /** Show the "Columns" picker only for `columns:write` admins (spec 11). */
+  canConfigureColumns?: boolean;
   /** People for the assignee picker in the create form. */
   people?: PersonOption[];
   /** The whole location tree as flat options: the filter lists all of them, the
@@ -467,20 +431,25 @@ export function AssetTable({
 }) {
   const {
     type,
+    columnOrder = null,
     showTypeFilter = false,
     showLocationFilter = true,
     title,
     emptyMessage,
   } = config;
-  const columns = React.useMemo(() => {
-    if (type) return columnsFor(type);
-    // Mixed-type view (dashboard, a location page): drop Assigned To when nothing
-    // shown is ever assigned to a person (e.g. a location holding only printers).
+  const view: ColumnView =
+    config.view ?? (type ? TYPE_TO_VIEW[type] : "dashboard");
+  // Resolve the column ids for this view (saved layout over code defaults), then
+  // map each id to its cell. The mixed views drop Assigned To when nothing shown
+  // is assigned to a person, but only when no layout is saved (spec 11).
+  const resolvedIds = React.useMemo(() => {
     const anyAssignee = assets.some((a) => typeTakesAssignee(a.type));
-    return anyAssignee
-      ? allColumns
-      : allColumns.filter((c) => c.id !== "assignee");
-  }, [type, assets]);
+    return resolveColumns(view, columnOrder, { anyAssignee });
+  }, [view, columnOrder, assets]);
+  const columns = React.useMemo(
+    () => resolvedIds.map((id) => COLUMN_REGISTRY[id]),
+    [resolvedIds],
+  );
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -504,6 +473,7 @@ export function AssetTable({
   }
 
   const [formOpen, setFormOpen] = React.useState(false);
+  const [columnsOpen, setColumnsOpen] = React.useState(false);
 
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
@@ -612,6 +582,11 @@ export function AssetTable({
         )}
 
         <div className="ml-auto flex items-center gap-2">
+          {canConfigureColumns && (
+            <Button variant="outline" onClick={() => setColumnsOpen(true)}>
+              <Columns3 className="size-4" /> Columns
+            </Button>
+          )}
           {canWrite && (
             <Button onClick={() => setFormOpen(true)}>
               <Plus className="size-4" /> New asset
@@ -736,11 +711,21 @@ export function AssetTable({
     />
   ) : null;
 
+  const picker = canConfigureColumns ? (
+    <ColumnPickerDialog
+      open={columnsOpen}
+      onOpenChange={setColumnsOpen}
+      view={view}
+      current={resolvedIds}
+    />
+  ) : null;
+
   if (!title)
     return (
       <>
         {card}
         {dialog}
+        {picker}
       </>
     );
 
@@ -749,6 +734,7 @@ export function AssetTable({
       <h1 className="text-2xl font-extrabold tracking-tight">{title}</h1>
       {card}
       {dialog}
+      {picker}
     </div>
   );
 }

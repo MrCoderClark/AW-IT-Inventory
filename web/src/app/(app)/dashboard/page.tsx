@@ -8,6 +8,7 @@ import { DonutChart } from "@/components/charts/donut-chart";
 import { StatusBars } from "@/components/charts/status-bars";
 import {
   getAssets,
+  getColumnConfig,
   getDashboardStats,
   getLocationOptions,
   getPeople,
@@ -20,13 +21,15 @@ export default async function DashboardPage({
 }: PageProps<"/dashboard">) {
   const user = await requireUser();
   const canWrite = hasPermission(user, "asset:write");
+  const canConfigureColumns = hasPermission(user, "columns:write");
   const { loc: rawLoc } = await searchParams;
   const loc = typeof rawLoc === "string" ? rawLoc : undefined;
-  const [assets, stats, people, locations] = await Promise.all([
+  const [assets, stats, people, locations, columnOrder] = await Promise.all([
     getAssets({ locationId: loc }),
     getDashboardStats(),
     canWrite ? getPeople() : Promise.resolve([]),
     getLocationOptions(),
+    getColumnConfig("dashboard"),
   ]);
   const t = stats.byType;
   const s = stats.byStatus;
@@ -91,8 +94,9 @@ export default async function DashboardPage({
 
       <AssetTable
         assets={assets}
-        config={{ showTypeFilter: true }}
+        config={{ view: "dashboard", columnOrder, showTypeFilter: true }}
         canWrite={canWrite}
+        canConfigureColumns={canConfigureColumns}
         people={people}
         locations={locations}
         activeLocationId={loc}

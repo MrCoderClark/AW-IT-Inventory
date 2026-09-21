@@ -15,6 +15,7 @@ import type {
   MachineSummary,
 } from "@/lib/data";
 import { LOCATION_PATH_SEP } from "@/lib/data";
+import type { ColumnView } from "@/lib/table-columns";
 import { db } from "./index";
 import {
   assets,
@@ -26,6 +27,7 @@ import {
   people,
   phoneDetails,
   printerDetails,
+  tableColumnConfig,
 } from "./schema";
 
 function toDateStr(value: Date | string | null): string {
@@ -171,6 +173,24 @@ export async function getAssetsByType(
     getLocationPathMap(),
   ]);
   return rows.map((r) => toAsset(r, pathById));
+}
+
+/**
+ * The saved column layout for a view, or `null` when none is saved (spec 11).
+ * `null` tells the table to fall back to the code-owned defaults. Read fresh per
+ * request (no cache), so a save + `revalidatePath` is enough for every user to
+ * see a new layout on their next load.
+ */
+export async function getColumnConfig(
+  view: ColumnView,
+): Promise<string[] | null> {
+  const [row] = await db
+    .select({ columns: tableColumnConfig.columns })
+    .from(tableColumnConfig)
+    .where(eq(tableColumnConfig.viewKey, view))
+    .limit(1);
+  if (!row) return null;
+  return Array.isArray(row.columns) ? row.columns : null;
 }
 
 /** One asset by its human tag (the UI `id`), or null if none matches. */

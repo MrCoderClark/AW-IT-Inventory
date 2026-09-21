@@ -13,6 +13,7 @@ PERMISSIONS = [
     ("asset:write", "Create and edit assets"),
     ("asset:delete", "Delete or retire assets"),
     ("location:write", "Manage the location tree"),
+    ("columns:write", "Configure the shared table column layouts"),
     ("assignment:write", "Assign and reassign assets"),
     ("scan:read", "View scan data and discovered devices"),
     ("scan:write", "Trigger and configure scans"),
@@ -28,8 +29,8 @@ ROLES = {
     "Owner": ["*"],
     "Admin": [
         "user:admin", "asset:read", "asset:write", "asset:delete",
-        "location:write", "assignment:write", "scan:read", "scan:write",
-        "report:read", "audit:read",
+        "location:write", "columns:write", "assignment:write", "scan:read",
+        "scan:write", "report:read", "audit:read",
     ],
     "Technician": [
         "asset:read", "asset:write", "location:write", "assignment:write",
