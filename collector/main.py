@@ -27,7 +27,7 @@ from collect_windows import collect_windows
 from config import Config, load_config
 from creds import resolve_profiles
 from discovery import discover
-from ingest import post_scan
+from ingest import get_discovery_settings, post_scan
 from models import HostResult, RunReport
 from report import print_summary, write_report
 from worker import run_worker
@@ -182,10 +182,28 @@ def run_scan(args: argparse.Namespace) -> int:
         )
         return 2
 
+    # Honor the app's discovery type toggles (spec 13). The switches OR with the
+    # CLI flags: an off type is skipped, and --no-windows/--no-printers can still
+    # narrow a run further. A settings outage falls back to the cache, then to
+    # all-on, so scanning never stops (AC-3, AC-6). Manual worker jobs bypass this.
+    settings, source = get_discovery_settings(config)
+    no_windows = args.no_windows or not settings["computer"]
+    no_printers = args.no_printers or not settings["printer"]
+    console.print(
+        f"[dim]Discovery settings ({source}): "
+        f"computers {'on' if settings['computer'] else 'off'}, "
+        f"printers {'on' if settings['printer'] else 'off'}.[/dim]"
+    )
+    if no_windows and no_printers:
+        console.print(
+            "[yellow]Both device types are switched off — this sweep will "
+            "discover nothing.[/yellow]"
+        )
+
     report = scan_targets(
         config,
-        no_windows=args.no_windows,
-        no_printers=args.no_printers,
+        no_windows=no_windows,
+        no_printers=no_printers,
         limit=args.limit,
     )
     saved = write_report(report, config)

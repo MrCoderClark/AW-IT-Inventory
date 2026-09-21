@@ -28,6 +28,7 @@ staticfiles/
 # Collector: local config + scan reports (may contain internal host data)
 collector/config.yaml
 collector/out/
+collector/.discovery-settings.json
 
 # Logs & caches
 *.log

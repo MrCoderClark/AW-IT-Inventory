@@ -362,6 +362,20 @@ export const scanWorkers = pgTable("scan_workers", {
   version: text("version"),
 });
 
+// ── Discovery type toggles (spec 13) ─────────────────────────────────────────
+// Per-type on/off switches for what the collector automatically discovers. One
+// row per toggleable device type. An ABSENT row means "on", so the empty table
+// equals "discover everything" and no seeding is needed (AC-2); reads coalesce a
+// missing type to true. `deviceType` is plain text with a union `$type` (not a
+// pg enum) so adding a future type never needs an enum migration.
+export const discoverySettings = pgTable("discovery_settings", {
+  deviceType: text("device_type").$type<"computer" | "printer">().primaryKey(),
+  enabled: boolean("enabled").notNull().default(true),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
 export type AssetRow = typeof assets.$inferSelect;
 export type PersonRow = typeof people.$inferSelect;
 export type MachineRow = typeof machines.$inferSelect;
@@ -376,3 +390,4 @@ export type ScanJobRow = typeof scanJobs.$inferSelect;
 export type PrinterCheckRow = typeof printerChecks.$inferSelect;
 export type PrinterStatusRow = typeof printerStatus.$inferSelect;
 export type ScanWorkerRow = typeof scanWorkers.$inferSelect;
+export type DiscoverySettingRow = typeof discoverySettings.$inferSelect;

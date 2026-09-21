@@ -14,6 +14,14 @@ export default defineConfig({
     include: ["src/**/*.test.{ts,tsx}"],
   },
   resolve: {
-    alias: { "@": path.resolve(import.meta.dirname, "./src") },
+    alias: {
+      "@": path.resolve(import.meta.dirname, "./src"),
+      // `server-only` is a bundle-time marker with no test runtime; point it at
+      // a no-op so server modules (db helpers) can load under Vitest.
+      "server-only": path.resolve(
+        import.meta.dirname,
+        "./src/test/empty-module.ts",
+      ),
+    },
   },
 });

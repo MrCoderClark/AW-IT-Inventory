@@ -60,6 +60,11 @@ class Config(BaseModel):
     client_id_env: str = "OPUS_CLIENT_ID"
     client_secret_env: str = "OPUS_CLIENT_SECRET"
 
+    # Discovery type toggles (spec 13): the automatic `scan` sweep pulls these
+    # from the web app first and skips an off type. The last good result is
+    # cached here so a settings outage never stops scanning. Not a secret.
+    discovery_cache_file: str = ".discovery-settings.json"
+
     # Worker (spec 12): the long-running `worker` command.
     worker_poll_interval: float = 5.0  # seconds between claim polls
     # Times of day the printer reachability checks fire (local to schedule_tz).
@@ -83,6 +88,11 @@ class Config(BaseModel):
     @property
     def client_secret(self) -> str:
         return os.environ.get(self.client_secret_env, "")
+
+    @property
+    def discovery_cache_path(self) -> Path:
+        p = Path(self.discovery_cache_file)
+        return p if p.is_absolute() else BASE_DIR / p
 
 
 def load_env(path: Path | None = None) -> None:

@@ -107,14 +107,29 @@ shown in the inbox) while manual scans still run; the collector falls back to a 
 nothing, logs a warning).
 
 - [x] Design it (spec): [13](../specs/13-discovery-type-toggles/index.md)
-- [ ] Build it: `/develop discovery type toggles`
-  - [ ] Foundations + collector read: the `discovery_settings` table and read/upsert
+- [ ] Build it: `/develop discovery type toggles` — code in
+      `web/src/db/{schema,discovery}.ts`, `web/src/app/api/scan/discovery-settings/route.ts`,
+      `web/src/app/(app)/{admin/page,discovery-actions}.ts(x)`,
+      `web/src/components/{discovery-toggles,ui/switch}.tsx`,
+      `collector/{ingest,config,main,worker}.py`. Milestones 1 and 2 are built and
+      verified live (`db:push` applied, table confirmed). Milestone 3 (reachability
+      link) is the only open item, deferred to spec 12 milestone 3.
+  - [x] Foundations + collector read: the `discovery_settings` table and read/upsert
         helpers, `GET /api/scan/discovery-settings` (service `scan:dequeue`), and the
         collector fetching + caching + applying it via `no_windows`/`no_printers` (manual
         jobs bypass) (covers AC-1 data, AC-2, AC-3, AC-4, AC-6, AC-7 endpoint, AC-8)
-  - [ ] Admin UI: the Discovery switches on `/admin` and the `setDiscoveryToggle` server
-        action gated on `scan:write`, hidden/read-only without it (covers AC-1, AC-7)
+        — built and verified: endpoint live, table live, collector run confirmed it skips
+        an off type and a manual scan still runs.
+  - [x] Admin UI: the Discovery switches on `/admin` and the `setDiscoveryToggleAction`
+        server action gated on `scan:write`, hidden/read-only without it (covers AC-1, AC-7)
+        — built and verified: toggle persisted round-trip in the live app.
   - [ ] Reachability link: gate the spec-12 scheduled reachability run on the Printers
-        switch (when that scheduler exists) (covers AC-5)
-- [ ] Verify it: `/check verify discovery type toggles`
-- [ ] Test it: `/test discovery type toggles`
+        switch (when that scheduler exists) (covers AC-5) — deferred: spec 12 milestone 3
+        (the reachability scheduler) is not built yet, so the gate lands with it.
+- [x] Verify it: `/check verify discovery type toggles` — web, endpoint, and the admin
+      toggle verified live by Claude; the collector sweep (AC-3 skip, AC-4 bypass, AC-8)
+      confirmed by the engineer's own run. AC-5 deferred until spec 12 milestone 3.
+- [x] Test it: `/test discovery type toggles` — 16 web tests (`web/src/db/discovery.test.ts`,
+      `discovery-actions.test.ts`, `discovery-settings/route.test.ts`, `discovery-toggles.test.tsx`)
+      plus 6 collector smoke tests (`collector/tests/test_discovery.py`), all pass. Covers the
+      automatable ACs (1, 2, 3 endpoint, 6, 7); AC-4 and AC-8 (a real sweep) stay for runtime verify.
