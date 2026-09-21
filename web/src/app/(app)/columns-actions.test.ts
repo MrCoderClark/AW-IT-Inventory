@@ -111,7 +111,9 @@ describe("saveColumnConfig — sanitize before write (AC-6) and save globally (A
 
     expect(res).toEqual({ ok: true, message: "Column layout saved for everyone." });
     expect(valuesMock).toHaveBeenCalledTimes(1);
-    const written = valuesMock.mock.calls[0][0];
+    const written = (valuesMock.mock.calls[0] as unknown as [
+      { viewKey: string; columns: string[]; updatedAt: Date },
+    ])[0];
     expect(written.viewKey).toBe("printer");
     expect(written.columns).toEqual(["name", "status", "actions"]);
     expect(written.updatedAt).toBeInstanceOf(Date);
@@ -123,7 +125,9 @@ describe("saveColumnConfig — sanitize before write (AC-6) and save globally (A
 
     await saveColumnConfig("printer", ["status", "ip"]);
 
-    const written = valuesMock.mock.calls[0][0].columns as string[];
+    const written = (
+      valuesMock.mock.calls[0] as unknown as [{ columns: string[] }]
+    )[0].columns;
     expect(written[0]).toBe("name");
     expect(written[written.length - 1]).toBe("actions");
   });

@@ -24,12 +24,13 @@ from rich.console import Console
 
 from collect_snmp import collect_printers
 from collect_windows import collect_windows
-from config import load_config
+from config import Config, load_config
 from creds import resolve_profiles
 from discovery import discover
 from ingest import post_scan
 from models import HostResult, RunReport
 from report import print_summary, write_report
+from worker import run_worker
 
 console = Console()
 
@@ -65,38 +66,30 @@ def _collect_targets(args: argparse.Namespace) -> list[str]:
     return ordered
 
 
-def run_scan(args: argparse.Namespace) -> int:
-    try:
-        config = load_config(args.config)
-    except FileNotFoundError:
-        console.print(
-            f"[red]Config not found:[/red] {args.config}. "
-            "Copy config.example.yaml to config.yaml and set your networks/profiles."
-        )
-        return 2
+def scan_targets(
+    config: Config,
+    *,
+    no_windows: bool = False,
+    no_printers: bool = False,
+    limit: int | None = None,
+) -> RunReport:
+    """Discover and collect the hosts on ``config.networks`` and return a report.
 
-    targets = _collect_targets(args)
-    if targets:
-        config.networks = targets
-    if not config.networks:
-        console.print(
-            "[red]No targets.[/red] Use --target / --targets-file, or set "
-            "`networks:` in config.yaml."
-        )
-        return 2
-
+    Shared by the ``scan`` command and the ``worker`` command's manual scan jobs
+    (spec 12): the caller sets ``config.networks`` to the targets first.
+    """
     run_id = datetime.datetime.now().strftime("%Y%m%dT%H%M%S") + "-" + uuid.uuid4().hex[:6]
     started = _now()
 
     console.print(f"[bold]Discovering[/bold] {', '.join(config.networks)} …")
-    discovered = discover(config, limit=args.limit)
+    discovered = discover(config, limit=limit)
     console.print(f"  {len(discovered)} reachable host(s).")
 
     win_targets = (
-        [] if args.no_windows else [d for d in discovered if d["device_type"] == "windows"]
+        [] if no_windows else [d for d in discovered if d["device_type"] == "windows"]
     )
     prn_targets = (
-        [] if args.no_printers else [d for d in discovered if d["device_type"] == "printer"]
+        [] if no_printers else [d for d in discovered if d["device_type"] == "printer"]
     )
     other = [d for d in discovered if d["device_type"] == "unknown"]
 
@@ -160,12 +153,40 @@ def run_scan(args: argparse.Namespace) -> int:
             )
         )
 
-    report = RunReport(
+    return RunReport(
         run_id=run_id,
         started_at=started,
         finished_at=_now(),
         networks=config.networks,
         hosts=hosts,
+    )
+
+
+def run_scan(args: argparse.Namespace) -> int:
+    try:
+        config = load_config(args.config)
+    except FileNotFoundError:
+        console.print(
+            f"[red]Config not found:[/red] {args.config}. "
+            "Copy config.example.yaml to config.yaml and set your networks/profiles."
+        )
+        return 2
+
+    targets = _collect_targets(args)
+    if targets:
+        config.networks = targets
+    if not config.networks:
+        console.print(
+            "[red]No targets.[/red] Use --target / --targets-file, or set "
+            "`networks:` in config.yaml."
+        )
+        return 2
+
+    report = scan_targets(
+        config,
+        no_windows=args.no_windows,
+        no_printers=args.no_printers,
+        limit=args.limit,
     )
     saved = write_report(report, config)
     print_summary(report, saved)
@@ -220,6 +241,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="POST results to the inventory API (default is dry-run to JSON).",
     )
     scan.set_defaults(func=run_scan)
+
+    worker = sub.add_parser(
+        "worker",
+        help="Run the long-running worker: drain manual scan jobs (spec 12). "
+        "The printer reachability scheduler is added in a later milestone.",
+    )
+    worker.add_argument("--config", default="config.yaml")
+    worker.set_defaults(func=run_worker)
     return parser
 
 

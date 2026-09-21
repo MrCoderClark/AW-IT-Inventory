@@ -1,9 +1,15 @@
 import "server-only";
 
-import { eq, sql } from "drizzle-orm";
+import { eq, or, sql } from "drizzle-orm";
 
 import { db } from "./index";
-import { assets, machines } from "./schema";
+import {
+  assets,
+  computerDetails,
+  machines,
+  networkDetails,
+  printerDetails,
+} from "./schema";
 
 // Loose shapes matching the collector's HostResult payload.
 interface IngestHardware {
@@ -84,6 +90,28 @@ export async function ingestScan(payload: IngestPayload): Promise<IngestResult> 
         .where(eq(assets.serial, serial))
         .limit(1);
       if (found.length) assetId = found[0].id;
+    }
+
+    // Fall back to matching a manually-entered device by its IP. For a printer,
+    // `printer_details.ipAddress` is the device's identity (spec 12), so a printer
+    // whose SNMP serial differs from — or is missing on — the asset still links to
+    // the right asset when scanned at its IP. Same for a network/computer detail IP.
+    if (!assetId && ip) {
+      const byIp = await db
+        .select({ id: assets.id })
+        .from(assets)
+        .leftJoin(printerDetails, eq(printerDetails.assetId, assets.id))
+        .leftJoin(networkDetails, eq(networkDetails.assetId, assets.id))
+        .leftJoin(computerDetails, eq(computerDetails.assetId, assets.id))
+        .where(
+          or(
+            eq(printerDetails.ipAddress, ip),
+            eq(networkDetails.ipAddress, ip),
+            eq(computerDetails.ipAddress, ip),
+          ),
+        )
+        .limit(1);
+      if (byIp.length) assetId = byIp[0].id;
     }
 
     const kind = h.device_type ?? (pr ? "printer" : hw ? "windows" : "unknown");

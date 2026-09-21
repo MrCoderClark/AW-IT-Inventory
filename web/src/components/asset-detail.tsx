@@ -8,11 +8,13 @@ import {
   Loader2,
   Pencil,
   Printer,
+  ScanLine,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { deleteAsset } from "@/app/(app)/assets/actions";
+import { requestScan } from "@/app/(app)/scan-actions";
 import {
   AssetFormDialog,
   type PersonOption,
@@ -121,6 +123,7 @@ export function AssetDetail({
   asset,
   machine,
   canWrite = false,
+  canScan = false,
   people = [],
   locations = [],
   details = null,
@@ -130,6 +133,8 @@ export function AssetDetail({
   machine?: MachineSummary;
   /** Show the write controls (Edit / Delete) only for `asset:write` users. */
   canWrite?: boolean;
+  /** Show the "Scan now" control only for `scan:write` users (AC-1, AC-9). */
+  canScan?: boolean;
   /** People for the assignee picker in the edit form. */
   people?: PersonOption[];
   /** Assignable leaf locations for the location picker in the edit form. */
@@ -147,6 +152,17 @@ export function AssetDetail({
   const [editOpen, setEditOpen] = React.useState(false);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [isDeleting, startDelete] = React.useTransition();
+  const [isScanning, startScan] = React.useTransition();
+
+  // Queue a manual scan of just this device (AC-1). The worker picks it up; the
+  // page's live-scan data refreshes on its next load once results ingest.
+  function scanNow() {
+    startScan(async () => {
+      const res = await requestScan("selected", [asset.id]);
+      if (res.ok) toast.success(res.message);
+      else toast.error(res.error);
+    });
+  }
 
   // Return to wherever the user came from (a category page), falling back to
   // the dashboard on a direct load or refresh with no in-app history.
@@ -258,10 +274,27 @@ export function AssetDetail({
       {/* Live-scan data from the collector */}
       {showHealth && (
         <div>
-          <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Live scan
-            {machine?.lastSeen ? ` · last seen ${machine.lastSeen}` : ""}
-          </p>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Live scan
+              {machine?.lastSeen ? ` · last seen ${machine.lastSeen}` : ""}
+            </p>
+            {canScan && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={scanNow}
+                disabled={isScanning}
+              >
+                {isScanning ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <ScanLine className="size-4" />
+                )}
+                Scan now
+              </Button>
+            )}
+          </div>
           {machine ? (
             <div className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-xl border bg-card p-5 sm:grid-cols-3">
               <Field

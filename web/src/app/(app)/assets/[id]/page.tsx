@@ -28,6 +28,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
 
   const { id } = await params;
   const canWrite = hasPermission(user, "asset:write");
+  const canScan = hasPermission(user, "scan:write");
   // All key off the same route tag, so fetch them together.
   const [asset, machine, assigneeId, people, locations, assetDetails] =
     await Promise.all([
@@ -45,6 +46,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
       asset={asset}
       machine={machine}
       canWrite={canWrite}
+      canScan={canScan}
       people={people}
       locations={locations}
       details={assetDetails?.row ?? null}

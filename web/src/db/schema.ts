@@ -139,16 +139,24 @@ export const machines = pgTable("machines", {
 // the asset's own type ever has a row here. All fields are nullable except a
 // printer's `ipAddress`, which a printer must have.
 
-export const computerDetails = pgTable("computer_details", {
-  assetId: uuid("asset_id")
-    .primaryKey()
-    .references(() => assets.id, { onDelete: "cascade" }),
-  formFactor: text("form_factor"), // laptop | desktop | all-in-one | tower
-  operatingSystem: text("operating_system"),
-  cpu: text("cpu"),
-  ramGb: integer("ram_gb"),
-  storage: text("storage"),
-});
+export const computerDetails = pgTable(
+  "computer_details",
+  {
+    assetId: uuid("asset_id")
+      .primaryKey()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    // Optional: a manually-entered target IP so a computer can be scanned before
+    // the collector has discovered it (spec 12). The scan resolver prefers this
+    // over the discovered `machines.ip`.
+    ipAddress: text("ip_address"),
+    formFactor: text("form_factor"), // laptop | desktop | all-in-one | tower
+    operatingSystem: text("operating_system"),
+    cpu: text("cpu"),
+    ramGb: integer("ram_gb"),
+    storage: text("storage"),
+  },
+  (t) => [index("computer_details_ip_idx").on(t.ipAddress)],
+);
 
 export const monitorDetails = pgTable("monitor_details", {
   assetId: uuid("asset_id")
@@ -239,6 +247,121 @@ export const tableColumnConfig = pgTable("table_column_config", {
     .notNull(),
 });
 
+// ── Scheduled and manual scans (spec 12) ─────────────────────────────────────
+// Four additive tables. All brand new (no rows to backfill), so NOT NULL columns
+// are safe. See docs/specs/12-scheduled-manual-scans/index.md for the contract.
+
+// Fixed shape of a finished job's `result`. Per-target status is recorded here so
+// an unreachable target never fails the job (only a worker-level error does).
+export type ScanJobResult = {
+  matched: number;
+  discovered: number;
+  upserted: number;
+  skipped: number;
+  targets: { ip: string; status: string }[];
+};
+
+// The manual scan queue. An admin enqueues a job (single computer, several
+// selected computers, or every known device); the worker claims exactly one
+// pending job atomically, runs it, posts results through /api/ingest/scan, then
+// marks it succeeded (or failed only on a worker-level error). `targets` is a
+// frozen, de-duplicated list of IP strings snapshotted at creation, so an "all"
+// job scans the device set as of enqueue time, not run time. `scope`/`status`
+// are plain text (not pg enums) so drizzle-kit push never needs an enum
+// migration to add a state; the union `$type` keeps them type-safe in TS.
+export const scanJobs = pgTable(
+  "scan_jobs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    scope: text("scope").$type<"all" | "selected">().notNull(),
+    targets: jsonb("targets").$type<string[]>().notNull(),
+    status: text("status")
+      .$type<
+        "pending" | "claimed" | "running" | "succeeded" | "failed" | "canceled"
+      >()
+      .notNull()
+      .default("pending"),
+    // User email from the access token; no FK, users live in aw-auth.
+    requestedBy: text("requested_by").notNull(),
+    workerId: text("worker_id"), // the worker that currently holds the claim
+    runId: text("run_id"), // the ingest run id the results were posted under
+    result: jsonb("result").$type<ScanJobResult>(),
+    error: text("error"), // worker-level error message when status = failed
+    requestedAt: timestamp("requested_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    // The claim query polls every few seconds; a partial index over just the
+    // pending rows keeps the "oldest pending" lookup cheap as finished jobs pile up.
+    index("scan_jobs_pending_idx")
+      .on(t.status, t.requestedAt)
+      .where(sql`${t.status} = 'pending'`),
+  ],
+);
+
+// Reachability history: one row per printer check (scheduled or manual).
+export const printerChecks = pgTable(
+  "printer_checks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    ipAddress: text("ip_address").notNull(), // snapshot of the IP checked
+    checkedAt: timestamp("checked_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    reachable: boolean("reachable").notNull(),
+    latencyMs: integer("latency_ms"),
+    method: text("method").$type<"tcp" | "snmp">().notNull(),
+    source: text("source").$type<"scheduled" | "manual">().notNull(),
+  },
+  (t) => [
+    index("printer_checks_asset_checked_idx").on(t.assetId, t.checkedAt.desc()),
+  ],
+);
+
+// Current reachability rollup plus alert state, 1:1 with a printer asset. Stores
+// derived values (consecutiveFailures/isDown/lastAlertState) deliberately: once-
+// only alert emails need a persisted last-alerted state.
+export const printerStatus = pgTable("printer_status", {
+  assetId: uuid("asset_id")
+    .primaryKey()
+    .references(() => assets.id, { onDelete: "cascade" }),
+  reachable: boolean("reachable"), // last known
+  lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
+  lastReachableAt: timestamp("last_reachable_at", { withTimezone: true }),
+  consecutiveFailures: integer("consecutive_failures").notNull().default(0),
+  isDown: boolean("is_down").notNull().default(false),
+  downSince: timestamp("down_since", { withTimezone: true }),
+  // dedupe key for alert emails: exactly one down email per down episode, one
+  // recovery email per recovery.
+  lastAlertState: text("last_alert_state")
+    .$type<"up" | "down">()
+    .notNull()
+    .default("up"),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+// Worker heartbeat, so the jobs view can tell whether a worker is polling.
+export const scanWorkers = pgTable("scan_workers", {
+  workerId: text("worker_id").primaryKey(),
+  lastPolledAt: timestamp("last_polled_at", { withTimezone: true }).notNull(),
+  version: text("version"),
+});
+
 export type AssetRow = typeof assets.$inferSelect;
 export type PersonRow = typeof people.$inferSelect;
 export type MachineRow = typeof machines.$inferSelect;
@@ -249,3 +372,7 @@ export type PrinterDetailsRow = typeof printerDetails.$inferSelect;
 export type PhoneDetailsRow = typeof phoneDetails.$inferSelect;
 export type NetworkDetailsRow = typeof networkDetails.$inferSelect;
 export type TableColumnConfigRow = typeof tableColumnConfig.$inferSelect;
+export type ScanJobRow = typeof scanJobs.$inferSelect;
+export type PrinterCheckRow = typeof printerChecks.$inferSelect;
+export type PrinterStatusRow = typeof printerStatus.$inferSelect;
+export type ScanWorkerRow = typeof scanWorkers.$inferSelect;

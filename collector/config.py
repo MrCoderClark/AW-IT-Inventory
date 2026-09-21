@@ -60,6 +60,18 @@ class Config(BaseModel):
     client_id_env: str = "OPUS_CLIENT_ID"
     client_secret_env: str = "OPUS_CLIENT_SECRET"
 
+    # Worker (spec 12): the long-running `worker` command.
+    worker_poll_interval: float = 5.0  # seconds between claim polls
+    # Times of day the printer reachability checks fire (local to schedule_tz).
+    schedule_times: list[str] = Field(default_factory=lambda: ["08:00", "13:00", "18:00"])
+    # Explicit zone for the schedule so fire times don't drift with the host OS
+    # or DST. None = the host's local zone. e.g. "America/New_York".
+    schedule_timezone: str | None = None
+    daily_snmp_time: str = "08:00"  # which check of the day also does full SNMP
+    reachability_ports: list[int] = Field(default_factory=lambda: [9100, 631, 515])
+    reachability_timeout: float = 1.5  # TCP connect timeout (seconds)
+    reachability_retention_days: int = 365  # prune printer_checks older than this
+
     @property
     def profiles_by_id(self) -> dict[str, CredentialProfile]:
         return {p.id: p for p in self.profiles}

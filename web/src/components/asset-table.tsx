@@ -7,6 +7,7 @@ import {
   type Row,
   type SortingState,
   type ColumnFiltersState,
+  type RowSelectionState,
   type RowData,
   flexRender,
   getCoreRowModel,
@@ -19,12 +20,16 @@ import {
   ArrowUpDown,
   Columns3,
   Download,
+  Loader2,
   MoreHorizontal,
   Plus,
   QrCode,
+  ScanLine,
   Search,
 } from "lucide-react";
 import { toast } from "sonner";
+
+import { requestScan } from "@/app/(app)/scan-actions";
 
 import {
   AssetFormDialog,
@@ -169,6 +174,33 @@ function SortHeader({
    Defined once, then registered by stable id in `COLUMN_REGISTRY` below. The
    render rule (`resolveColumns`, spec 11) picks which ids show and in what order
    from the saved layout or the code defaults. */
+
+/** Row-selection checkbox column, prepended only on the Computers table when the
+   user can scan (spec 12, AC-2). Native inputs (styled) — no extra UI primitive.
+   Clicks stop propagation so ticking a box never opens the asset. */
+const selectColumn: ColumnDef<Asset> = {
+  id: "select",
+  header: ({ table }) => (
+    <input
+      type="checkbox"
+      aria-label="Select all on this page"
+      className="size-4 cursor-pointer accent-primary align-middle"
+      checked={table.getIsAllPageRowsSelected()}
+      onChange={(e) => table.toggleAllPageRowsSelected(e.target.checked)}
+    />
+  ),
+  cell: ({ row }) => (
+    <input
+      type="checkbox"
+      aria-label={`Select ${row.original.id}`}
+      className="size-4 cursor-pointer accent-primary align-middle"
+      checked={row.getIsSelected()}
+      onChange={(e) => row.toggleSelected(e.target.checked)}
+      onClick={(e) => e.stopPropagation()}
+    />
+  ),
+  enableSorting: false,
+};
 
 const idColumn: ColumnDef<Asset> = {
   accessorKey: "id",
@@ -411,6 +443,7 @@ export function AssetTable({
   config,
   canWrite = false,
   canConfigureColumns = false,
+  canScan = false,
   people = [],
   locations = [],
   activeLocationId,
@@ -421,6 +454,9 @@ export function AssetTable({
   canWrite?: boolean;
   /** Show the "Columns" picker only for `columns:write` admins (spec 11). */
   canConfigureColumns?: boolean;
+  /** Show the scan controls (select + Scan selected / Scan all) only for
+     `scan:write` users; the UI enables them on the Computers table (spec 12). */
+  canScan?: boolean;
   /** People for the assignee picker in the create form. */
   people?: PersonOption[];
   /** The whole location tree as flat options: the filter lists all of them, the
@@ -439,6 +475,8 @@ export function AssetTable({
   } = config;
   const view: ColumnView =
     config.view ?? (type ? TYPE_TO_VIEW[type] : "dashboard");
+  // Scan controls live on the Computers table for `scan:write` users (spec 12).
+  const scanEnabled = canScan && type === "Computer";
   // Resolve the column ids for this view (saved layout over code defaults), then
   // map each id to its cell. The mixed views drop Assigned To when nothing shown
   // is assigned to a person, but only when no layout is saved (spec 11).
@@ -446,10 +484,10 @@ export function AssetTable({
     const anyAssignee = assets.some((a) => typeTakesAssignee(a.type));
     return resolveColumns(view, columnOrder, { anyAssignee });
   }, [view, columnOrder, assets]);
-  const columns = React.useMemo(
-    () => resolvedIds.map((id) => COLUMN_REGISTRY[id]),
-    [resolvedIds],
-  );
+  const columns = React.useMemo(() => {
+    const base = resolvedIds.map((id) => COLUMN_REGISTRY[id]);
+    return scanEnabled ? [selectColumn, ...base] : base;
+  }, [resolvedIds, scanEnabled]);
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -480,15 +518,20 @@ export function AssetTable({
     [],
   );
   const [globalFilter, setGlobalFilter] = React.useState("");
+  const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
+  const [isScanning, startScan] = React.useTransition();
 
   const table = useReactTable({
     data: assets,
     columns,
-    state: { sorting, columnFilters, globalFilter },
+    state: { sorting, columnFilters, globalFilter, rowSelection },
     meta: { openAsset },
+    getRowId: (row) => row.id,
+    enableRowSelection: scanEnabled,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onGlobalFilterChange: setGlobalFilter,
+    onRowSelectionChange: setRowSelection,
     globalFilterFn: assetGlobalFilter,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
@@ -496,6 +539,31 @@ export function AssetTable({
     getPaginationRowModel: getPaginationRowModel(),
     initialState: { pagination: { pageSize: 8 } },
   });
+
+  const selectedIds = table.getSelectedRowModel().rows.map((r) => r.original.id);
+
+  // Queue a scan of the ticked computers (AC-2), then clear the selection.
+  function scanSelected() {
+    if (selectedIds.length === 0) return;
+    startScan(async () => {
+      const res = await requestScan("selected", selectedIds);
+      if (res.ok) {
+        toast.success(res.message);
+        setRowSelection({});
+      } else {
+        toast.error(res.error);
+      }
+    });
+  }
+
+  // Queue a scan of every known device — IPs snapshotted server-side (AC-2).
+  function scanAll() {
+    startScan(async () => {
+      const res = await requestScan("all", []);
+      if (res.ok) toast.success(res.message);
+      else toast.error(res.error);
+    });
+  }
 
   // Only the all-types view has a `type` column; looking it up otherwise
   // makes TanStack log "Column with id 'type' does not exist". The value is
@@ -582,6 +650,26 @@ export function AssetTable({
         )}
 
         <div className="ml-auto flex items-center gap-2">
+          {scanEnabled && (
+            <>
+              <Button
+                variant="outline"
+                onClick={scanSelected}
+                disabled={isScanning || selectedIds.length === 0}
+              >
+                {isScanning ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <ScanLine className="size-4" />
+                )}
+                Scan selected
+                {selectedIds.length > 0 ? ` (${selectedIds.length})` : ""}
+              </Button>
+              <Button variant="outline" onClick={scanAll} disabled={isScanning}>
+                <ScanLine className="size-4" /> Scan all
+              </Button>
+            </>
+          )}
           {canConfigureColumns && (
             <Button variant="outline" onClick={() => setColumnsOpen(true)}>
               <Columns3 className="size-4" /> Columns
@@ -641,7 +729,8 @@ export function AssetTable({
                     <TableCell
                       key={cell.id}
                       onClick={
-                        cell.column.id === "actions"
+                        cell.column.id === "actions" ||
+                        cell.column.id === "select"
                           ? (e) => e.stopPropagation()
                           : undefined
                       }

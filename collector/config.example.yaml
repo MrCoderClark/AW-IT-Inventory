@@ -45,3 +45,14 @@ output_dir: out
 # `create_service_account`.
 auth_url: http://127.0.0.1:8000      # aw-auth
 ingest_url: http://localhost:3000    # web app
+
+# Worker (spec 12): `uv run python main.py worker`. All optional — the defaults
+# below apply if omitted. The worker account needs the scan:dequeue scope.
+worker_poll_interval: 5.0            # seconds between manual-scan-queue polls
+# The printer reachability schedule (added in a later milestone):
+schedule_times: ["08:00", "13:00", "18:00"]
+# schedule_timezone: America/New_York  # default: the host's local zone
+daily_snmp_time: "08:00"             # which daily check also does full SNMP
+reachability_ports: [9100, 631, 515]
+reachability_timeout: 1.5            # TCP connect timeout, seconds
+reachability_retention_days: 365

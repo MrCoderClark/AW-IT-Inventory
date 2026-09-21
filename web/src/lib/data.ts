@@ -11,6 +11,7 @@ import {
   FileText,
   Settings,
   ScanLine,
+  ListChecks,
   HelpCircle,
 } from "lucide-react";
 
@@ -187,6 +188,7 @@ export const NAV_MANAGE: NavItem[] = [
   { label: "Compliance", href: "/compliance", icon: ShieldCheck },
   { label: "Reports", href: "/reports", icon: FileText },
   { label: "Scans", href: "/scans", icon: ScanLine },
+  { label: "Scan Jobs", href: "/scans/jobs", icon: ListChecks },
   { label: "Admin", href: "/admin", icon: Settings },
 ];
 
