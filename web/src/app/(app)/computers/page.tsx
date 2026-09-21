@@ -29,6 +29,7 @@ export default async function Page({
   const loc = typeof rawLoc === "string" ? rawLoc : undefined;
   const canWrite = hasPermission(user, "asset:write");
   const canConfigureColumns = hasPermission(user, "columns:write");
+  const canScan = hasPermission(user, "scan:write");
   const [assets, people, locations, columnOrder] = await Promise.all([
     getAssetsByType("Computer", { locationId: loc }),
     canWrite ? getPeople() : Promise.resolve([]),
@@ -48,6 +49,7 @@ export default async function Page({
       }}
       canWrite={canWrite}
       canConfigureColumns={canConfigureColumns}
+      canScan={canScan}
       people={people}
       locations={locations}
       activeLocationId={loc}

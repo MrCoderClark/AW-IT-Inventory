@@ -37,6 +37,12 @@ export const TYPE_FIELDS: Record<AssetType, TypeFormConfig> = {
     hiddenShared: [],
     fields: [
       {
+        key: "ipAddress",
+        label: "IP address",
+        kind: "text",
+        placeholder: "e.g. 192.168.72.15 (for on-demand scans)",
+      },
+      {
         key: "formFactor",
         label: "Form factor",
         kind: "select",

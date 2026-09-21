@@ -13,6 +13,8 @@ dump: the atomic build steps stay in each feature's spec (`docs/specs/`). Run
 | Feature | Status | Spec |
 |---|---|---|
 | Global table column configuration | done | [11](../specs/11-table-column-config/index.md) |
+| Scheduled and manual scans | in-progress | [12](../specs/12-scheduled-manual-scans/index.md) |
+| Discovery type toggles | in-progress | [13](../specs/13-discovery-type-toggles/index.md) |
 
 ## Features
 
@@ -48,3 +50,71 @@ every user sees it; a view with no saved layout renders exactly today's columns.
 - [x] Verify it: `/check verify table column config`
 - [x] Test it: `/test table column config` — 50 tests in `table-columns.test.ts`,
       `columns-actions.test.ts`, `column-picker-dialog.test.tsx` (full suite: 171 pass)
+
+### Scheduled and manual scans · in-progress
+
+Let admins start an on-demand scan of one computer, several selected computers, or every
+known device from the UI, and have the collector ping every printer three times a day to
+track reachability, flagging a down printer in the UI and emailing the admins. Built on
+one long-running collector worker (a DB job queue it polls, plus an in-process scheduler);
+alerts are sent by aw-auth via Resend.
+
+**Done when**: an admin with `scan:write` can trigger a manual scan (single, selected, or
+all) that the worker runs and reconciles; every manually-entered printer is checked 3×/day
+(default 08:00/13:00/18:00, full SNMP once daily); a printer down for 2 checks in a row is
+flagged in the UI and triggers one admin email, with one email on recovery; reachability
+history and status are visible on the printers views.
+
+- [x] Design it (spec): [12](../specs/12-scheduled-manual-scans/index.md)
+- [ ] Build it: `/develop scheduled and manual scans` — milestones 1–2 code in
+      `web/src/db/{schema,scan}.ts`, `web/src/app/api/scan/{claim,jobs/[id]/status}/route.ts`,
+      `web/src/app/(app)/scan-actions.ts`, `web/src/components/{asset-detail,asset-table,scan-jobs-view}.tsx`,
+      `web/src/app/(app)/scans/jobs/page.tsx`, `collector/{worker,main,config}.py`,
+      `aw-auth/accounts/management/commands/set_service_account_scopes.py`.
+      Milestones 3–4 (reachability, alerting, printer UI, retention) not started.
+      Also added a manual `ipAddress` field to computers (schema `computer_details`,
+      `web/src/lib/{asset-fields,table-columns}.ts`, `web/src/db/queries.ts`) so any
+      computer can be scan-targeted, not only collector-discovered ones — extends
+      spec 10's computer form; `/sync` should reconcile it into specs 10/12.
+  - [ ] Foundations: the four web tables (`scan_jobs` + partial pending index,
+        `printer_checks`, `printer_status`, `scan_workers`), the collector service account
+        granted `scan:dequeue`, and a new `opus-web` service account with `notify:send`
+        (covers AC-1, AC-9) — schema + service-account tooling written; awaiting the
+        engineer's `db:push` + service-account commands to confirm live.
+  - [ ] Manual scans end to end: the `main.py worker` loop, the claim/status endpoints
+        (atomic claim + claim fence), `requestScan`/`cancelScanJob`, the Scan now /
+        selected / all controls, the jobs view, and the stuck-job reaper
+        (covers AC-1, AC-2, AC-3, AC-4, AC-5) — code complete; awaiting typecheck + verify.
+  - [ ] Printer reachability + alerting: the APScheduler checks (TCP probe + daily SNMP),
+        the reachability endpoint writing `printer_checks`/`printer_status`, and aw-auth's
+        notify endpoint sending down/recovery email via Resend to admins (covers AC-6, AC-7)
+  - [ ] Printer UI + retention: reachability badge and recent history on the printers
+        views, plus the daily history prune (covers AC-8, AC-10)
+- [ ] Verify it: `/check verify scheduled and manual scans`
+- [ ] Test it: `/test scheduled and manual scans`
+
+### Discovery type toggles · in-progress
+
+Give admins per-type on/off switches for what the collector automatically discovers
+(Computers, Printers), controlled from the web Admin page, persisted in the web DB, and
+read by the collector before each automatic sweep. Manual scans bypass the switches;
+turning Printers off also pauses the spec-12 scheduled reachability checks.
+
+**Done when**: an admin with `scan:write` can turn Computers or Printers on/off on the
+Admin page; the collector's `scan` sweep skips an off type (never collected, ingested, or
+shown in the inbox) while manual scans still run; the collector falls back to a local cache
+(then all-on) when it can't read the settings; and both-off is allowed (auto-scan discovers
+nothing, logs a warning).
+
+- [x] Design it (spec): [13](../specs/13-discovery-type-toggles/index.md)
+- [ ] Build it: `/develop discovery type toggles`
+  - [ ] Foundations + collector read: the `discovery_settings` table and read/upsert
+        helpers, `GET /api/scan/discovery-settings` (service `scan:dequeue`), and the
+        collector fetching + caching + applying it via `no_windows`/`no_printers` (manual
+        jobs bypass) (covers AC-1 data, AC-2, AC-3, AC-4, AC-6, AC-7 endpoint, AC-8)
+  - [ ] Admin UI: the Discovery switches on `/admin` and the `setDiscoveryToggle` server
+        action gated on `scan:write`, hidden/read-only without it (covers AC-1, AC-7)
+  - [ ] Reachability link: gate the spec-12 scheduled reachability run on the Printers
+        switch (when that scheduler exists) (covers AC-5)
+- [ ] Verify it: `/check verify discovery type toggles`
+- [ ] Test it: `/test discovery type toggles`

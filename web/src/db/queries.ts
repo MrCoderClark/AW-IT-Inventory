@@ -55,6 +55,7 @@ const assetSelect = {
   assigneeInitials: people.initials,
   // Searchable identifiers from the type detail tables (only one type ever has a
   // row per asset, so at most one set is non-null). See spec 10 AC-5.
+  computerIp: computerDetails.ipAddress,
   printerIp: printerDetails.ipAddress,
   phoneImei: phoneDetails.imei,
   phoneNumber: phoneDetails.phoneNumber,
@@ -78,6 +79,7 @@ type Row = {
   spec: string | null;
   assigneeName: string | null;
   assigneeInitials: string | null;
+  computerIp: string | null;
   printerIp: string | null;
   phoneImei: string | null;
   phoneNumber: string | null;
@@ -106,10 +108,17 @@ function toAsset(r: Row, pathById: Map<string, string>): Asset {
     warrantyUntil: r.warrantyUntil ?? "",
     costCenter: r.costCenter ?? "",
     spec: r.spec ?? "",
-    search: [r.printerIp, r.phoneImei, r.phoneNumber, r.networkIp, r.networkMac]
+    search: [
+      r.computerIp,
+      r.printerIp,
+      r.phoneImei,
+      r.phoneNumber,
+      r.networkIp,
+      r.networkMac,
+    ]
       .filter(Boolean)
       .join(" "),
-    ip: r.printerIp ?? r.networkIp ?? "",
+    ip: r.printerIp ?? r.networkIp ?? r.computerIp ?? "",
     mac: r.networkMac ?? "",
     phoneNumber: r.phoneNumber ?? "",
   };
@@ -122,6 +131,7 @@ function selectAssets() {
     .select(assetSelect)
     .from(assets)
     .leftJoin(people, eq(assets.assigneeId, people.id))
+    .leftJoin(computerDetails, eq(assets.id, computerDetails.assetId))
     .leftJoin(printerDetails, eq(assets.id, printerDetails.assetId))
     .leftJoin(phoneDetails, eq(assets.id, phoneDetails.assetId))
     .leftJoin(networkDetails, eq(assets.id, networkDetails.assetId));

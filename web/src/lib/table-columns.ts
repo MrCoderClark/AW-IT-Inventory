@@ -78,7 +78,7 @@ const SHARED: ColumnId[] = [
 /** What each view may show. Category catalogs add that type's identifier
    columns; the mixed views (dashboard, location) add Type instead (AC-3). */
 const CATALOGS: Record<ColumnView, ColumnId[]> = {
-  computer: SHARED,
+  computer: [...SHARED, "ip"],
   monitor: SHARED,
   printer: [...SHARED, "ip"],
   network: [...SHARED, "ip", "mac"],
@@ -91,7 +91,7 @@ const CATALOGS: Record<ColumnView, ColumnId[]> = {
    (`columnsFor(type)` for a category, `allColumns` for the mixed views), so
    nothing changes until an admin opts in (AC-2). */
 const DEFAULTS: Record<ColumnView, ColumnId[]> = {
-  computer: ["id", "name", "model", "serial", "assignee", "location", "status", "lastSync", "actions"],
+  computer: ["id", "name", "model", "serial", "ip", "assignee", "location", "status", "lastSync", "actions"],
   monitor: ["id", "name", "model", "serial", "assignee", "location", "status", "actions"],
   printer: ["id", "name", "model", "serial", "ip", "location", "status", "lastSync", "actions"],
   network: ["id", "name", "model", "serial", "ip", "mac", "location", "status", "actions"],
