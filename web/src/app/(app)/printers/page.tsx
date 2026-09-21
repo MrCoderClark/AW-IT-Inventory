@@ -2,7 +2,12 @@ import { Lock } from "lucide-react";
 
 import { AssetTable } from "@/components/asset-table";
 import { PagePlaceholder } from "@/components/page-placeholder";
-import { getAssetsByType, getLocationOptions, getPeople } from "@/db/queries";
+import {
+  getAssetsByType,
+  getColumnConfig,
+  getLocationOptions,
+  getPeople,
+} from "@/db/queries";
 import { hasPermission, requireUser } from "@/lib/auth/session";
 
 export default async function Page({ searchParams }: PageProps<"/printers">) {
@@ -21,10 +26,12 @@ export default async function Page({ searchParams }: PageProps<"/printers">) {
   const { loc: rawLoc } = await searchParams;
   const loc = typeof rawLoc === "string" ? rawLoc : undefined;
   const canWrite = hasPermission(user, "asset:write");
-  const [assets, people, locations] = await Promise.all([
+  const canConfigureColumns = hasPermission(user, "columns:write");
+  const [assets, people, locations, columnOrder] = await Promise.all([
     getAssetsByType("Printer", { locationId: loc }),
     canWrite ? getPeople() : Promise.resolve([]),
     getLocationOptions(),
+    getColumnConfig("printer"),
   ]);
 
   return (
@@ -32,10 +39,13 @@ export default async function Page({ searchParams }: PageProps<"/printers">) {
       assets={assets}
       config={{
         type: "Printer",
+        view: "printer",
+        columnOrder,
         title: "Printers",
         emptyMessage: "No printers yet.",
       }}
       canWrite={canWrite}
+      canConfigureColumns={canConfigureColumns}
       people={people}
       locations={locations}
       activeLocationId={loc}

@@ -6,6 +6,7 @@ import { AssetTable } from "@/components/asset-table";
 import { PagePlaceholder } from "@/components/page-placeholder";
 import {
   getAssets,
+  getColumnConfig,
   getLocationById,
   getLocationOptions,
   getPeople,
@@ -31,11 +32,13 @@ export default async function Page({ params }: PageProps<"/locations/[id]">) {
   if (!location) notFound();
 
   const canWrite = hasPermission(user, "asset:write");
-  const [assets, options, people] = await Promise.all([
+  const canConfigureColumns = hasPermission(user, "columns:write");
+  const [assets, options, people, columnOrder] = await Promise.all([
     // Everything assigned anywhere in this location's subtree (AC-8).
     getAssets({ locationId: id }),
     getLocationOptions(),
     canWrite ? getPeople() : Promise.resolve([]),
+    getColumnConfig("location"),
   ]);
 
   const current = options.find((o) => o.id === id);
@@ -105,11 +108,14 @@ export default async function Page({ params }: PageProps<"/locations/[id]">) {
       <AssetTable
         assets={assets}
         config={{
+          view: "location",
+          columnOrder,
           showTypeFilter: true,
           showLocationFilter: false,
           emptyMessage: "No devices assigned to this location yet.",
         }}
         canWrite={canWrite}
+        canConfigureColumns={canConfigureColumns}
         people={people}
         locations={options}
       />
