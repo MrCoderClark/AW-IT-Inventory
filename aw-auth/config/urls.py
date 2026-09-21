@@ -6,6 +6,7 @@ from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 from accounts.jwks import jwks, openid_configuration
+from accounts.views import PrinterAlertView
 
 
 def healthz(_request):
@@ -22,6 +23,11 @@ urlpatterns = [
         name="openid-configuration",
     ),
     path("v1/auth/", include("accounts.urls")),
+    path(
+        "v1/notify/printer-alert",
+        PrinterAlertView.as_view(),
+        name="notify-printer-alert",
+    ),
     path("v1/schema", SpectacularAPIView.as_view(), name="schema"),
     path("v1/docs", SpectacularSwaggerView.as_view(url_name="schema"), name="docs"),
 ]

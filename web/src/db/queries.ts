@@ -5,6 +5,7 @@ import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle
 
 import type {
   Asset,
+  AssetReachability,
   AssetStatus,
   AssetType,
   DeviceSuggestion,
@@ -13,6 +14,7 @@ import type {
   LocationNode,
   LocationOption,
   MachineSummary,
+  ReachabilityCheck,
 } from "@/lib/data";
 import { LOCATION_PATH_SEP } from "@/lib/data";
 import type { ColumnView } from "@/lib/table-columns";
@@ -26,7 +28,9 @@ import {
   networkDetails,
   people,
   phoneDetails,
+  printerChecks,
   printerDetails,
+  printerStatus,
   tableColumnConfig,
 } from "./schema";
 
@@ -182,7 +186,108 @@ export async function getAssetsByType(
       .orderBy(asc(assets.tag)),
     getLocationPathMap(),
   ]);
-  return rows.map((r) => toAsset(r, pathById));
+  const list = rows.map((r) => toAsset(r, pathById));
+
+  // Printers carry a reachability rollup for the badge column (spec 12, AC-8).
+  if (type === "Printer" && list.length > 0) {
+    const reach = await getPrinterReachabilityMap();
+    for (const a of list) {
+      const r = reach[a.id];
+      if (r) a.reachability = r;
+    }
+  }
+  return list;
+}
+
+/** Map a printer_status row to the display reachability rollup (spec 12). A null
+   `reachable` (a row that exists but was never resolved) reads as "unknown". */
+function toReachability(row: {
+  reachable: boolean | null;
+  isDown: boolean;
+  lastCheckedAt: Date | string | null;
+  downSince: Date | string | null;
+}): AssetReachability {
+  const iso = (v: Date | string | null) =>
+    v ? (typeof v === "string" ? v : v.toISOString()) : null;
+  if (row.reachable === null) {
+    return { state: "unknown", lastCheckedAt: iso(row.lastCheckedAt), downSince: null };
+  }
+  return {
+    state: row.isDown ? "down" : "up",
+    lastCheckedAt: iso(row.lastCheckedAt),
+    downSince: iso(row.downSince),
+  };
+}
+
+/** Reachability rollups for every printer, keyed by asset tag (spec 12, AC-8). */
+export async function getPrinterReachabilityMap(): Promise<
+  Record<string, AssetReachability>
+> {
+  const rows = await db
+    .select({
+      tag: assets.tag,
+      reachable: printerStatus.reachable,
+      isDown: printerStatus.isDown,
+      lastCheckedAt: printerStatus.lastCheckedAt,
+      downSince: printerStatus.downSince,
+    })
+    .from(printerStatus)
+    .innerJoin(assets, eq(assets.id, printerStatus.assetId));
+  const out: Record<string, AssetReachability> = {};
+  for (const r of rows) out[r.tag] = toReachability(r);
+  return out;
+}
+
+/**
+ * The reachability rollup plus recent check history for one printer's detail
+ * page (spec 12, AC-8). `tag` is the human asset id. Returns null when the tag
+ * is not a printer; the status is "unknown" until the first check lands.
+ */
+export async function getPrinterReachability(
+  tag: string,
+  historyLimit = 10,
+): Promise<{ status: AssetReachability; history: ReachabilityCheck[] } | null> {
+  const [a] = await db
+    .select({ id: assets.id })
+    .from(assets)
+    .where(and(eq(assets.tag, tag), eq(assets.type, "Printer")))
+    .limit(1);
+  if (!a) return null;
+
+  const [statusRow] = await db
+    .select({
+      reachable: printerStatus.reachable,
+      isDown: printerStatus.isDown,
+      lastCheckedAt: printerStatus.lastCheckedAt,
+      downSince: printerStatus.downSince,
+    })
+    .from(printerStatus)
+    .where(eq(printerStatus.assetId, a.id))
+    .limit(1);
+
+  const historyRows = await db
+    .select({
+      checkedAt: printerChecks.checkedAt,
+      reachable: printerChecks.reachable,
+      latencyMs: printerChecks.latencyMs,
+      method: printerChecks.method,
+    })
+    .from(printerChecks)
+    .where(eq(printerChecks.assetId, a.id))
+    .orderBy(desc(printerChecks.checkedAt))
+    .limit(historyLimit);
+
+  return {
+    status: statusRow
+      ? toReachability(statusRow)
+      : { state: "unknown", lastCheckedAt: null, downSince: null },
+    history: historyRows.map((r) => ({
+      checkedAt: r.checkedAt.toISOString(),
+      reachable: r.reachable,
+      latencyMs: r.latencyMs,
+      method: r.method,
+    })),
+  };
 }
 
 /**

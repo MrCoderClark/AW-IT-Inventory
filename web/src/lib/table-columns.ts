@@ -35,6 +35,7 @@ export type ColumnId =
   | "ip"
   | "mac"
   | "phoneNumber"
+  | "reachability"
   | "actions";
 
 /** Always shown, never removable, and pinned: Name first, Actions last (AC-4). */
@@ -59,6 +60,7 @@ export const COLUMN_LABELS: Record<ColumnId, string> = {
   ip: "IP Address",
   mac: "MAC",
   phoneNumber: "Phone",
+  reachability: "Reachability",
   actions: "Actions",
 };
 
@@ -80,7 +82,7 @@ const SHARED: ColumnId[] = [
 const CATALOGS: Record<ColumnView, ColumnId[]> = {
   computer: [...SHARED, "ip"],
   monitor: SHARED,
-  printer: [...SHARED, "ip"],
+  printer: [...SHARED, "ip", "reachability"],
   network: [...SHARED, "ip", "mac"],
   phone: [...SHARED, "phoneNumber"],
   dashboard: [...SHARED, "type"],
@@ -93,7 +95,7 @@ const CATALOGS: Record<ColumnView, ColumnId[]> = {
 const DEFAULTS: Record<ColumnView, ColumnId[]> = {
   computer: ["id", "name", "model", "serial", "ip", "assignee", "location", "status", "lastSync", "actions"],
   monitor: ["id", "name", "model", "serial", "assignee", "location", "status", "actions"],
-  printer: ["id", "name", "model", "serial", "ip", "location", "status", "lastSync", "actions"],
+  printer: ["id", "name", "model", "serial", "ip", "reachability", "location", "status", "lastSync", "actions"],
   network: ["id", "name", "model", "serial", "ip", "mac", "location", "status", "actions"],
   phone: ["id", "name", "model", "serial", "phoneNumber", "assignee", "location", "status", "actions"],
   dashboard: ["id", "name", "type", "serial", "model", "assignee", "location", "status", "lastSync", "actions"],

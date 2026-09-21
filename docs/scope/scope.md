@@ -71,7 +71,17 @@ history and status are visible on the printers views.
       `web/src/app/(app)/scan-actions.ts`, `web/src/components/{asset-detail,asset-table,scan-jobs-view}.tsx`,
       `web/src/app/(app)/scans/jobs/page.tsx`, `collector/{worker,main,config}.py`,
       `aw-auth/accounts/management/commands/set_service_account_scopes.py`.
-      Milestones 3–4 (reachability, alerting, printer UI, retention) not started.
+      Milestones 3–4 (reachability, alerting, printer UI, retention) code in
+      `web/src/db/reachability.ts`, `web/src/lib/notify.ts`,
+      `web/src/app/api/scan/{printers,reachability,reachability/prune}/route.ts`,
+      `web/src/db/queries.ts`, `web/src/lib/{data,table-columns}.ts`,
+      `web/src/components/{reachability-badge,asset-table,asset-detail}.tsx`,
+      `web/src/app/(app)/assets/[id]/page.tsx`, `collector/{reachability,worker,main,config}.py`,
+      `collector/pyproject.toml` (apscheduler), and aw-auth
+      `accounts/{service_auth,notifications,views}.py` + `config/urls.py`. Two new
+      collector-facing service endpoints (`GET /api/scan/printers`,
+      `POST /api/scan/reachability/prune`) beyond the spec's API table — `/sync`
+      should fold them in.
       Also added a manual `ipAddress` field to computers (schema `computer_details`,
       `web/src/lib/{asset-fields,table-columns}.ts`, `web/src/db/queries.ts`) so any
       computer can be scan-targeted, not only collector-discovered ones — extends
@@ -88,8 +98,16 @@ history and status are visible on the printers views.
   - [ ] Printer reachability + alerting: the APScheduler checks (TCP probe + daily SNMP),
         the reachability endpoint writing `printer_checks`/`printer_status`, and aw-auth's
         notify endpoint sending down/recovery email via Resend to admins (covers AC-6, AC-7)
+        — code complete; awaiting `uv sync` (apscheduler), the `opus-web` service account
+        (`create_service_account opus-web --scopes notify:send`), env wiring, typecheck +
+        verify. NOTE: `lastAlertState` is advanced only after a successful send (not inside
+        the check transaction as the spec's State-transitions text says) so a failed send
+        retries — matches AC-7 and the notify-failure test scenario; `/sync` should reconcile
+        the wording.
   - [ ] Printer UI + retention: reachability badge and recent history on the printers
-        views, plus the daily history prune (covers AC-8, AC-10)
+        views, plus the daily history prune (covers AC-8, AC-10) — code complete; awaiting
+        typecheck + verify. Badge is a new `reachability` column in the spec-11 printer
+        catalog/defaults.
 - [ ] Verify it: `/check verify scheduled and manual scans`
 - [ ] Test it: `/test scheduled and manual scans`
 

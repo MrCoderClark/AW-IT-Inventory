@@ -30,12 +30,15 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { StatusBadge } from "@/components/status-badge";
+import { ReachabilityBadge } from "@/components/reachability-badge";
 import {
   TYPE_ICON,
   type Asset,
+  type AssetReachability,
   type AssetType,
   type LocationOption,
   type MachineSummary,
+  type ReachabilityCheck,
 } from "@/lib/data";
 import type { AssetFormValues } from "@/lib/asset-schema";
 import {
@@ -73,6 +76,19 @@ function fmt(iso: string | Date | null | undefined) {
     year: "numeric",
     month: "short",
     day: "2-digit",
+  });
+}
+
+/** Date + time, for reachability timestamps (spec 12). */
+function fmtDateTime(iso: string | Date | null | undefined) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("en-US", {
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 }
 
@@ -128,6 +144,7 @@ export function AssetDetail({
   locations = [],
   details = null,
   assigneeId = null,
+  reachability = null,
 }: {
   asset: Asset;
   machine?: MachineSummary;
@@ -143,6 +160,12 @@ export function AssetDetail({
   details?: Record<string, unknown> | null;
   /** The asset's current assignee id, to pre-select in the edit form. */
   assigneeId?: string | null;
+  /** Printer reachability status + recent history (spec 12, AC-8); null for
+     non-printers or a printer never checked. */
+  reachability?: {
+    status: AssetReachability;
+    history: ReachabilityCheck[];
+  } | null;
 }) {
   const Icon = TYPE_ICON[asset.type];
   const showHealth =
@@ -267,6 +290,76 @@ export function AssetDetail({
             {TYPE_FIELDS[asset.type].fields.map((f) => (
               <Field key={f.key} label={f.label} value={fmtDetail(f, details)} />
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Printer reachability (spec 12, AC-8) */}
+      {reachability && (
+        <div>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Reachability
+            </p>
+            <ReachabilityBadge reachability={reachability.status} />
+          </div>
+          <div className="rounded-xl border bg-card p-5">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-3">
+              <Field
+                label="Last checked"
+                value={fmtDateTime(reachability.status.lastCheckedAt)}
+                mono
+              />
+              {reachability.status.state === "down" && (
+                <Field
+                  label="Down since"
+                  value={fmtDateTime(reachability.status.downSince)}
+                  mono
+                />
+              )}
+            </div>
+            {reachability.history.length > 0 ? (
+              <div className="mt-4">
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Recent checks
+                </p>
+                <ul className="divide-y text-sm">
+                  {reachability.history.map((c, i) => (
+                    <li
+                      key={i}
+                      className="flex items-center justify-between gap-2 py-1.5"
+                    >
+                      <span className="flex items-center gap-2">
+                        <span
+                          aria-hidden
+                          className="size-1.5 rounded-full"
+                          style={{
+                            backgroundColor: c.reachable
+                              ? "var(--status-online)"
+                              : "var(--status-maintenance)",
+                          }}
+                        />
+                        <span className={c.reachable ? "" : "text-muted-foreground"}>
+                          {c.reachable ? "Reachable" : "Unreachable"}
+                        </span>
+                        <span className="text-[11px] uppercase text-muted-foreground">
+                          {c.method}
+                        </span>
+                      </span>
+                      <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                        {c.latencyMs != null ? `${c.latencyMs} ms · ` : ""}
+                        {fmtDateTime(c.checkedAt)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <p className="mt-4 text-sm text-muted-foreground">
+                No checks yet — the collector worker checks printers on its
+                schedule (default 08:00, 13:00, 18:00).
+              </p>
+            )}
           </div>
         </div>
       )}
