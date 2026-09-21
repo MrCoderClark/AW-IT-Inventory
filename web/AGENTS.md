@@ -31,3 +31,32 @@ before writing. Layouts persist in the `table_column_config` table, one row per
 view. Gotcha: a newly seeded aw-auth permission only reaches a user after they
 sign in again, because permissions ride the access token's `perms` claim
 (restarting servers or clearing the browser cache does not refresh it).
+
+## Discovery type toggles (spec 13)
+
+Per type on/off switches for what the collector automatically discovers
+(Computers, Printers). The code owns the settings in one `server-only` module
+`src/db/discovery.ts`: `getDiscoverySettings()` reads the `discovery_settings`
+table and coalesces a missing type to `true`, so an absent row means on and the
+empty table means "discover everything" (no seeding). `setDiscoveryToggle()`
+upserts one row. The device type union and the `isDiscoveryType` guard live here
+too; add a new toggleable type by extending both plus the table's `$type`.
+
+Two callers, two auth gates. Admins edit from `/admin` through the
+`setDiscoveryToggleAction` server action in `src/app/(app)/discovery-actions.ts`,
+gated on `scan:write` (the switches render read only for a `scan:read` viewer who
+lacks it). The collector reads the switches through `GET /api/scan/discovery-settings`,
+gated on the service `scan:dequeue` scope, same token path as the other
+`/api/scan/*` routes. The switches govern only the automatic sweep; manual scan
+jobs never read them.
+
+The `Switch` UI primitive (`src/components/ui/switch.tsx`) is the Base UI toggle
+in the shadcn Nova style. Note for tests: it renders a `role="switch"` element
+and uses `aria-disabled`, not the native `disabled` attribute, when disabled.
+
+## Testing note: `server-only` under Vitest
+
+`vitest.config.mts` aliases `server-only` to a no-op stub
+(`src/test/empty-module.ts`) so a server module (a `src/db/*` helper) can be
+imported directly in a test. Mock its real boundary (`@/db/index`, the auth
+session, `next/cache`) as the existing action and db tests do.

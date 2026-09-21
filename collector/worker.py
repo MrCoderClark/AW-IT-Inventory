@@ -180,6 +180,9 @@ def _run_job(config: Config, tokens: TokenCache, worker_id: str, job: dict) -> N
         return
 
     try:
+        # Manual jobs always scan their explicit targets: they intentionally
+        # bypass the discovery type toggles (spec 13, AC-4). Do not gate this on
+        # get_discovery_settings — an off type must never block a targeted scan.
         report = scan_targets(_job_config(config, targets))
         ingest_res = post_scan(config, report)
         result = _summarize(targets, report, ingest_res)
