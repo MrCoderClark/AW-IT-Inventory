@@ -108,7 +108,14 @@ history and status are visible on the printers views.
         views, plus the daily history prune (covers AC-8, AC-10) — code complete; awaiting
         typecheck + verify. Badge is a new `reachability` column in the spec-11 printer
         catalog/defaults.
-- [ ] Verify it: `/check verify scheduled and manual scans`
+- [x] Verify it: `/check verify scheduled and manual scans` — AC-6/7/8/9/10 all
+      proven live (scheduler fired + daily SNMP ingested, down→recovery with once-only
+      alerts, prune, auth). Verify caught two real bugs, fixed via `/debug` and confirmed
+      (a real down + recovery email landed): Resend was blocked by Cloudflare 1010 (stdlib
+      `urllib` default User-Agent) and web counted aw-auth's HTTP 200 as sent even when
+      Resend failed. Fixes in `aw-auth/accounts/notifications.py`, `web/src/lib/notify.ts`
+      (+ regression tests `accounts/tests.py`, `web/src/lib/notify.test.ts`); commit still
+      pending.
 - [ ] Test it: `/test scheduled and manual scans`
 
 ### Discovery type toggles · in-progress

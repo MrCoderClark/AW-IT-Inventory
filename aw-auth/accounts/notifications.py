@@ -93,6 +93,11 @@ def send_printer_alert(printer: dict, event: str, since: str | None) -> bool:
         headers={
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
+            "Accept": "application/json",
+            # Cloudflare (in front of api.resend.com) blocks urllib's default
+            # "Python-urllib/x.y" agent with a 403 "error code: 1010", so set an
+            # explicit User-Agent. Without this the request never reaches Resend.
+            "User-Agent": "opus-aw-auth/1.0",
         },
         method="POST",
     )

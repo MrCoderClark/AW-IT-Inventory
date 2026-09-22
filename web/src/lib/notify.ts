@@ -97,6 +97,18 @@ export async function sendPrinterAlert(event: AlertEvent): Promise<boolean> {
       );
       return false;
     }
+    // aw-auth returns 200 with { sent } even when the underlying Resend send
+    // failed. Treat only a real send as success, so a failed delivery leaves the
+    // transition pending (lastAlertState not advanced) for the next check to
+    // retry, instead of being silently dropped (AC-7 notify-failure path).
+    const data = (await res.json().catch(() => null)) as { sent?: boolean } | null;
+    if (data?.sent !== true) {
+      console.error(
+        `[notify] aw-auth accepted but did not deliver for ${event.name} ` +
+          `(${event.ip}); leaving it to retry on the next check.`,
+      );
+      return false;
+    }
     return true;
   } catch (err) {
     console.error(`[notify] printer-alert failed for ${event.name} (${event.ip}):`, err);
