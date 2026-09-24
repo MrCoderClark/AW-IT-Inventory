@@ -11,6 +11,10 @@ ports:
   printer: 9100
 
 snmp_community: public
+# SNMP version for printers: "auto" tries v2c then falls back to v1 (default),
+# "v2c" or "v1" pin one. The Canon imageFORCE answers only SNMPv1 and drops v2c,
+# so "auto" (or "v1") is needed for it; pin "v1" to skip the v2c timeout.
+snmp_version: auto
 
 # WinRM local-admin credential profiles. `username` uses `.\name` for a local
 # account. Secrets come from the named environment variable.
@@ -57,3 +61,16 @@ daily_snmp_time: "08:00"             # which daily check also does full SNMP
 reachability_ports: [9100, 631, 515]
 reachability_timeout: 1.5            # TCP connect timeout, seconds
 reachability_retention_days: 365
+# Printer page counter (spec 14): candidate OIDs for a printer's total page
+# counter, tried IN ORDER — the first that returns a number wins. Each is read in
+# its own SNMP GET, so a model that lacks one falls through to the next (needed
+# under SNMP v1, where a missing OID fails the whole request). This lets one
+# config serve a mixed fleet. Default: Canon's "Total 2" (counter 102, matches the
+# number Canon iR-ADV / imageFORCE show on their own Check Counter page) first,
+# then the standard Printer-MIB prtMarkerLifeCount as a universal fallback.
+counter_oids:
+  - "1.3.6.1.4.1.1602.1.11.1.3.1.4.102"   # Canon "Total 2"
+  - "1.3.6.1.2.1.43.10.2.1.4.1.1"         # standard prtMarkerLifeCount
+# When the worker emails the daily counter report (local to schedule_timezone),
+# default just after the 08:00 SNMP collect so the day's reading is already in.
+counter_report_time: "08:05"

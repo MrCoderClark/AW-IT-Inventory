@@ -15,6 +15,7 @@ dump: the atomic build steps stay in each feature's spec (`docs/specs/`). Run
 | Global table column configuration | done | [11](../specs/11-table-column-config/index.md) |
 | Scheduled and manual scans | done | [12](../specs/12-scheduled-manual-scans/index.md) |
 | Discovery type toggles | in-progress | [13](../specs/13-discovery-type-toggles/index.md) |
+| Printer page counter and daily report | in-progress | [14](../specs/14-printer-page-counter/index.md) |
 
 ## Features
 
@@ -162,3 +163,48 @@ nothing, logs a warning).
       `discovery-actions.test.ts`, `discovery-settings/route.test.ts`, `discovery-toggles.test.tsx`)
       plus 6 collector smoke tests (`collector/tests/test_discovery.py`), all pass. Covers the
       automatable ACs (1, 2, 3 endpoint, 6, 7); AC-4 and AC-8 (a real sweep) stay for runtime verify.
+
+### Printer page counter and daily report · in-progress
+
+Read each printer's total page (life) counter over SNMP, keep a daily history of it,
+show the latest count and the day's change on the printer detail page, and email the
+admins a daily counter report. The counter rides the existing daily SNMP collect
+(spec 12); the read OID is configurable so the Canon imageFORCE 520 (which may not
+answer the standard OID) can still be read. An admin can also send the report on demand.
+
+**Done when**: every managed printer's total page counter is read daily over SNMP and
+stored as a daily snapshot; the printer detail page shows the latest total, today's
+delta, and recent history; a daily email (default 08:05, admins) lists each printer's
+total and today's delta; an admin with `scan:write` can send the report on demand.
+
+- [x] Design it (spec): [14](../specs/14-printer-page-counter/index.md)
+- [x] Build it: `/develop printer page counter` — code in `web/src/db/{schema,counters,ingest}.ts`,
+      `web/src/db/queries.ts` (unchanged — panel reads via `getPrinterCounters` in
+      `counters.ts`), `web/src/lib/{data,counter-report,notify}.ts`,
+      `web/src/app/api/scan/counter-report/send/route.ts`,
+      `web/src/app/api/scan/reachability/prune/route.ts` (extended),
+      `web/src/app/(app)/{counter-report-actions.ts,admin/page.tsx,assets/[id]/page.tsx}`,
+      `web/src/components/{send-counter-report,asset-detail}.tsx`,
+      `collector/{collect_snmp,config,reachability,worker,main}.py`,
+      `collector/config.example.yaml`, and aw-auth
+      `accounts/{notifications,views}.py` + `config/urls.py`. Reuses the spec-12
+      `opus-web` service account (`notify:send`) and the Resend path — no new
+      accounts or secrets.
+  - [x] Read + record: the `printer_counters` daily-snapshot table, the collector's
+        configurable `counter_oid` (default standard), and the ingest upsert of the
+        daily snapshot for matched printers (covers AC-1, AC-2) — code written;
+        awaiting the engineer's `npm run db:push` (schema live) and, for the real Canon
+        imageFORCE 520 counter, an `snmpwalk` to pin its OID in `collector/config.yaml`.
+  - [x] Detail panel: latest total, today's delta ("first reading" / "counter reset"
+        handled), and recent daily history on the printer detail page (covers AC-3)
+        — code written; awaiting typecheck + verify.
+  - [x] Daily report + manual send: the shared `sendCounterReport`, aw-auth
+        `POST /v1/notify/printer-counter-report` (resolve admins, send via Resend), the
+        worker's daily job at `counter_report_time`, and the Admin "Send counter report
+        now" button gated on `scan:write` (covers AC-4, AC-5, AC-7) — code written;
+        awaiting typecheck + verify (needs `OPUS_WEB_CLIENT_ID/SECRET` in `web/.env` and
+        `RESEND_API_KEY`/`EMAIL_FROM` in `aw-auth/.env`, all already set for spec 12).
+  - [x] Retention: extend the worker's daily prune (and the prune endpoint) to also
+        prune `printer_counters` (covers AC-6) — code written; awaiting verify.
+- [ ] Verify it: `/check verify printer page counter`
+- [ ] Test it: `/test printer page counter`

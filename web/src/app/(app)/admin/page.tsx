@@ -1,7 +1,8 @@
-import { Lock, Radar } from "lucide-react";
+import { Gauge, Lock, Radar } from "lucide-react";
 
 import { DiscoveryToggles } from "@/components/discovery-toggles";
 import { PagePlaceholder } from "@/components/page-placeholder";
+import { SendCounterReport } from "@/components/send-counter-report";
 import {
   Card,
   CardContent,
@@ -58,6 +59,27 @@ export default async function Page() {
           <DiscoveryToggles settings={settings} canWrite={canWrite} />
         </CardContent>
       </Card>
+
+      {/* Printer page-counter report (spec 14, AC-5). The button is shown only to
+          scan:write admins; the server action re-checks the permission too. */}
+      {canWrite && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Gauge className="size-5 text-muted-foreground" />
+              <CardTitle>Printer page counters</CardTitle>
+            </div>
+            <CardDescription>
+              The admins get a daily email of each printer&apos;s total pages and
+              the day&apos;s change (default 08:05). Send it now to get a fresh
+              report on demand.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <SendCounterReport />
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

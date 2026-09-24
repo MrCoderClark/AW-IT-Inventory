@@ -46,6 +46,10 @@ class Config(BaseModel):
     profiles: list[CredentialProfile] = Field(default_factory=list)
     rules: list[Rule] = Field(default_factory=list)
     snmp_community: str = "public"
+    # SNMP version to use for printers: "auto" tries v2c then falls back to v1,
+    # "v2c" or "v1" pin one. Some devices (e.g. the Canon imageFORCE) answer only
+    # v1 and silently drop v2c, so "auto" reads them without extra config.
+    snmp_version: str = "auto"
     winrm_transport: str = "ntlm"
     winrm_scheme: str = "http"
     concurrency: int = 64
@@ -76,6 +80,24 @@ class Config(BaseModel):
     reachability_ports: list[int] = Field(default_factory=lambda: [9100, 631, 515])
     reachability_timeout: float = 1.5  # TCP connect timeout (seconds)
     reachability_retention_days: int = 365  # prune printer_checks older than this
+
+    # Printer page counter (spec 14). Candidate OIDs for a printer's total page
+    # counter, tried IN ORDER; the first that returns a number wins. This lets one
+    # config serve a mixed fleet: a vendor "total" OID first (matching the number
+    # the device shows on its own counter page), with the standard Printer-MIB
+    # prtMarkerLifeCount as a universal fallback. Each candidate is read in its own
+    # SNMP GET, so a model that lacks one just falls through to the next (important
+    # under SNMP v1, where a missing OID fails the whole request). The default has
+    # Canon's "Total 2" (counter 102, e.g. iR-ADV / imageFORCE) first.
+    counter_oids: list[str] = Field(
+        default_factory=lambda: [
+            "1.3.6.1.4.1.1602.1.11.1.3.1.4.102",  # Canon "Total 2"
+            "1.3.6.1.2.1.43.10.2.1.4.1.1",  # standard prtMarkerLifeCount
+        ]
+    )
+    # When the worker sends the daily counter report (local to schedule_timezone),
+    # default just after the 08:00 SNMP collect so the day's reading is in first.
+    counter_report_time: str = "08:05"
 
     @property
     def profiles_by_id(self) -> dict[str, CredentialProfile]:

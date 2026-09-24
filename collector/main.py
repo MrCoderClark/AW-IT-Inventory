@@ -126,6 +126,8 @@ def scan_targets(
                 [d["ip"] for d in prn_targets],
                 config.snmp_community,
                 config.snmp_timeout,
+                config.counter_oids,
+                config.snmp_version,
             )
         )
         for d in prn_targets:

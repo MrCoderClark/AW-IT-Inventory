@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 
+import { pruneCounters } from "@/db/counters";
 import { pruneChecks } from "@/db/reachability";
 import { bearerFrom, verifyServiceToken } from "@/lib/auth/service";
 
 /**
- * The worker's daily retention task calls this to prune reachability history
- * older than its configured window (spec 12, AC-10). The worker owns the
- * retention default (365 days) and passes it as `retentionDays`. Service
- * `scan:dequeue`.
+ * The worker's daily retention task calls this to prune old history older than
+ * its configured window: reachability checks (spec 12, AC-10) and printer page-
+ * counter snapshots (spec 14, AC-6). The worker owns the retention default (365
+ * days) and passes it as `retentionDays`. Service `scan:dequeue`.
  */
 export async function POST(request: Request) {
   const token = bearerFrom(request.headers.get("authorization"));
@@ -32,6 +33,9 @@ export async function POST(request: Request) {
   const retentionDays =
     typeof body?.retentionDays === "number" ? body.retentionDays : 365;
 
-  const pruned = await pruneChecks(retentionDays);
-  return NextResponse.json({ ok: true, pruned });
+  const [pruned, prunedCounters] = await Promise.all([
+    pruneChecks(retentionDays),
+    pruneCounters(retentionDays),
+  ]);
+  return NextResponse.json({ ok: true, pruned, prunedCounters });
 }

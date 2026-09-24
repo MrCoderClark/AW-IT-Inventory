@@ -1,6 +1,7 @@
 import "server-only";
 
 import { AUTH_API_URL } from "./auth/config";
+import type { CounterReportRow } from "@/db/counters";
 import type { AlertEvent } from "@/db/reachability";
 
 /**
@@ -112,6 +113,54 @@ export async function sendPrinterAlert(event: AlertEvent): Promise<boolean> {
     return true;
   } catch (err) {
     console.error(`[notify] printer-alert failed for ${event.name} (${event.ip}):`, err);
+    return false;
+  }
+}
+
+/**
+ * Ask aw-auth to email the admins the daily printer page-counter report (spec 14,
+ * AC-4, AC-7). Web assembles the per-printer rows (it holds the counter history)
+ * and posts them; aw-auth resolves the admins and sends via Resend, the same
+ * `opus-web` service account (`notify:send`) and Resend path as the down alerts.
+ * Returns true only when aw-auth actually delivered (keys on `sent`, not the
+ * status code), so a failed send is reported rather than silently dropped.
+ */
+export async function sendCounterReportEmail(
+  printers: CounterReportRow[],
+): Promise<boolean> {
+  try {
+    const token = await getServiceToken();
+    if (!token) return false;
+
+    const res = await fetch(`${AUTH_API_URL}/v1/notify/printer-counter-report`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ printers }),
+      cache: "no-store",
+    });
+    if (res.status === 401) {
+      cachedToken = null;
+    }
+    if (!res.ok) {
+      console.error(
+        `[notify] printer-counter-report ${res.status}: ` +
+          `${(await res.text()).slice(0, 200)}`,
+      );
+      return false;
+    }
+    const data = (await res.json().catch(() => null)) as { sent?: boolean } | null;
+    if (data?.sent !== true) {
+      console.error(
+        "[notify] aw-auth accepted the counter report but did not deliver it.",
+      );
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("[notify] printer-counter-report failed:", err);
     return false;
   }
 }

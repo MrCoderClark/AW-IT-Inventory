@@ -2,6 +2,7 @@ import "server-only";
 
 import { eq, or, sql } from "drizzle-orm";
 
+import { upsertPrinterCounter } from "./counters";
 import { db } from "./index";
 import {
   assets,
@@ -25,6 +26,7 @@ interface IngestHealth {
 }
 interface IngestPrinter {
   serial?: string | null;
+  page_count?: number | null;
   [k: string]: unknown;
 }
 export interface IngestHost {
@@ -160,6 +162,21 @@ export async function ingestScan(payload: IngestPayload): Promise<IngestResult> 
         .update(assets)
         .set({ lastSync: now, updatedAt: now })
         .where(eq(assets.id, assetId));
+
+      // Record today's printer page-counter snapshot (spec 14, AC-2). Rides this
+      // existing ingest: any matched printer that returned a numeric life counter
+      // updates the one row for today (idempotent per day). Best-effort — a
+      // counter write must never fail the ingest of the machine itself.
+      if (kind === "printer" && typeof pr?.page_count === "number") {
+        try {
+          await upsertPrinterCounter(assetId, pr.page_count, "scheduled", now);
+        } catch (err) {
+          console.error(
+            `[ingest] printer-counter snapshot failed for asset ${assetId}:`,
+            err,
+          );
+        }
+      }
     } else {
       result.discovered += 1;
     }
