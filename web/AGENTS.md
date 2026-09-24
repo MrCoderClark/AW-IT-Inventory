@@ -54,6 +54,39 @@ The `Switch` UI primitive (`src/components/ui/switch.tsx`) is the Base UI toggle
 in the shadcn Nova style. Note for tests: it renders a `role="switch"` element
 and uses `aria-disabled`, not the native `disabled` attribute, when disabled.
 
+## Printer reachability + alerting (spec 12)
+
+The collector `worker` runs an in-process APScheduler that checks every
+manually-entered printer three times a day (a TCP probe, plus a full SNMP collect
+on the first check) and posts the results to the web app. Three service endpoints
+serve it, all gated on the service `scan:dequeue` scope (same token path as the
+other `/api/scan/*` routes): `GET /api/scan/printers` (the targets to probe),
+`POST /api/scan/reachability` (record checks), `POST /api/scan/reachability/prune`
+(retention). The web app never connects into the fleet; the worker pulls and pushes.
+
+The reachability engine is one `server-only` module `src/db/reachability.ts`. A
+printer is "down" exactly when `printer_status.consecutiveFailures >= 2`.
+`recordChecks` writes each check and the rollup in a transaction and returns the
+up/down transitions to alert on; the route then fires the email and calls
+`markAlertSent`. Key rule: `lastAlertState` is advanced only AFTER a successful
+send, so a failed send leaves the transition pending and the next check retries it
+(one down email per episode, one recovery email, no duplicates while down). The
+UI read helpers (`getPrinterReachabilityMap`, `getPrinterReachability`) live in
+`src/db/queries.ts`.
+
+Alerting is the one web -> aw-auth call in the app: web detects the transition (it
+holds the history) and `src/lib/notify.ts` posts to aw-auth's
+`/v1/notify/printer-alert` with the `opus-web` service account (client-credentials,
+scope `notify:send`; creds in `web/.env` as `OPUS_WEB_CLIENT_ID` /
+`OPUS_WEB_CLIENT_SECRET`). Gotcha: aw-auth returns HTTP 200 with a `{ sent }` body
+even when the underlying Resend send failed, so `notify.ts` keys success on
+`sent === true`, not the status code (otherwise a failed delivery is silently
+dropped instead of retried).
+
+The printers table gains a `reachability` column (a normal spec-11 catalog +
+defaults entry) rendered by `ReachabilityBadge`; the printer detail page shows the
+badge plus recent check history.
+
 ## Testing note: `server-only` under Vitest
 
 `vitest.config.mts` aliases `server-only` to a no-op stub

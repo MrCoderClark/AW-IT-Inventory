@@ -32,10 +32,14 @@ describe("sendPrinterAlert (spec 12)", () => {
     vi.resetModules();
     process.env.OPUS_WEB_CLIENT_ID = "cid";
     process.env.OPUS_WEB_CLIENT_SECRET = "sec";
+    // The failure/skip paths log on purpose; keep the test output clean.
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it("returns true when aw-auth reports the alert was sent", async () => {

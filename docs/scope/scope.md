@@ -13,7 +13,7 @@ dump: the atomic build steps stay in each feature's spec (`docs/specs/`). Run
 | Feature | Status | Spec |
 |---|---|---|
 | Global table column configuration | done | [11](../specs/11-table-column-config/index.md) |
-| Scheduled and manual scans | in-progress | [12](../specs/12-scheduled-manual-scans/index.md) |
+| Scheduled and manual scans | done | [12](../specs/12-scheduled-manual-scans/index.md) |
 | Discovery type toggles | in-progress | [13](../specs/13-discovery-type-toggles/index.md) |
 
 ## Features
@@ -51,7 +51,7 @@ every user sees it; a view with no saved layout renders exactly today's columns.
 - [x] Test it: `/test table column config` — 50 tests in `table-columns.test.ts`,
       `columns-actions.test.ts`, `column-picker-dialog.test.tsx` (full suite: 171 pass)
 
-### Scheduled and manual scans · in-progress
+### Scheduled and manual scans · done
 
 Let admins start an on-demand scan of one computer, several selected computers, or every
 known device from the UI, and have the collector ping every printer three times a day to
@@ -66,7 +66,7 @@ flagged in the UI and triggers one admin email, with one email on recovery; reac
 history and status are visible on the printers views.
 
 - [x] Design it (spec): [12](../specs/12-scheduled-manual-scans/index.md)
-- [ ] Build it: `/develop scheduled and manual scans` — milestones 1–2 code in
+- [x] Build it: `/develop scheduled and manual scans` — milestones 1–2 code in
       `web/src/db/{schema,scan}.ts`, `web/src/app/api/scan/{claim,jobs/[id]/status}/route.ts`,
       `web/src/app/(app)/scan-actions.ts`, `web/src/components/{asset-detail,asset-table,scan-jobs-view}.tsx`,
       `web/src/app/(app)/scans/jobs/page.tsx`, `collector/{worker,main,config}.py`,
@@ -86,16 +86,16 @@ history and status are visible on the printers views.
       `web/src/lib/{asset-fields,table-columns}.ts`, `web/src/db/queries.ts`) so any
       computer can be scan-targeted, not only collector-discovered ones — extends
       spec 10's computer form; `/sync` should reconcile it into specs 10/12.
-  - [ ] Foundations: the four web tables (`scan_jobs` + partial pending index,
+  - [x] Foundations: the four web tables (`scan_jobs` + partial pending index,
         `printer_checks`, `printer_status`, `scan_workers`), the collector service account
         granted `scan:dequeue`, and a new `opus-web` service account with `notify:send`
         (covers AC-1, AC-9) — schema + service-account tooling written; awaiting the
         engineer's `db:push` + service-account commands to confirm live.
-  - [ ] Manual scans end to end: the `main.py worker` loop, the claim/status endpoints
+  - [x] Manual scans end to end: the `main.py worker` loop, the claim/status endpoints
         (atomic claim + claim fence), `requestScan`/`cancelScanJob`, the Scan now /
         selected / all controls, the jobs view, and the stuck-job reaper
         (covers AC-1, AC-2, AC-3, AC-4, AC-5) — code complete; awaiting typecheck + verify.
-  - [ ] Printer reachability + alerting: the APScheduler checks (TCP probe + daily SNMP),
+  - [x] Printer reachability + alerting: the APScheduler checks (TCP probe + daily SNMP),
         the reachability endpoint writing `printer_checks`/`printer_status`, and aw-auth's
         notify endpoint sending down/recovery email via Resend to admins (covers AC-6, AC-7)
         — code complete; awaiting `uv sync` (apscheduler), the `opus-web` service account
@@ -104,7 +104,7 @@ history and status are visible on the printers views.
         the check transaction as the spec's State-transitions text says) so a failed send
         retries — matches AC-7 and the notify-failure test scenario; `/sync` should reconcile
         the wording.
-  - [ ] Printer UI + retention: reachability badge and recent history on the printers
+  - [x] Printer UI + retention: reachability badge and recent history on the printers
         views, plus the daily history prune (covers AC-8, AC-10) — code complete; awaiting
         typecheck + verify. Badge is a new `reachability` column in the spec-11 printer
         catalog/defaults.
@@ -116,7 +116,11 @@ history and status are visible on the printers views.
       Resend failed. Fixes in `aw-auth/accounts/notifications.py`, `web/src/lib/notify.ts`
       (+ regression tests `accounts/tests.py`, `web/src/lib/notify.test.ts`); commit still
       pending.
-- [ ] Test it: `/test scheduled and manual scans`
+- [x] Test it: `/test scheduled and manual scans` — Vitest suite in
+      `web/src/db/reachability.test.ts` (transition engine: down/recovery/dedupe/retry,
+      targets, prune), `web/src/app/api/scan/{printers,reachability,reachability/prune}/route.test.ts`
+      (auth + validation + alert flow), plus `web/src/lib/notify.test.ts` and
+      `aw-auth/accounts/tests.py` from the `/debug` fix. Suite passes.
 
 ### Discovery type toggles · in-progress
 
