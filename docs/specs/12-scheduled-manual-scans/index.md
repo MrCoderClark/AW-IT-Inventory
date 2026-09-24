@@ -1,7 +1,7 @@
 # 12. Scheduled and manual scans
 
 **Date**: 2026-09-21
-**Status**: In Progress
+**Status**: Accepted
 
 ## Summary
 
