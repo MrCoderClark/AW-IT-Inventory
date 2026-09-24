@@ -9,7 +9,7 @@ from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from .models import ServiceAccount
-from .notifications import send_printer_alert
+from .notifications import send_counter_report, send_printer_alert
 from .serializers import (
     OpusTokenObtainPairSerializer,
     RegisterSerializer,
@@ -115,6 +115,32 @@ class PrinterAlertView(APIView):
             )
 
         sent = send_printer_alert(printer, event, since)
+        return Response({"ok": True, "sent": sent})
+
+
+class CounterReportView(APIView):
+    """Email the admins the daily printer page-counter report (spec 14, AC-4).
+
+    Called by web (which holds the counter history and assembles the rows) with
+    its `opus-web` service account. Requires a service token carrying
+    `notify:send`. aw-auth resolves "the admins" from RBAC and sends through
+    Resend. A send failure is reported so the caller can surface it.
+    """
+
+    authentication_classes: list = []  # machine caller; token verified by scope
+    permission_classes = [HasServiceScope]
+    required_scope = "notify:send"
+
+    @extend_schema(request=None, responses={200: None})
+    def post(self, request):
+        printers = request.data.get("printers")
+        if not isinstance(printers, list):
+            return Response(
+                {"detail": "printers[] is required"},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+
+        sent = send_counter_report(printers)
         return Response({"ok": True, "sent": sent})
 
 

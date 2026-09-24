@@ -3,6 +3,7 @@ import { Lock } from "lucide-react";
 
 import { AssetDetail } from "@/components/asset-detail";
 import { PagePlaceholder } from "@/components/page-placeholder";
+import { getPrinterCounters } from "@/db/counters";
 import {
   getAssetAssigneeId,
   getAssetById,
@@ -32,16 +33,26 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
   const canScan = hasPermission(user, "scan:write");
   // All key off the same route tag, so fetch them together. Reachability returns
   // null for non-printers (spec 12, AC-8).
-  const [asset, machine, assigneeId, people, locations, assetDetails, reachability] =
-    await Promise.all([
-      getAssetById(id),
-      getMachineSummary(id),
-      canWrite ? getAssetAssigneeId(id) : Promise.resolve(null),
-      canWrite ? getPeople() : Promise.resolve([]),
-      canWrite ? getLeafLocationOptions() : Promise.resolve([]),
-      getAssetDetails(id),
-      getPrinterReachability(id),
-    ]);
+  const [
+    asset,
+    machine,
+    assigneeId,
+    people,
+    locations,
+    assetDetails,
+    reachability,
+    counters,
+  ] = await Promise.all([
+    getAssetById(id),
+    getMachineSummary(id),
+    canWrite ? getAssetAssigneeId(id) : Promise.resolve(null),
+    canWrite ? getPeople() : Promise.resolve([]),
+    canWrite ? getLeafLocationOptions() : Promise.resolve([]),
+    getAssetDetails(id),
+    getPrinterReachability(id),
+    // Page-counter panel (spec 14, AC-3); null for non-printers.
+    getPrinterCounters(id),
+  ]);
   if (!asset) notFound();
 
   return (
@@ -55,6 +66,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
       details={assetDetails?.row ?? null}
       assigneeId={assigneeId ?? null}
       reachability={reachability}
+      counters={counters}
     />
   );
 }

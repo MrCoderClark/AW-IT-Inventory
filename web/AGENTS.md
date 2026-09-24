@@ -87,6 +87,40 @@ The printers table gains a `reachability` column (a normal spec-11 catalog +
 defaults entry) rendered by `ReachabilityBadge`; the printer detail page shows the
 badge plus recent check history.
 
+## Printer page counter (spec 14)
+
+Each network printer's total page (life) counter is read over SNMP and kept as a
+daily snapshot: one row per printer per calendar day (`printer_counters`, the
+latest read of the day winning). It rides the existing ingest, no new scan path:
+on `/api/ingest/scan`, a matched printer with a numeric `page_count` upserts
+today's snapshot via `upsertPrinterCounter` (best effort, a counter write never
+fails the machine ingest). Everything else is computed from this history in one
+`server-only` module `src/db/counters.ts`: `getPrinterCounters` (detail panel:
+latest total, today's delta, recent daily history), `assembleCounterReport` (the
+email rows), and `pruneCounters` (retention). The live meter never overwrites the
+manual `printer_details.pageCount`; they are separate fields.
+
+Delta rule: today's delta = today's total minus the most recent prior day's
+total. No prior day reads "first reading" (no number); a drop reads "counter
+reset" (never a negative); a printer with no snapshot that day reads "no reading"
+in the report. So a printer's first ever day always shows "first reading".
+
+Daily report + manual send. One shared `server-only` `sendCounterReport()`
+(`src/lib/counter-report.ts`) assembles the rows and posts them through
+`src/lib/notify.ts` (`sendCounterReportEmail`) to aw-auth's
+`/v1/notify/printer-counter-report`, reusing the same `opus-web` service account
+(`notify:send`) and Resend path as the spec-12 alerts; aw-auth renders the HTML
+table email (name, serial, location, ip, total, today) and resolves the admins.
+Two triggers: the worker's daily job hits `POST /api/scan/counter-report/send`
+(service `scan:dequeue`); an admin hits the "Send counter report now" button on
+`/admin`, which calls the `sendCounterReportNow` server action (cookie +
+`scan:write`). Success keys on aw-auth's `sent === true`, like the alert path.
+
+The report's location column reuses `getLocationPathMap`, now exported from
+`src/db/queries.ts`. The daily retention prune
+(`POST /api/scan/reachability/prune`, service `scan:dequeue`) now prunes
+`printer_counters` as well as `printer_checks`.
+
 ## Testing note: `server-only` under Vitest
 
 `vitest.config.mts` aliases `server-only` to a no-op stub

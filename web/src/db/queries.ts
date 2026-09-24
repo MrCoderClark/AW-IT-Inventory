@@ -730,7 +730,7 @@ function buildLocationIndex(rows: LocationRaw[]): LocationIndex {
 }
 
 /** Map every location id to its full display path. */
-const getLocationPathMap = cache(async function getLocationPathMap(): Promise<
+export const getLocationPathMap = cache(async function getLocationPathMap(): Promise<
   Map<string, string>
 > {
   const rows = await getLocationRows();

@@ -9,6 +9,7 @@ import {
   numeric,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -376,6 +377,47 @@ export const discoverySettings = pgTable("discovery_settings", {
     .notNull(),
 });
 
+// ── Printer page counter (spec 14) ───────────────────────────────────────────
+// One daily snapshot of a printer's total page (life) counter, filled from the
+// SNMP counter that already rides the ingest. One row per printer per calendar
+// day (the latest read of the day wins), so the table stays tiny while still
+// giving a real day-over-day delta and a year of history. Additive and brand new
+// (no rows to backfill), so the NOT NULL columns are safe. `source` is plain text
+// with a union `$type` (not a pg enum) so a future source never needs a migration.
+// The latest total, the delta and the daily report are all computed from this
+// history; there is no rollup table, and the manual `printer_details.pageCount`
+// is never overwritten by this live meter.
+export const printerCounters = pgTable(
+  "printer_counters",
+  {
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    // Calendar day in the schedule timezone; the latest read of the day wins.
+    readingDate: date("reading_date").notNull(),
+    totalPages: integer("total_pages").notNull(), // the life counter read that day
+    lastReadAt: timestamp("last_read_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    source: text("source").$type<"scheduled" | "manual">().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    // One snapshot per printer per day; makes the daily upsert idempotent.
+    primaryKey({ columns: [t.assetId, t.readingDate] }),
+    // Serves the latest total, the delta, and the recent-history read.
+    index("printer_counters_asset_date_idx").on(
+      t.assetId,
+      t.readingDate.desc(),
+    ),
+  ],
+);
+
 export type AssetRow = typeof assets.$inferSelect;
 export type PersonRow = typeof people.$inferSelect;
 export type MachineRow = typeof machines.$inferSelect;
@@ -391,3 +433,4 @@ export type PrinterCheckRow = typeof printerChecks.$inferSelect;
 export type PrinterStatusRow = typeof printerStatus.$inferSelect;
 export type ScanWorkerRow = typeof scanWorkers.$inferSelect;
 export type DiscoverySettingRow = typeof discoverySettings.$inferSelect;
+export type PrinterCounterRow = typeof printerCounters.$inferSelect;

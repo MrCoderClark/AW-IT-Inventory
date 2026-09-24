@@ -80,6 +80,25 @@ export interface ReachabilityCheck {
   method: "tcp" | "snmp";
 }
 
+/* ---------------- Printer page counter (spec 14) ---------------- */
+
+/** A day's counter reading with its computed delta, for the detail panel. */
+export interface CounterHistoryDay {
+  readingDate: string; // YYYY-MM-DD
+  totalPages: number;
+  delta: number | null; // pages that day; null when a first reading or a reset
+  note: "first-reading" | "counter-reset" | null;
+}
+
+/** The page-counter panel data for one printer's detail page (spec 14, AC-3). */
+export interface PrinterCounters {
+  latestTotal: number | null;
+  latestDate: string | null; // YYYY-MM-DD
+  latestDelta: number | null;
+  latestNote: "first-reading" | "counter-reset" | null;
+  history: CounterHistoryDay[];
+}
+
 /* ---------------- Status metadata ---------------- */
 
 export const STATUS_META: Record<

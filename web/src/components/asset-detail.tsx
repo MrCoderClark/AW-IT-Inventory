@@ -38,6 +38,7 @@ import {
   type AssetType,
   type LocationOption,
   type MachineSummary,
+  type PrinterCounters,
   type ReachabilityCheck,
 } from "@/lib/data";
 import type { AssetFormValues } from "@/lib/asset-schema";
@@ -90,6 +91,30 @@ function fmtDateTime(iso: string | Date | null | undefined) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+/** A YYYY-MM-DD reading date, for the page-counter panel (spec 14). */
+function fmtDay(day: string | null | undefined) {
+  if (!day) return "—";
+  const d = new Date(`${day}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return day;
+  return d.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  });
+}
+
+/** A day's page-counter delta as human text: the number, or the note (spec 14,
+ *  AC-3): "first reading" for no prior day, "counter reset" when it dropped. */
+function fmtDelta(
+  delta: number | null,
+  note: "first-reading" | "counter-reset" | null,
+): string {
+  if (note === "first-reading") return "First reading";
+  if (note === "counter-reset") return "Counter reset";
+  if (delta == null) return "—";
+  return `+${delta.toLocaleString("en-US")}`;
 }
 
 function Field({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
@@ -145,6 +170,7 @@ export function AssetDetail({
   details = null,
   assigneeId = null,
   reachability = null,
+  counters = null,
 }: {
   asset: Asset;
   machine?: MachineSummary;
@@ -166,6 +192,9 @@ export function AssetDetail({
     status: AssetReachability;
     history: ReachabilityCheck[];
   } | null;
+  /** Printer page-counter panel (spec 14, AC-3); null for non-printers or a
+     printer never read. */
+  counters?: PrinterCounters | null;
 }) {
   const Icon = TYPE_ICON[asset.type];
   const showHealth =
@@ -358,6 +387,75 @@ export function AssetDetail({
               <p className="mt-4 text-sm text-muted-foreground">
                 No checks yet — the collector worker checks printers on its
                 schedule (default 08:00, 13:00, 18:00).
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Printer page counter (spec 14, AC-3) */}
+      {counters && (
+        <div>
+          <div className="mb-3 flex items-center gap-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Page counter
+            </p>
+          </div>
+          <div className="rounded-xl border bg-card p-5">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-3">
+              <Field
+                label="Total pages"
+                value={
+                  counters.latestTotal != null
+                    ? counters.latestTotal.toLocaleString("en-US")
+                    : "—"
+                }
+                mono
+              />
+              <Field
+                label="Today"
+                value={fmtDelta(counters.latestDelta, counters.latestNote)}
+                mono
+              />
+              <Field label="Last reading" value={fmtDay(counters.latestDate)} mono />
+            </div>
+            {counters.history.length > 0 ? (
+              <div className="mt-4">
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Recent daily history
+                </p>
+                <ul className="divide-y text-sm">
+                  {counters.history.map((d) => (
+                    <li
+                      key={d.readingDate}
+                      className="flex items-center justify-between gap-2 py-1.5"
+                    >
+                      <span className="text-muted-foreground">
+                        {fmtDay(d.readingDate)}
+                      </span>
+                      <span className="flex items-center gap-3">
+                        <span className="font-mono text-xs tabular-nums">
+                          {d.totalPages.toLocaleString("en-US")}
+                        </span>
+                        <span
+                          className={cn(
+                            "font-mono text-xs tabular-nums",
+                            d.note
+                              ? "text-muted-foreground"
+                              : "text-[color:var(--status-online)]",
+                          )}
+                        >
+                          {fmtDelta(d.delta, d.note)}
+                        </span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <p className="mt-4 text-sm text-muted-foreground">
+                No readings yet — the collector reads each printer&apos;s page
+                counter on its daily SNMP collect (default 08:00).
               </p>
             )}
           </div>

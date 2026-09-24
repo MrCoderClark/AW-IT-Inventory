@@ -30,7 +30,12 @@ from rich.console import Console
 from config import Config, load_config
 from ingest import get_token, post_scan
 from models import RunReport
-from reachability import run_reachability_check, run_retention_prune
+from reachability import (
+    run_counter_report,
+    run_manual_reachability,
+    run_reachability_check,
+    run_retention_prune,
+)
 
 console = Console()
 
@@ -203,6 +208,16 @@ def _run_job(config: Config, tokens: TokenCache, worker_id: str, job: dict) -> N
         )
         return
 
+    # Refresh reachability for any printer in this job (spec 12 follow-up): a
+    # manual scan records a TCP reachability check (source="manual"), separate
+    # from the SNMP page-count collect above, so the badge updates on demand
+    # instead of waiting for the next scheduled sweep. Best-effort — a
+    # reachability failure never fails the scan job.
+    try:
+        run_manual_reachability(config, tokens.get(), targets)
+    except Exception as e:  # noqa: BLE001
+        console.print(f"  [yellow]manual reachability check failed:[/yellow] {e}")
+
     if _post_status(
         config,
         tokens.get(),
@@ -267,6 +282,13 @@ def _build_scheduler(config: Config, tokens: "TokenCache"):
             console.print(f"  [red]retention job error:[/red] {e}")
             tokens.invalidate()
 
+    def counter_report_job() -> None:
+        try:
+            run_counter_report(config, tokens.get())
+        except Exception as e:  # noqa: BLE001 — must never kill the scheduler
+            console.print(f"  [red]counter report job error:[/red] {e}")
+            tokens.invalidate()
+
     scheduled: list[str] = []
     for t in config.schedule_times:
         try:
@@ -285,7 +307,7 @@ def _build_scheduler(config: Config, tokens: "TokenCache"):
         )
         scheduled.append(f"{t}{' (full SNMP)' if full else ''}")
 
-    # Daily retention prune at a quiet hour (AC-10).
+    # Daily retention prune at a quiet hour (AC-10, spec 14 AC-6).
     scheduler.add_job(
         prune_job,
         CronTrigger(hour=3, minute=15, timezone=tz),
@@ -294,10 +316,30 @@ def _build_scheduler(config: Config, tokens: "TokenCache"):
         misfire_grace_time=3600,
     )
 
+    # Daily printer page-counter report (spec 14, AC-4), just after the SNMP
+    # collect so the day's reading is already in.
+    report_scheduled = "off"
+    try:
+        r_hour, r_minute = (int(x) for x in config.counter_report_time.split(":"))
+        scheduler.add_job(
+            counter_report_job,
+            CronTrigger(hour=r_hour, minute=r_minute, timezone=tz),
+            id="counter-report",
+            replace_existing=True,
+            misfire_grace_time=1800,
+        )
+        report_scheduled = config.counter_report_time
+    except ValueError:
+        console.print(
+            f"[yellow]Skipping malformed counter_report_time "
+            f"'{config.counter_report_time}'.[/yellow]"
+        )
+
     zone = config.schedule_timezone or "host local"
     console.print(
         f"[bold]Reachability schedule[/bold] ({zone}): "
-        f"{', '.join(scheduled) if scheduled else 'none'} · prune 03:15."
+        f"{', '.join(scheduled) if scheduled else 'none'} · prune 03:15 · "
+        f"counter report {report_scheduled}."
     )
     return scheduler
 
