@@ -180,7 +180,6 @@ export const printerDetails = pgTable(
     ipAddress: text("ip_address").notNull(), // required for printers
     colorMode: text("color_mode"), // mono | color
     isDuplex: boolean("is_duplex"),
-    pageCount: integer("page_count"),
     connection: text("connection"), // network | USB
     mgmtUrl: text("mgmt_url"),
   },
@@ -385,8 +384,8 @@ export const discoverySettings = pgTable("discovery_settings", {
 // (no rows to backfill), so the NOT NULL columns are safe. `source` is plain text
 // with a union `$type` (not a pg enum) so a future source never needs a migration.
 // The latest total, the delta and the daily report are all computed from this
-// history; there is no rollup table, and the manual `printer_details.pageCount`
-// is never overwritten by this live meter.
+// history; there is no rollup table. This live SNMP meter is now the only page
+// count a printer has (the old manual `printer_details.pageCount` was removed).
 export const printerCounters = pgTable(
   "printer_counters",
   {

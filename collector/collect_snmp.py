@@ -118,6 +118,43 @@ async def _read_page_count(
     return None
 
 
+async def _read_one(
+    ip: str,
+    community: str,
+    timeout: float,
+    oid: str,
+    versions: tuple[int, ...],
+) -> str | None:
+    """Read a single OID best-effort: the raw value, or None if it is missing or
+    the request fails. Its own GET on purpose, so a missing OID never fails the
+    read of another one under SNMP v1 (see the note on _read_page_count)."""
+    try:
+        got = await _snmp_get(ip, community, timeout, [oid], versions)
+    except Exception:  # noqa: BLE001 — one missing OID must not fail the collect
+        return None
+    return got[0] if got else None
+
+
+async def _pick_version(
+    ip: str,
+    community: str,
+    timeout: float,
+    versions: tuple[int, ...],
+) -> tuple[str | None, tuple[int, ...]]:
+    """Establish reachability on sysDescr and pin the version that answered.
+
+    sysDescr exists on every SNMP device, so it is the reachability anchor. We
+    probe each configured version with a plain sysDescr GET and keep the first
+    that responds; every later read is pinned to that one version, so a v1-only
+    device costs a single v2c timeout, not one per OID. Returns
+    ``(sysDescr, (version,))`` or ``(None, ())`` when nothing responds."""
+    for mp_model in versions:
+        got = await _snmp_get(ip, community, timeout, [OIDS["description"]], (mp_model,))
+        if got:
+            return _clean(got[0]), (mp_model,)
+    return None, ()
+
+
 async def collect_printer(
     ip: str,
     community: str,
@@ -127,30 +164,31 @@ async def collect_printer(
 ) -> tuple[PrinterInfo | None, list[str]]:
     versions = mp_models_for(snmp_version)
 
-    # Identity + status: standard OIDs that exist on every printer, read together.
-    # The page counter is read SEPARATELY (see _read_page_count) so a vendor counter
-    # OID a model lacks can never fail this identity read under SNMP v1.
-    base_keys = ["description", "serial", "status"]
+    # Reachability anchors on sysDescr (present on every device) and pins the
+    # responding SNMP version. Everything else is read SEPARATELY, best-effort:
+    # under SNMP v1 a GET of a missing OID fails the WHOLE request, and some
+    # printers (e.g. the Canon iR1750) do not implement prtGeneralSerialNumber,
+    # so bundling serial/status with sysDescr would drop identity AND the counter.
+    # A missing serial or status now just stays blank.
     try:
-        base = await _snmp_get(
-            ip, community, timeout, [OIDS[k] for k in base_keys], versions
-        )
+        description, versions_ok = await _pick_version(ip, community, timeout, versions)
     except Exception as e:  # noqa: BLE001
         return None, [f"snmp_error: {type(e).__name__}: {e}"]
-    if base is None:
+    if not versions_ok:
         return None, ["snmp_no_response"]
-    m = dict(zip(base_keys, base))
 
+    serial = await _read_one(ip, community, timeout, OIDS["serial"], versions_ok)
+    status = await _read_one(ip, community, timeout, OIDS["status"], versions_ok)
     page_count = await _read_page_count(
-        ip, community, timeout, counter_oids or [DEFAULT_COUNTER_OID], versions
+        ip, community, timeout, counter_oids or [DEFAULT_COUNTER_OID], versions_ok
     )
 
     printer = PrinterInfo(
-        description=_clean(m.get("description")),
-        model=_clean(m.get("description")),  # refined from sysDescr later
-        serial=_clean(m.get("serial")),
+        description=description,
+        model=description,  # refined from sysDescr later
+        serial=_clean(serial),
         page_count=page_count,
-        status=PRINTER_STATUS.get(_to_int(_clean(m.get("status"))) or 0),
+        status=PRINTER_STATUS.get(_to_int(_clean(status)) or 0),
     )
     return printer, []
 
