@@ -82,7 +82,6 @@ export const TYPE_FIELDS: Record<AssetType, TypeFormConfig> = {
       },
       { key: "colorMode", label: "Color mode", kind: "select", options: ["mono", "color"] },
       { key: "isDuplex", label: "Duplex", kind: "select", options: ["Yes", "No"], bool: true },
-      { key: "pageCount", label: "Page count", kind: "int" },
       { key: "connection", label: "Connection", kind: "select", options: ["network", "USB"] },
       { key: "mgmtUrl", label: "Management URL", kind: "text" },
     ],

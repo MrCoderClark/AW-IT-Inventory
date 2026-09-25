@@ -16,6 +16,7 @@ dump: the atomic build steps stay in each feature's spec (`docs/specs/`). Run
 | Scheduled and manual scans | done | [12](../specs/12-scheduled-manual-scans/index.md) |
 | Discovery type toggles | done | [13](../specs/13-discovery-type-toggles/index.md) |
 | Printer page counter and daily report | in-progress | [14](../specs/14-printer-page-counter/index.md) |
+| Per-run ignore of discovery switches (collector) | planned | — |
 
 ## Features
 
@@ -211,5 +212,31 @@ total and today's delta; an admin with `scan:write` can send the report on deman
         `RESEND_API_KEY`/`EMAIL_FROM` in `aw-auth/.env`, all already set for spec 12).
   - [x] Retention: extend the worker's daily prune (and the prune endpoint) to also
         prune `printer_counters` (covers AC-6) — code written; awaiting verify.
-- [ ] Verify it: `/check verify printer page counter`
+- [x] Verify it: `/check verify printer page counter` — verified live 2026-09-25:
+      AC-1 (collector read 581,856 from the real Canon iR1750 over SNMP v1),
+      AC-2 (single daily row, latest read wins), AC-3 (panel: total, "first
+      reading", history), AC-5 (admin "Send counter report now" button present).
+      AC-4 (daily email) confirmed by the engineer (email works). AC-3 reset/multi-day
+      delta, AC-6 prune, and AC-7 auth gates rest on the test suite.
 - [ ] Test it: `/test printer page counter`
+
+### Per-run ignore of discovery switches (collector) · planned
+
+Weight: lean. Give the collector's `scan` command a `--ignore-discovery-settings`
+flag so a human running it on the host can override the global Computers/Printers
+switches for a one-off run, without editing the app. Surfaced by spec 13's own
+tradeoff note: v1 has no per-run escape hatch, only the narrowing `--no-windows` /
+`--no-printers` flags. Enrolled from spec 13 follow-up.
+
+**Done when**: `main.py scan --ignore-discovery-settings` runs every enabled
+discovery type regardless of the web switches (both-off included), the normal `scan`
+still honors the switches, and the flag is documented in the collector help/config.
+
+- [ ] Build it: `/develop per-run ignore of discovery switches` (lean — no spec expected;
+      route to `/architect` only if the settings-read path turns out load-bearing)
+
+_Parked in the specs (not yet enrolled — conditional on a trigger): per-model /
+per-profile counter OID overrides and mono/color + print/copy breakdowns (spec 14,
+"if the fleet grows" / "if wanted"); a weekly/monthly rollup email (spec 14, "if the
+daily report is too frequent"); extending the discovery switch set to phone / monitor
+/ network (spec 13, once those scanners exist)._

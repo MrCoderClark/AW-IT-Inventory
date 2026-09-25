@@ -17,8 +17,8 @@ export type { CounterHistoryDay, PrinterCounters };
  * winning, so recording is idempotent within a day.
  *
  * Everything is computed from this history: the latest total, the delta, the
- * detail-page panel and the daily report all read here (no rollup table). The
- * live meter never touches the manual `printer_details.pageCount`.
+ * detail-page panel and the daily report all read here (no rollup table). This
+ * live meter is a printer's only page count (the manual `pageCount` was removed).
  */
 
 /** One printer's line in the daily counter report / email. */

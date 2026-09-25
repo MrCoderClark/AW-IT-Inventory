@@ -97,8 +97,8 @@ today's snapshot via `upsertPrinterCounter` (best effort, a counter write never
 fails the machine ingest). Everything else is computed from this history in one
 `server-only` module `src/db/counters.ts`: `getPrinterCounters` (detail panel:
 latest total, today's delta, recent daily history), `assembleCounterReport` (the
-email rows), and `pruneCounters` (retention). The live meter never overwrites the
-manual `printer_details.pageCount`; they are separate fields.
+email rows), and `pruneCounters` (retention). This live SNMP meter is a printer's
+only page count; the old manual `printer_details.pageCount` field was removed.
 
 Delta rule: today's delta = today's total minus the most recent prior day's
 total. No prior day reads "first reading" (no number); a drop reads "counter
