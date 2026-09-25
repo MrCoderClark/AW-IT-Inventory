@@ -14,7 +14,7 @@ dump: the atomic build steps stay in each feature's spec (`docs/specs/`). Run
 |---|---|---|
 | Global table column configuration | done | [11](../specs/11-table-column-config/index.md) |
 | Scheduled and manual scans | done | [12](../specs/12-scheduled-manual-scans/index.md) |
-| Discovery type toggles | in-progress | [13](../specs/13-discovery-type-toggles/index.md) |
+| Discovery type toggles | done | [13](../specs/13-discovery-type-toggles/index.md) |
 | Printer page counter and daily report | in-progress | [14](../specs/14-printer-page-counter/index.md) |
 
 ## Features
@@ -123,7 +123,7 @@ history and status are visible on the printers views.
       (auth + validation + alert flow), plus `web/src/lib/notify.test.ts` and
       `aw-auth/accounts/tests.py` from the `/debug` fix. Suite passes.
 
-### Discovery type toggles · in-progress
+### Discovery type toggles · done
 
 Give admins per-type on/off switches for what the collector automatically discovers
 (Computers, Printers), controlled from the web Admin page, persisted in the web DB, and

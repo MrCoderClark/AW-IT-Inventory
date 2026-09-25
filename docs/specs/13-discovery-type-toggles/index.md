@@ -1,7 +1,7 @@
 # 13. Discovery type toggles
 
 **Date**: 2026-09-21
-**Status**: In Progress
+**Status**: Accepted
 
 ## Summary
 
