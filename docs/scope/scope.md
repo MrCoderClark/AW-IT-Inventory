@@ -14,7 +14,7 @@ dump: the atomic build steps stay in each feature's spec (`docs/specs/`). Run
 |---|---|---|
 | Global table column configuration | done | [11](../specs/11-table-column-config/index.md) |
 | Scheduled and manual scans | done | [12](../specs/12-scheduled-manual-scans/index.md) |
-| Discovery type toggles | in-progress | [13](../specs/13-discovery-type-toggles/index.md) |
+| Discovery type toggles | done | [13](../specs/13-discovery-type-toggles/index.md) |
 | Printer page counter and daily report | in-progress | [14](../specs/14-printer-page-counter/index.md) |
 
 ## Features
@@ -123,7 +123,7 @@ history and status are visible on the printers views.
       (auth + validation + alert flow), plus `web/src/lib/notify.test.ts` and
       `aw-auth/accounts/tests.py` from the `/debug` fix. Suite passes.
 
-### Discovery type toggles · in-progress
+### Discovery type toggles · done
 
 Give admins per-type on/off switches for what the collector automatically discovers
 (Computers, Printers), controlled from the web Admin page, persisted in the web DB, and
@@ -137,13 +137,13 @@ shown in the inbox) while manual scans still run; the collector falls back to a 
 nothing, logs a warning).
 
 - [x] Design it (spec): [13](../specs/13-discovery-type-toggles/index.md)
-- [ ] Build it: `/develop discovery type toggles` — code in
+- [x] Build it: `/develop discovery type toggles` — code in
       `web/src/db/{schema,discovery}.ts`, `web/src/app/api/scan/discovery-settings/route.ts`,
       `web/src/app/(app)/{admin/page,discovery-actions}.ts(x)`,
       `web/src/components/{discovery-toggles,ui/switch}.tsx`,
-      `collector/{ingest,config,main,worker}.py`. Milestones 1 and 2 are built and
-      verified live (`db:push` applied, table confirmed). Milestone 3 (reachability
-      link) is the only open item, deferred to spec 12 milestone 3.
+      `collector/{ingest,config,main,worker,reachability}.py`. All three milestones
+      built. Milestone 3 (the reachability link, AC-5) landed once spec 12's
+      reachability scheduler shipped.
   - [x] Foundations + collector read: the `discovery_settings` table and read/upsert
         helpers, `GET /api/scan/discovery-settings` (service `scan:dequeue`), and the
         collector fetching + caching + applying it via `no_windows`/`no_printers` (manual
@@ -153,12 +153,17 @@ nothing, logs a warning).
   - [x] Admin UI: the Discovery switches on `/admin` and the `setDiscoveryToggleAction`
         server action gated on `scan:write`, hidden/read-only without it (covers AC-1, AC-7)
         — built and verified: toggle persisted round-trip in the live app.
-  - [ ] Reachability link: gate the spec-12 scheduled reachability run on the Printers
-        switch (when that scheduler exists) (covers AC-5) — deferred: spec 12 milestone 3
-        (the reachability scheduler) is not built yet, so the gate lands with it.
+  - [x] Reachability link: gate the spec-12 scheduled reachability run on the Printers
+        switch (covers AC-5) — built: `run_reachability_check` now reads the toggle via
+        `get_discovery_settings` and skips the scheduled check (and its daily SNMP collect)
+        when Printers is off; manual scans stay ungated. Code in `collector/reachability.py`.
+        Runtime verification of AC-5 (flip Printers off, confirm the scheduled run skips)
+        still pending.
 - [x] Verify it: `/check verify discovery type toggles` — web, endpoint, and the admin
       toggle verified live by Claude; the collector sweep (AC-3 skip, AC-4 bypass, AC-8)
-      confirmed by the engineer's own run. AC-5 deferred until spec 12 milestone 3.
+      confirmed by the engineer's own run. AC-5's gate is now built; its one runtime check
+      (flip Printers off, confirm the scheduled reachability run skips) is the last item
+      before this feature is `done`.
 - [x] Test it: `/test discovery type toggles` — 16 web tests (`web/src/db/discovery.test.ts`,
       `discovery-actions.test.ts`, `discovery-settings/route.test.ts`, `discovery-toggles.test.tsx`)
       plus 6 collector smoke tests (`collector/tests/test_discovery.py`), all pass. Covers the

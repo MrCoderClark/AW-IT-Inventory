@@ -119,6 +119,20 @@ def run_reachability_check(
     (which also ingests fresh SNMP data), ``tcp`` otherwise. A printer stays
     "reachable" if EITHER TCP or (on the daily run) SNMP answers, so a printer
     with SNMP disabled is never falsely marked down."""
+    # The scheduled reachability run honors the Printers discovery toggle (spec 13,
+    # AC-5): when Printers is off, skip the scheduled checks (and the daily SNMP
+    # collect they carry); they resume when it is turned back on. Manual scans are
+    # never gated — they call run_manual_reachability, not this.
+    from ingest import get_discovery_settings
+
+    settings, source = get_discovery_settings(config)
+    if not settings.get("printer", True):
+        console.print(
+            f"[dim]reachability: Printers discovery is off ({source}); "
+            "skipping the scheduled check.[/dim]"
+        )
+        return
+
     targets = _fetch_printer_targets(config, token)
     if not targets:
         console.print("[dim]reachability: no printers to check.[/dim]")
