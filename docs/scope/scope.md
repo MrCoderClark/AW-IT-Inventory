@@ -16,7 +16,7 @@ dump: the atomic build steps stay in each feature's spec (`docs/specs/`). Run
 | Scheduled and manual scans | done | [12](../specs/12-scheduled-manual-scans/index.md) |
 | Discovery type toggles | done | [13](../specs/13-discovery-type-toggles/index.md) |
 | Printer page counter and daily report | done | [14](../specs/14-printer-page-counter/index.md) |
-| Per-run ignore of discovery switches (collector) | planned | — |
+| Per-run ignore of discovery switches (collector) | done | — |
 
 ## Features
 
@@ -222,7 +222,7 @@ total and today's delta; an admin with `scan:write` can send the report on deman
       `web/src/db/counters.test.ts` (AC-2/3/4/6), `counter-report/send/route.test.ts`
       (AC-7), `counter-report-actions.test.ts` (AC-5). AC-1 in `collector/tests/test_snmp.py`.
 
-### Per-run ignore of discovery switches (collector) · planned
+### Per-run ignore of discovery switches (collector) · done
 
 Weight: lean. Give the collector's `scan` command a `--ignore-discovery-settings`
 flag so a human running it on the host can override the global Computers/Printers
@@ -234,8 +234,12 @@ tradeoff note: v1 has no per-run escape hatch, only the narrowing `--no-windows`
 discovery type regardless of the web switches (both-off included), the normal `scan`
 still honors the switches, and the flag is documented in the collector help/config.
 
-- [ ] Build it: `/develop per-run ignore of discovery switches` (lean — no spec expected;
-      route to `/architect` only if the settings-read path turns out load-bearing)
+- [x] Build it: `/develop per-run ignore of discovery switches` — code in
+      `collector/main.py`: the `--ignore-discovery-settings` flag on the `scan` command;
+      `run_scan` skips the discovery-settings fetch and runs all types on when set
+      (still narrowed by `--no-windows` / `--no-printers`), else honors the switches
+      as before. Smoke-verified 2026-09-28: the flag run scanned a printer while the
+      Printers switch was off-bypassing, and a normal run honored the app settings.
 
 _Parked in the specs (not yet enrolled — conditional on a trigger): per-model /
 per-profile counter OID overrides and mono/color + print/copy breakdowns (spec 14,

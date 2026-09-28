@@ -184,18 +184,28 @@ def run_scan(args: argparse.Namespace) -> int:
         )
         return 2
 
-    # Honor the app's discovery type toggles (spec 13). The switches OR with the
-    # CLI flags: an off type is skipped, and --no-windows/--no-printers can still
-    # narrow a run further. A settings outage falls back to the cache, then to
+    # Honor the app's discovery type toggles (spec 13), unless this run opts out
+    # with --ignore-discovery-settings (spec 13 follow-up): a one-off host scan
+    # that should not be governed by the app switches. Either way the CLI flags
+    # still apply: --no-windows/--no-printers can narrow the run further. When the
+    # switches are honored, a settings outage falls back to the cache, then to
     # all-on, so scanning never stops (AC-3, AC-6). Manual worker jobs bypass this.
-    settings, source = get_discovery_settings(config)
-    no_windows = args.no_windows or not settings["computer"]
-    no_printers = args.no_printers or not settings["printer"]
-    console.print(
-        f"[dim]Discovery settings ({source}): "
-        f"computers {'on' if settings['computer'] else 'off'}, "
-        f"printers {'on' if settings['printer'] else 'off'}.[/dim]"
-    )
+    if args.ignore_discovery_settings:
+        no_windows = args.no_windows
+        no_printers = args.no_printers
+        console.print(
+            "[dim]Discovery settings: ignored for this run "
+            "(--ignore-discovery-settings); all types on.[/dim]"
+        )
+    else:
+        settings, source = get_discovery_settings(config)
+        no_windows = args.no_windows or not settings["computer"]
+        no_printers = args.no_printers or not settings["printer"]
+        console.print(
+            f"[dim]Discovery settings ({source}): "
+            f"computers {'on' if settings['computer'] else 'off'}, "
+            f"printers {'on' if settings['printer'] else 'off'}.[/dim]"
+        )
     if no_windows and no_printers:
         console.print(
             "[yellow]Both device types are switched off — this sweep will "
@@ -259,6 +269,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--ingest",
         action="store_true",
         help="POST results to the inventory API (default is dry-run to JSON).",
+    )
+    scan.add_argument(
+        "--ignore-discovery-settings",
+        action="store_true",
+        help="Ignore the app's Computers/Printers discovery switches for this "
+        "run (a one-off host scan that should not be governed by the app). Still "
+        "narrowed by --no-windows / --no-printers.",
     )
     scan.set_defaults(func=run_scan)
 
