@@ -44,14 +44,20 @@ describe("catalogFor (AC-3)", () => {
     expect(c).not.toContain("type");
   });
 
-  it("offers no type-specific identifier columns for computers or monitors", () => {
-    for (const view of ["computer", "monitor"] as ColumnView[]) {
-      const c = catalogFor(view);
-      expect(c).not.toContain("ip");
-      expect(c).not.toContain("mac");
-      expect(c).not.toContain("phoneNumber");
-      expect(c).not.toContain("type");
-    }
+  it("offers IP for computers (the manual computer IP field, spec 12) but no other identifier", () => {
+    const c = catalogFor("computer");
+    expect(c).toContain("ip");
+    expect(c).not.toContain("mac");
+    expect(c).not.toContain("phoneNumber");
+    expect(c).not.toContain("type");
+  });
+
+  it("offers no type-specific identifier columns for monitors", () => {
+    const c = catalogFor("monitor");
+    expect(c).not.toContain("ip");
+    expect(c).not.toContain("mac");
+    expect(c).not.toContain("phoneNumber");
+    expect(c).not.toContain("type");
   });
 
   it("offers Type but no identifier columns for the mixed dashboard/location views", () => {
@@ -75,9 +81,9 @@ describe("catalogFor (AC-3)", () => {
 
 describe("defaultsFor (AC-2, matches today's hardcoded columns)", () => {
   const expected: Record<ColumnView, string[]> = {
-    computer: ["id", "name", "model", "serial", "assignee", "location", "status", "lastSync", "actions"],
+    computer: ["id", "name", "model", "serial", "ip", "assignee", "location", "status", "lastSync", "actions"],
     monitor: ["id", "name", "model", "serial", "assignee", "location", "status", "actions"],
-    printer: ["id", "name", "model", "serial", "ip", "location", "status", "lastSync", "actions"],
+    printer: ["id", "name", "model", "serial", "ip", "reachability", "location", "status", "lastSync", "actions"],
     network: ["id", "name", "model", "serial", "ip", "mac", "location", "status", "actions"],
     phone: ["id", "name", "model", "serial", "phoneNumber", "assignee", "location", "status", "actions"],
     dashboard: ["id", "name", "type", "serial", "model", "assignee", "location", "status", "lastSync", "actions"],

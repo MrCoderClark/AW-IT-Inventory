@@ -18,6 +18,11 @@ vi.mock("@/app/(app)/assets/actions", () => ({
   updateAsset: vi.fn(),
   deleteAsset: vi.fn(),
 }));
+// The "Scan now" button imports the scan server action, which pulls in the db
+// client (server-only). Stub it so importing the component never loads the DB.
+vi.mock("@/app/(app)/scan-actions", () => ({
+  requestScan: vi.fn(),
+}));
 
 function makeAsset(overrides: Partial<Asset> = {}): Asset {
   return {

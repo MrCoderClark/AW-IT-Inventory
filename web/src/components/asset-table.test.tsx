@@ -28,6 +28,11 @@ vi.mock("@/app/(app)/columns-actions", () => ({
   saveColumnConfig: vi.fn(),
   resetColumnConfig: vi.fn(),
 }));
+// The row "Scan now" action imports the scan server action (server-only + db
+// client) too; mock it so the suite loads under jsdom (spec 12).
+vi.mock("@/app/(app)/scan-actions", () => ({
+  requestScan: vi.fn(),
+}));
 
 let seq = 0;
 function makeAsset(overrides: Partial<Asset> = {}): Asset {

@@ -15,7 +15,7 @@ dump: the atomic build steps stay in each feature's spec (`docs/specs/`). Run
 | Global table column configuration | done | [11](../specs/11-table-column-config/index.md) |
 | Scheduled and manual scans | done | [12](../specs/12-scheduled-manual-scans/index.md) |
 | Discovery type toggles | done | [13](../specs/13-discovery-type-toggles/index.md) |
-| Printer page counter and daily report | in-progress | [14](../specs/14-printer-page-counter/index.md) |
+| Printer page counter and daily report | done | [14](../specs/14-printer-page-counter/index.md) |
 | Per-run ignore of discovery switches (collector) | planned | — |
 
 ## Features
@@ -170,7 +170,7 @@ nothing, logs a warning).
       plus 6 collector smoke tests (`collector/tests/test_discovery.py`), all pass. Covers the
       automatable ACs (1, 2, 3 endpoint, 6, 7); AC-4 and AC-8 (a real sweep) stay for runtime verify.
 
-### Printer page counter and daily report · in-progress
+### Printer page counter and daily report · done
 
 Read each printer's total page (life) counter over SNMP, keep a daily history of it,
 show the latest count and the day's change on the printer detail page, and email the
@@ -218,7 +218,9 @@ total and today's delta; an admin with `scan:write` can send the report on deman
       reading", history), AC-5 (admin "Send counter report now" button present).
       AC-4 (daily email) confirmed by the engineer (email works). AC-3 reset/multi-day
       delta, AC-6 prune, and AC-7 auth gates rest on the test suite.
-- [ ] Test it: `/test printer page counter`
+- [x] Test it: `/test printer page counter` — 20 tests pass:
+      `web/src/db/counters.test.ts` (AC-2/3/4/6), `counter-report/send/route.test.ts`
+      (AC-7), `counter-report-actions.test.ts` (AC-5). AC-1 in `collector/tests/test_snmp.py`.
 
 ### Per-run ignore of discovery switches (collector) · planned
 
