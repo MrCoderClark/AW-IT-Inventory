@@ -84,9 +84,11 @@ The single real unknown, the Canon OID, is handled the honest way: make the OID
 configurable, default it to the standard, and confirm the device's real OID during
 the build rather than guess it into the spec.
 
-Keeping the live meter separate from the manual `printer_details.pageCount` avoids a
-data fight: the manual field is admin metadata, the snapshot is the live reading, and
-neither clobbers the other.
+The original design kept the live meter separate from a manual
+`printer_details.pageCount` field: the manual field was admin metadata, the snapshot
+the live reading, and neither clobbered the other. That manual field was removed on
+2026-09-25: it was almost always empty and, sitting beside the live panel, only
+duplicated it. The live snapshot history is now a printer's only page count.
 
 ## References
 

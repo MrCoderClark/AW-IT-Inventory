@@ -83,9 +83,10 @@ the real OID is confirmed against the device during the build.
 - index on (`assetId`, `readingDate` desc) for the latest, the delta, and history
 
 No rollup table: the latest total, the delta, and the report are all computed from
-this history. `printer_details.pageCount` stays the manual admin-entered field and
-is never overwritten by the live read (they are separate: manual metadata vs the
-live meter).
+this history. This live meter is the only page count a printer has. The original
+design kept a separate manual `printer_details.pageCount` field beside it, but that
+field was removed on 2026-09-25 once the live counter worked: an always empty manual
+value sitting above the live panel only duplicated it.
 
 **Delta rule**: today's delta = today's `totalPages` minus the `totalPages` of the
 most recent prior day with a reading. No prior reading -> "first reading" (no
@@ -118,7 +119,9 @@ token. aw-auth resolves the admins and builds and sends the email through Resend
 **Key invariants**:
 - One snapshot per (`assetId`, `readingDate`); the latest read that day wins, so
   recording is idempotent within a day.
-- The live counter never overwrites the manual `printer_details.pageCount`.
+- The live counter is a printer's only page count; the separate manual
+  `printer_details.pageCount` field was removed on 2026-09-25 (it duplicated the
+  live meter). A printer with no SNMP counter now simply has no page count.
 - The email lists every managed printer; one with no snapshot for the target day
   reads "no reading" rather than being dropped.
 - Secrets and accounts are reused, not added: the `opus-web` service account

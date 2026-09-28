@@ -10,7 +10,7 @@
 
 Today every asset type uses one shared form (spec 08), so a printer shows fields
 that do not fit it (an assignee, a person) and there is nowhere to record the
-fields that do fit (its IP address, whether it prints in color, its page count).
+fields that do fit (its IP address, whether it prints in color, its management URL).
 This spec gives each of the five types (Computer, Monitor, Printer, Phone,
 Network) its own set of fields on top of the shared ones, stored in a small
 per-type detail table joined one to one with the asset. A few fields (printer and
@@ -39,7 +39,7 @@ is thrown away.
   type (Printers and Network gear have no Assignee). The field set for each type
   is: Computer (form factor, operating system, CPU, RAM, storage), Monitor (size,
   resolution, panel type, refresh rate, ports, curved), Printer (**IP address,
-  required**, color mode, duplex, page count, connection, management URL), Phone
+  required**, color mode, duplex, connection, management URL), Phone
   (IMEI, phone number, carrier, storage, OS, plan), Network (IP address, MAC
   address, device role, port count, firmware, management URL). Printer IP address
   is the one type-specific field that is **required**; every other type-specific
@@ -119,8 +119,10 @@ existing tables). Five new tables, each 1:1 with `assets`:
   `ports` text; `isCurved` boolean. All nullable.
 - **`printer_details`**: `assetId` PK/FK (cascade); **`ipAddress` text NOT NULL
   (indexed, required)**; `colorMode` text (mono / color); `isDuplex` boolean;
-  `pageCount` integer; `connection` text (network / USB); `mgmtUrl` text. Only
-  `ipAddress` is required; the rest nullable.
+  `connection` text (network / USB); `mgmtUrl` text. Only
+  `ipAddress` is required; the rest nullable. (The original `pageCount` field was
+  removed on 2026-09-25; the live SNMP page counter from spec 14 is now a
+  printer's only page count.)
 - **`phone_details`**: `assetId` PK/FK (cascade); **`imei` text (indexed)**;
   **`phoneNumber` text (indexed)**; `carrier` text; `storageGb` integer; `os` text
   (iOS / Android); `plan` text. All nullable.
@@ -177,12 +179,12 @@ auth-walled tool; no regulated-data compliance scope.
 `npm run db:push` to create the five detail tables (additive; no data change).
 
 **Critical test scenarios** (each maps to an acceptance criterion):
-- Happy path: add a Printer, fill IP, color mode, duplex, page count; it saves to
+- Happy path: add a Printer, fill IP, color mode, duplex, connection; it saves to
   `printer_details`, shows on the detail page, and the printer form never asked for
   an assignee, verifies **AC-1**, **AC-2**, **AC-3**.
 - Search: a printer's IP and a phone's number are found by the search bar, verifies
   **AC-5**.
-- Validation: a bad type-specific value (e.g. non-numeric page count) shows an
+- Validation: a bad type-specific value (e.g. a non-numeric monitor refresh rate) shows an
   inline error and the action writes nothing, verifies **AC-4**.
 - Delete: deleting an asset removes its detail row (no orphan), verifies **AC-2**.
 - Auth: a user without `asset:write` sees no write controls and a direct action

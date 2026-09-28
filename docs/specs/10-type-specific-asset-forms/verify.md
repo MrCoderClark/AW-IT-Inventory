@@ -15,9 +15,9 @@ _Steps derived from spec 10 acceptance criteria. `/check verify` runs these;
 
 ## UI / manual (signed in as a user with `asset:write`)
 - [ ] Open **New asset** on `/printers`: the form shows printer fields (IP address,
-  color mode, duplex, page count, connection, management URL) and **no Assignee** →
+  color mode, duplex, connection, management URL) and **no Assignee** →
   AC-1
-- [ ] Save a printer with an IP, color mode, and page count → it persists, the
+- [ ] Save a printer with an IP, color mode, and connection → it persists, the
   detail page shows those fields, and the printer appears in the list → AC-1, AC-2, AC-3
 - [ ] Repeat for each other type: Computer (form factor, OS, CPU, RAM, storage),
   Monitor (size, resolution, panel, refresh, ports, curved), Phone (IMEI, number,
@@ -31,7 +31,7 @@ _Steps derived from spec 10 acceptance criteria. `/check verify` runs these;
   and a phone number with and without punctuation → all find the same device → AC-5
 - [ ] A monitor's `sizeInches` (e.g. 34.5) saves and displays correctly (numeric
   round-trips as a string through Drizzle; coercion must hold) → AC-4
-- [ ] Enter an invalid type-specific value (e.g. a non-numeric page count) → inline
+- [ ] Enter an invalid type-specific value (e.g. a non-numeric monitor refresh rate) → inline
   error, nothing written → AC-4
 - [ ] Try to save a Printer with the IP address left blank → inline "required"
   error, nothing written; saving with an IP succeeds → AC-1, AC-4

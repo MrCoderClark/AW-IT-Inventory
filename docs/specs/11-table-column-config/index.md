@@ -288,8 +288,8 @@ specs 07 to 10): make one view configurable end to end, then widen to all seven.
 
 ## Follow-up
 
-- [ ] Offer the remaining per-type detail fields (page count, RAM, screen size,
-      form factor, and so on) as columns by left-joining the detail tables into
+- [ ] Offer the remaining per-type detail fields (RAM, screen size, form factor,
+      color mode, and so on) as columns by left-joining the detail tables into
       `getAssetsByType` / `getAssets`; this spec deliberately limits category
       columns to the identifiers already on the asset object (spec 10's open
       follow-up).

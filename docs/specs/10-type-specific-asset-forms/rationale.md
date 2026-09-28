@@ -13,7 +13,7 @@ has two costs now that the fleet is real:
   hides Assignee for Printer and Network in the form; this spec makes that part of
   a proper per-type field model.)
 - There is nowhere to record the fields that a type actually has: a printer's IP,
-  color mode, and page count; a phone's IMEI, number, carrier, and plan; a monitor's
+  color mode, and connection; a phone's IMEI, number, carrier, and plan; a monitor's
   size, resolution, and panel; a switch's port count and firmware. Today these get
   crammed into the freeform `spec` text or lost.
 
@@ -63,7 +63,7 @@ resolution, mac, and so on).
 
 **Cons**:
 - A wide, sparse table: most columns are null for most rows (a printer row has no
-  IMEI, a phone row has no page count), which is noisy and easy to misuse.
+  IMEI, a phone row has no color mode), which is noisy and easy to misuse.
 - Column name collisions across types (two types both want `ip_address`,
   `mgmt_url`), forcing prefixes and losing the clean per-type grouping.
 
