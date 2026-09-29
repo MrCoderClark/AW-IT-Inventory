@@ -112,6 +112,7 @@ def scan_targets(
                 credential_profile=res["credential_profile"],
                 hardware=res["hardware"],
                 health=res["health"],
+                software=res["software"],
                 errors=res["errors"],
             )
 

@@ -4,6 +4,7 @@ import { eq, or, sql } from "drizzle-orm";
 
 import { upsertPrinterCounter } from "./counters";
 import { db } from "./index";
+import { replaceInstalledSoftware, type PostedSoftware } from "./software";
 import {
   assets,
   computerDetails,
@@ -38,6 +39,9 @@ export interface IngestHost {
   hardware?: IngestHardware | null;
   health?: IngestHealth | null;
   printer?: IngestPrinter | null;
+  // Installed programs from a Windows collect (spec 15). null/absent = not
+  // collected (leave stored software intact); an array = the current set.
+  software?: PostedSoftware[] | null;
   errors?: string[];
 }
 export interface IngestPayload {
@@ -83,15 +87,20 @@ export async function ingestScan(payload: IngestPayload): Promise<IngestResult> 
       continue;
     }
 
-    // Reconcile to an existing asset by serial.
+    // Reconcile to an existing asset by serial. Capture its type too, so the
+    // ingest can enforce "software only for Computer assets" (spec 15, AC-3).
     let assetId: string | null = null;
+    let assetType: string | null = null;
     if (serial) {
       const found = await db
-        .select({ id: assets.id })
+        .select({ id: assets.id, type: assets.type })
         .from(assets)
         .where(eq(assets.serial, serial))
         .limit(1);
-      if (found.length) assetId = found[0].id;
+      if (found.length) {
+        assetId = found[0].id;
+        assetType = found[0].type;
+      }
     }
 
     // Fall back to matching a manually-entered device by its IP. For a printer,
@@ -100,7 +109,7 @@ export async function ingestScan(payload: IngestPayload): Promise<IngestResult> 
     // the right asset when scanned at its IP. Same for a network/computer detail IP.
     if (!assetId && ip) {
       const byIp = await db
-        .select({ id: assets.id })
+        .select({ id: assets.id, type: assets.type })
         .from(assets)
         .leftJoin(printerDetails, eq(printerDetails.assetId, assets.id))
         .leftJoin(networkDetails, eq(networkDetails.assetId, assets.id))
@@ -113,7 +122,10 @@ export async function ingestScan(payload: IngestPayload): Promise<IngestResult> 
           ),
         )
         .limit(1);
-      if (byIp.length) assetId = byIp[0].id;
+      if (byIp.length) {
+        assetId = byIp[0].id;
+        assetType = byIp[0].type;
+      }
     }
 
     const kind = h.device_type ?? (pr ? "printer" : hw ? "windows" : "unknown");
@@ -173,6 +185,22 @@ export async function ingestScan(payload: IngestPayload): Promise<IngestResult> 
         } catch (err) {
           console.error(
             `[ingest] printer-counter snapshot failed for asset ${assetId}:`,
+            err,
+          );
+        }
+      }
+
+      // Software inventory (spec 15, AC-3): for a matched Computer asset, replace
+      // its tracked software with the watchlist matches from this scan. Only
+      // Computer assets get rows; `software == null` means the collector didn't
+      // read software (non-Windows or a read failure), so the prior set is left
+      // intact. Best-effort — a software write must never fail the machine ingest.
+      if (assetType === "Computer" && Array.isArray(h.software)) {
+        try {
+          await replaceInstalledSoftware(assetId, h.software, now);
+        } catch (err) {
+          console.error(
+            `[ingest] software inventory failed for asset ${assetId}:`,
             err,
           );
         }

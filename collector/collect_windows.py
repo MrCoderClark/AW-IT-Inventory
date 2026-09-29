@@ -11,7 +11,7 @@ import json
 import winrm
 
 from config import Config, CredentialProfile
-from models import Disk, Hardware, Health
+from models import Disk, Hardware, Health, Software
 
 # Single round-trip: gather hardware + OS/health and emit compact JSON.
 PS_COLLECT = r"""
@@ -29,6 +29,16 @@ $free = @{}
 foreach ($d in (Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3")) {
     $free["$($d.DeviceID)"] = [math]::Round($d.FreeSpace/1GB, 1) }
 $uptime = if ($os.LastBootUpTime) { ((Get-Date) - $os.LastBootUpTime).TotalHours } else { $null }
+# Installed programs from the registry Uninstall keys (spec 15): HKLM 64-bit, HKLM
+# WOW6432Node (32-bit on 64-bit Windows), and HKCU (per-user installs). Never
+# Win32_Product (slow, can trigger MSI repair). Best-effort — SilentlyContinue
+# skips a hive that isn't present in this session.
+$swPaths = @(
+    'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
+    'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
+    'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*')
+$sw = @(Get-ItemProperty $swPaths | Where-Object { $_.DisplayName } | ForEach-Object {
+    @{ name = "$($_.DisplayName)"; version = "$($_.DisplayVersion)"; publisher = "$($_.Publisher)"; install_date = "$($_.InstallDate)" } })
 [ordered]@{
     hostname       = $cs.DNSHostName
     manufacturer   = $cs.Manufacturer
@@ -47,6 +57,7 @@ $uptime = if ($os.LastBootUpTime) { ((Get-Date) - $os.LastBootUpTime).TotalHours
     uptime_hours   = if ($uptime) { [math]::Round($uptime, 1) } else { $null }
     free_disk_gb   = $free
     logged_on_user = $cs.UserName
+    software       = $sw
 } | ConvertTo-Json -Depth 5 -Compress
 """
 
@@ -57,7 +68,16 @@ def _as_list(value) -> list:
     return value if isinstance(value, list) else [value]
 
 
-def _parse(data: dict) -> tuple[Hardware, Health, str | None]:
+def _clean(value) -> str | None:
+    """Registry strings come back as "" for absent values (the PS "$(...)"
+    coercion); normalize an empty/whitespace string to None."""
+    if not isinstance(value, str):
+        return None
+    v = value.strip()
+    return v or None
+
+
+def _parse(data: dict) -> tuple[Hardware, Health, str | None, list[Software]]:
     disks = [
         Disk(
             model=d.get("model"),
@@ -87,7 +107,17 @@ def _parse(data: dict) -> tuple[Hardware, Health, str | None]:
         free_disk_gb={k: v for k, v in (data.get("free_disk_gb") or {}).items()},
         logged_on_user=data.get("logged_on_user"),
     )
-    return hardware, health, data.get("hostname")
+    software = [
+        Software(
+            name=_clean(s.get("name")),
+            version=_clean(s.get("version")),
+            publisher=_clean(s.get("publisher")),
+            install_date=_clean(s.get("install_date")),
+        )
+        for s in _as_list(data.get("software"))
+        if isinstance(s, dict) and _clean(s.get("name"))
+    ]
+    return hardware, health, data.get("hostname"), software
 
 
 def collect_windows(
@@ -98,6 +128,7 @@ def collect_windows(
         "health": None,
         "hostname": None,
         "credential_profile": None,
+        "software": None,
         "errors": [],
     }
     port = config.ports.winrm
@@ -121,12 +152,13 @@ def collect_windows(
                 last_err = f"{prof.id}: ps_exit_{r.status_code} {err.decode(errors='ignore')}"
                 continue
             raw = (r.std_out or b"").decode("utf-8", errors="ignore").strip() or "{}"
-            hw, health, hostname = _parse(json.loads(raw))
+            hw, health, hostname, software = _parse(json.loads(raw))
             out.update(
                 hardware=hw,
                 health=health,
                 hostname=hostname,
                 credential_profile=prof.id,
+                software=software,
             )
             return out
         except Exception as e:  # noqa: BLE001 - report and try next profile

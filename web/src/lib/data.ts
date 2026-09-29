@@ -99,6 +99,34 @@ export interface PrinterCounters {
   history: CounterHistoryDay[];
 }
 
+/* ---------------- Software inventory (spec 15) ---------------- */
+
+/** One tracked title on the /software aggregate page (AC-4): its fleet install
+   count (distinct Computer assets) and the distinct versions seen. */
+export interface SoftwareInventoryRow {
+  id: string; // tracked_software id
+  name: string; // the tracked title
+  machineCount: number; // distinct Computer assets with a matching row (0 shown)
+  versions: string[]; // distinct versions seen across the fleet
+}
+
+/** A Computer asset that has a tracked title, for the per-title drill-down
+   (AC-5). `id` is the asset tag (the UI id), so it links to /assets/[id]. */
+export interface SoftwareTitleMachine {
+  id: string; // asset tag
+  name: string;
+  serial: string;
+  versions: string[]; // the versions of this title found on the machine
+  lastSeen: string; // ISO date of the scan that recorded it
+}
+
+/** One tracked program on a computer's detail-page software panel (AC-6). */
+export interface InstalledSoftwareItem {
+  name: string; // the actual DisplayName found
+  version: string;
+  publisher: string;
+}
+
 /* ---------------- Status metadata ---------------- */
 
 export const STATUS_META: Record<

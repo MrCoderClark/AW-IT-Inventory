@@ -17,6 +17,7 @@ dump: the atomic build steps stay in each feature's spec (`docs/specs/`). Run
 | Discovery type toggles | done | [13](../specs/13-discovery-type-toggles/index.md) |
 | Printer page counter and daily report | done | [14](../specs/14-printer-page-counter/index.md) |
 | Per-run ignore of discovery switches (collector) | done | — |
+| Software inventory (tracked-software watchlist) | done | [15](../specs/15-software-inventory/index.md) |
 
 ## Features
 
@@ -240,6 +241,67 @@ still honors the switches, and the flag is documented in the collector help/conf
       (still narrowed by `--no-windows` / `--no-printers`), else honors the switches
       as before. Smoke-verified 2026-09-28: the flag run scanned a printer while the
       Printers switch was off-bypassing, and a normal run honored the app settings.
+
+### Software inventory (tracked-software watchlist) · done
+
+Track a small, admin-managed watchlist of software titles across the Windows fleet.
+The collector reads each computer's installed programs; the app stores the watchlist
+matches per Computer asset (current state); `/software` lists each tracked title with
+its machine count and the versions seen, and each computer's detail page shows its own
+tracked software. Managed on the Admin page, gated on `scan:write`.
+
+**Done when**: an admin with `scan:write` manages the watchlist on `/admin`; a Windows
+scan of a matched Computer records its watchlist-matching software (case-insensitive
+contains, current state); `/software` shows every tracked title with a distinct-machine
+count (0 included) and the versions seen, and drills into the machines that have a
+title; a computer's detail page shows a tracked-software panel. Viewing is open to any
+`asset:read` user.
+
+- [x] Design it (spec): [15](../specs/15-software-inventory/index.md)
+- [x] Build it: `/develop software inventory` — code in
+      `web/src/db/{schema,software,ingest}.ts`, `web/src/lib/data.ts`,
+      `web/src/app/(app)/software-actions.ts`,
+      `web/src/components/{tracked-software-card,asset-detail}.tsx`,
+      `web/src/app/(app)/admin/page.tsx`,
+      `web/src/app/(app)/software/{page,[trackedId]/page}.tsx`,
+      `web/src/app/(app)/assets/[id]/page.tsx`, and collector
+      `collect_windows.py`, `models.py`, `main.py`. No new permission
+      (reuses `scan:write`); the `/software` nav entry already existed.
+  - [x] Data model + watchlist management: the `tracked_software` + `installed_software`
+        tables, the Admin card, and the `add` / `remove` server actions gated on
+        `scan:write` (covers AC-1, AC-7, AC-3 data) — code complete; awaiting the
+        engineer's `npm run db:push` to make the two tables live.
+  - [x] Collector software collection: read the registry Uninstall keys in the existing
+        WinRM call, add `software` to the Windows model + ingest payload, best effort
+        (covers AC-2) — done; `software=None` when not collected, `[]` when read OK but
+        empty, so a failed read never wipes stored software.
+  - [x] Ingest storage: filter the posted software to watchlist matches for a matched
+        Computer asset, replace that asset's `installed_software` rows (current state)
+        (covers AC-3) — done; case-insensitive contains, full replace in a transaction,
+        best effort (a software write never fails the machine ingest).
+  - [x] Software UI: the `/software` aggregate page (counts + versions, zero shown), the
+        per-title drill-down to machines, and the computer detail software panel
+        (covers AC-4, AC-5, AC-6) — done; drill-down is a route `/software/[trackedId]`,
+        panel shows for Computer assets with an empty state.
+- [x] Verify it: `/check verify software inventory` — verified live 2026-09-29 against the
+      running app + DB. Tables live (both, exact columns + the `lower(name)` unique index).
+      AC-1 (add "Chrome", case-insensitive duplicate "chrome" rejected, admin card shown),
+      AC-3 (synthetic scan through the real `/api/ingest/scan`: matched Computer stored only
+      the watchlist match "Google Chrome", "7-Zip" excluded; unmatched host stored nothing),
+      AC-4 (`/software` Chrome count 1 + version), AC-5 (drill-down lists the computer +
+      version + link), AC-6 (detail panel with data, and empty state on another computer)
+      all proven; test artifacts cleaned up. Still BLOCKED: AC-2 (collector's real registry
+      Uninstall read needs the physical Windows fleet) and AC-7's negative path (a user
+      without `scan:write` — no non-admin account to drive); both are for `/test` + a real
+      collector run.
+- [x] Test it: `/test software inventory` — 43 tests, all pass. Web (Vitest, 37):
+      `web/src/db/software.test.ts` (22: watchlist match/dedupe/replace, add/remove
+      helpers, aggregate + drill-down shaping, panel), `software-actions.test.ts` (9:
+      `scan:write` gate both ways + validation + duplicate/empty mapping, AC-1/AC-7),
+      `tracked-software-card.test.tsx` (6: render, add, remove, empty state, a11y).
+      Collector (pytest, 6): `collector/tests/test_software.py` (registry parse +
+      blank→None, AC-2). Full suites green (web 277, collector 15). AC-2's live WinRM
+      registry read on a real host stays a manual/collector-run check (not automatable).
 
 _Parked in the specs (not yet enrolled — conditional on a trigger): per-model /
 per-profile counter OID overrides and mono/color + print/copy breakdowns (spec 14,

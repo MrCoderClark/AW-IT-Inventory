@@ -36,6 +36,7 @@ import {
   type Asset,
   type AssetReachability,
   type AssetType,
+  type InstalledSoftwareItem,
   type LocationOption,
   type MachineSummary,
   type PrinterCounters,
@@ -171,6 +172,7 @@ export function AssetDetail({
   assigneeId = null,
   reachability = null,
   counters = null,
+  software = [],
 }: {
   asset: Asset;
   machine?: MachineSummary;
@@ -195,6 +197,9 @@ export function AssetDetail({
   /** Printer page-counter panel (spec 14, AC-3); null for non-printers or a
      printer never read. */
   counters?: PrinterCounters | null;
+  /** Tracked software found on this computer (spec 15, AC-6); the panel shows for
+     Computer assets, with an empty state when none was found. */
+  software?: InstalledSoftwareItem[];
 }) {
   const Icon = TYPE_ICON[asset.type];
   const showHealth =
@@ -456,6 +461,44 @@ export function AssetDetail({
               <p className="mt-4 text-sm text-muted-foreground">
                 No readings yet — the collector reads each printer&apos;s page
                 counter on its daily SNMP collect (default 08:00).
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Tracked software (spec 15, AC-6) — Computer assets only */}
+      {asset.type === "Computer" && (
+        <div>
+          <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Tracked software
+          </p>
+          <div className="rounded-xl border bg-card p-5">
+            {software.length > 0 ? (
+              <ul className="divide-y text-sm">
+                {software.map((s, i) => (
+                  <li
+                    key={`${s.name}-${s.version}-${i}`}
+                    className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium">{s.name}</span>
+                      {s.publisher && (
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {s.publisher}
+                        </span>
+                      )}
+                    </span>
+                    <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
+                      {s.version || "—"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No tracked software found on this computer. Titles appear here once
+                a Windows scan matches one from the watchlist (managed on Admin).
               </p>
             )}
           </div>

@@ -121,6 +121,32 @@ The report's location column reuses `getLocationPathMap`, now exported from
 (`POST /api/scan/reachability/prune`, service `scan:dequeue`) now prunes
 `printer_counters` as well as `printer_checks`.
 
+## Software inventory (spec 15)
+
+An admin-managed watchlist of software titles (`tracked_software`, unique on
+`lower(name)`) and the tracked matches per Computer asset (`installed_software`,
+current state, keyed on `assetId` like `printer_counters`, no history). One
+`server-only` module `src/db/software.ts` owns it all: the watchlist read/add/remove,
+`replaceInstalledSoftware` (the ingest-time filter), and the read paths
+(`getSoftwareInventory` aggregate, `getSoftwareTitleDetail` drill-down,
+`getInstalledSoftware` panel).
+
+Match rule: a tracked title matches a program when the title is a case-insensitive
+substring of the program's DisplayName, so one program can count under more than one
+title. The collector sends every installed program; the filter runs web-side at
+ingest. On `/api/ingest/scan`, a matched **Computer** asset with a `software` array
+fully replaces its `installed_software` rows in a transaction (best effort, a software
+write never fails the machine ingest). `software == null` means the collector didn't
+read it (non-Windows or a read failure), so the prior set is left intact; a
+non-Computer or unmatched machine stores nothing.
+
+Managing the watchlist needs `scan:write` (reused, no new permission), through
+`addTrackedSoftwareAction` / `removeTrackedSoftwareAction`
+(`src/app/(app)/software-actions.ts`) and the Admin "Tracked software" card. Viewing is
+open to any `asset:read` user: `/software` (every title, distinct-Computer count with 0
+shown, distinct versions) and `/software/[trackedId]` (the machines that have a title),
+plus a tracked-software panel on the computer detail page.
+
 ## Testing note: `server-only` under Vitest
 
 `vitest.config.mts` aliases `server-only` to a no-op stub
