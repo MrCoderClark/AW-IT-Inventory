@@ -23,6 +23,12 @@ vi.mock("@/app/(app)/assets/actions", () => ({
 vi.mock("@/app/(app)/scan-actions", () => ({
   requestScan: vi.fn(),
 }));
+// The assignment controls import the people server actions (spec 16), which pull
+// in the db client too; stub them so the import never loads the DB.
+vi.mock("@/app/(app)/people-actions", () => ({
+  assignAssetAction: vi.fn(),
+  returnAssetAction: vi.fn(),
+}));
 
 function makeAsset(overrides: Partial<Asset> = {}): Asset {
   return {
@@ -136,11 +142,13 @@ describe("AssetDetail", () => {
     expect(screen.getByText(/Live scan/)).toBeInTheDocument();
   });
 
-  // covers: AC-4 (audit timeline)
-  it("renders the audit history timeline", () => {
+  // covers: spec 16 AC-7 (the assignment panel shows the current holder and the
+  // custody history; superseded the old fabricated audit timeline)
+  it("renders the assignment panel with its history empty state", () => {
     render(<AssetDetail asset={makeAsset()} />);
-    expect(screen.getByText("Audit History")).toBeInTheDocument();
-    expect(screen.getByText("Assigned to Sarah Jenkins")).toBeInTheDocument();
+    expect(screen.getByText("Assignment")).toBeInTheDocument();
+    // No history passed → the empty state shows.
+    expect(screen.getByText("No assignment history yet.")).toBeInTheDocument();
   });
 
   // covers: AC-6 (a read-only user sees no write controls)

@@ -325,15 +325,40 @@ export interface Person {
   initials: string;
 }
 
-/** Wrapped in React.cache so the 5 category pages + dashboard + detail page
-   that each load people (when the user can write) dedupe to one query per
-   request instead of a round trip apiece. */
+/** People for the assignee picker: ACTIVE only (spec 16, AC-8 — the picker never
+   offers an archived person). Wrapped in React.cache so the 5 category pages +
+   dashboard + detail page that each load people (when the user can write) dedupe
+   to one query per request instead of a round trip apiece. */
 export const getPeople = cache(async function getPeople(): Promise<Person[]> {
   return db
     .select({ id: people.id, name: people.name, initials: people.initials })
     .from(people)
+    .where(eq(people.status, "active"))
     .orderBy(asc(people.name));
 });
+
+/** A device that can be handed to a person, for the person-page assign picker
+   (spec 16). Only types that carry an assignee (Computer/Monitor/Phone; printers
+   and network gear are never person-assigned). */
+export interface AssignableAsset {
+  tag: string;
+  name: string;
+  type: AssetType;
+}
+
+/** Assignable devices for the person-page assign picker, ordered by name. */
+export async function getAssignableAssets(): Promise<AssignableAsset[]> {
+  const rows = await db
+    .select({ tag: assets.tag, name: assets.name, type: assets.type })
+    .from(assets)
+    .where(inArray(assets.type, ["Computer", "Monitor", "Phone"]))
+    .orderBy(asc(assets.name));
+  return rows.map((r) => ({
+    tag: r.tag,
+    name: r.name,
+    type: r.type as AssetType,
+  }));
+}
 
 /**
  * The current assignee id for one asset tag, so the edit form can pre-select

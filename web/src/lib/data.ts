@@ -13,6 +13,7 @@ import {
   ScanLine,
   ListChecks,
   HelpCircle,
+  Users,
 } from "lucide-react";
 
 /* ---------------- Types ---------------- */
@@ -125,6 +126,60 @@ export interface InstalledSoftwareItem {
   name: string; // the actual DisplayName found
   version: string;
   publisher: string;
+}
+
+/* ---------------- People directory & assignments (spec 16) ---------------- */
+
+export type PersonStatus = "active" | "archived";
+
+/** One row on the /people directory (AC-2): the profile summary plus the count
+   of devices the person currently holds. */
+export interface DirectoryPerson {
+  id: string;
+  name: string;
+  initials: string;
+  email: string;
+  department: string;
+  jobTitle: string;
+  phone: string;
+  employeeId: string;
+  officeLocation: string; // full location path, "" = none
+  officeLocationId: string | null;
+  status: PersonStatus;
+  deviceCount: number; // devices with an open assignment to this person
+}
+
+/** A device a person currently holds, for the person detail page (AC-4). `id`
+   is the asset tag (the UI id), so it links to /assets/[id]. */
+export interface CurrentDevice {
+  id: string; // asset tag
+  name: string;
+  type: AssetType;
+  serial: string;
+  assignedAt: string; // ISO — when this open assignment started
+}
+
+/** One assignment event, used by both the person timeline and the device
+   timeline (AC-4, AC-7). Carries both sides so either page can render it. */
+export interface AssignmentEvent {
+  id: string;
+  assetId: string; // asset tag (the UI id), for a link
+  assetName: string;
+  assetType: AssetType;
+  personId: string;
+  personName: string;
+  assignedAt: string; // ISO
+  assignedBy: string; // admin email
+  unassignedAt: string | null; // ISO; null = still open
+  unassignedBy: string | null; // admin email; null while open
+  open: boolean;
+}
+
+/** The full person detail page payload (AC-4). */
+export interface PersonDetail {
+  person: DirectoryPerson;
+  currentDevices: CurrentDevice[];
+  history: AssignmentEvent[];
 }
 
 /* ---------------- Status metadata ---------------- */
@@ -254,6 +309,7 @@ export const NAV_ASSETS: NavItem[] = [
 ];
 
 export const NAV_MANAGE: NavItem[] = [
+  { label: "People", href: "/people", icon: Users },
   { label: "Compliance", href: "/compliance", icon: ShieldCheck },
   { label: "Reports", href: "/reports", icon: FileText },
   { label: "Scans", href: "/scans", icon: ScanLine },

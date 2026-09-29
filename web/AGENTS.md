@@ -147,6 +147,44 @@ open to any `asset:read` user: `/software` (every title, distinct-Computer count
 shown, distinct versions) and `/software/[trackedId]` (the machines that have a title),
 plus a tracked-software panel on the computer detail page.
 
+## People directory and device assignments (spec 16)
+
+A managed directory of the staff who use the fleet, plus a full device custody
+history. People live in the inventory DB (`people`, extended with department,
+job title, phone, employee id, office location, and a `people_status` enum) with
+NO link to aw-auth: they are employees, not login accounts, so the two databases
+stay separate. `initials` is always derived from `name` on write (never entered).
+Email and employee id are unique when present (email case-insensitively, via
+partial unique indexes); a blank never collides.
+
+The assignment engine `src/db/assignments.ts` is the single writer of
+`assets.assigneeId`. Each hand out opens a row in `asset_assignments` and each
+return closes it (`unassignedAt` null = the current holder); the engine keeps
+`assigneeId` in step with the open assignment inside one transaction, so the two
+never drift (AC-11). The partial unique index `asset_assignments_open_uq` enforces
+at most one open assignment per device; a lost double-assign race surfaces as
+SQLSTATE 23505 and is turned into a clean `already-assigned` result by
+`isOpenAssignmentRace`, not a raw throw. The engine exposes transaction-aware
+cores (`assignAssetTx` / `returnAssetTx`) so the asset form's assignee change
+shares the asset create/update transaction: **the asset form never writes
+`assigneeId` directly, it routes through the engine** (`assets/actions.ts`). Any
+new code that sets `assigneeId` outside the engine breaks the invariant.
+
+The directory + lifecycle live in one `server-only` module `src/db/people.ts`
+(list/search/count, get one, create/update, archive/restore, delete only when the
+person has no history, `deriveInitials`, `escapeLike` for search). Directory
+search escapes LIKE wildcards. Archiving closes all of a person's open assignments
+and returns those devices to the pool in one transaction. Managing people and
+assigning devices both reuse `asset:write` (no new permission, no aw-auth reseed),
+gated in `src/app/(app)/people-actions.ts`; viewing is open to any `asset:read`
+user. The assignee picker (`getPeople` in `queries.ts`) lists **active people
+only**. Surfaces: `/people` (directory: search, active/archived filter, device
+count, pagination), `/people/[id]` (profile, current devices, history,
+assign/return/archive/restore/delete), and an Assignment panel on the asset detail
+page (assign/return + real custody history, replacing the old audit timeline).
+Form validation is `src/lib/person-schema.ts` (zod, same client + server pattern
+as `asset-schema.ts`; the client always submits a full `PersonFormValues`).
+
 ## Testing note: `server-only` under Vitest
 
 `vitest.config.mts` aliases `server-only` to a no-op stub

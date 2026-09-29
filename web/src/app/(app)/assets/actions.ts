@@ -12,8 +12,14 @@ import {
   phoneDetails,
   printerDetails,
 } from "@/db/schema";
+import {
+  assignAssetTx,
+  isOpenAssignmentRace,
+  returnAssetTx,
+} from "@/db/assignments";
 import { locationLeafStatus } from "@/db/queries";
 import { getCurrentUser, hasPermission } from "@/lib/auth/session";
+import type { AuthUser } from "@/lib/auth/types";
 import { assetInputSchema, firstError } from "@/lib/asset-schema";
 import { detailsSchemaFor } from "@/lib/asset-fields";
 import type { ActionResult, AssetType } from "@/lib/data";
@@ -92,6 +98,24 @@ const ASSIGNEE_GONE: ActionResult = {
   error: "That assignee no longer exists. Refresh and try again.",
 };
 
+const ASSIGNEE_ARCHIVED: ActionResult = {
+  ok: false,
+  error: "That person is archived. Restore them first, or pick someone else.",
+};
+
+const ASSIGNEE_RACE: ActionResult = {
+  ok: false,
+  error: "That device was just assigned to someone else. Refresh and try again.",
+};
+
+/** Thrown inside the create/update transaction when routing the assignee change
+   through the assignment engine fails, so the whole write rolls back cleanly. */
+class AssignFailure extends Error {
+  constructor(public result: ActionResult) {
+    super("assignment failed");
+  }
+}
+
 const LOCATION_GONE: ActionResult = {
   ok: false,
   error: "That location no longer exists. Refresh and try again.",
@@ -138,10 +162,17 @@ async function checkLeaf(locationId: string | null): Promise<ActionResult | null
   return null;
 }
 
-/** Gate every write action on `asset:write`, server-side. */
-async function requireWrite(): Promise<boolean> {
+/** Gate every write action on `asset:write`, server-side. Returns the acting
+   user (needed to stamp assignment events), or null when not permitted. */
+async function requireWrite(): Promise<AuthUser | null> {
   const user = await getCurrentUser();
-  return hasPermission(user, "asset:write");
+  return hasPermission(user, "asset:write") ? user : null;
+}
+
+/** Map an assignment-engine error to the matching asset-form action result. */
+function assignFailureResult(error: string): ActionResult {
+  if (error === "person-archived") return ASSIGNEE_ARCHIVED;
+  return ASSIGNEE_GONE; // person-not-found / asset-not-found
 }
 
 const TYPE_ROUTE: Record<AssetType, string> = {
@@ -164,7 +195,8 @@ function revalidateFor(type: AssetType) {
  * inbox quick-create does). Type fixes the tag prefix, so they always agree.
  */
 export async function createAsset(raw: unknown): Promise<ActionResult> {
-  if (!(await requireWrite())) return FORBIDDEN;
+  const user = await requireWrite();
+  if (!user) return FORBIDDEN;
 
   const parsed = assetInputSchema.safeParse(raw);
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
@@ -193,7 +225,8 @@ export async function createAsset(raw: unknown): Promise<ActionResult> {
             status: input.status,
             serial: input.serial,
             model: input.model,
-            assigneeId: input.assigneeId,
+            // `assigneeId` is written only by the assignment engine below, never
+            // set directly, so a create always opens a matching assignment (AC-11).
             locationId: input.locationId,
             vendor: input.vendor,
             spec: input.spec,
@@ -208,11 +241,19 @@ export async function createAsset(raw: unknown): Promise<ActionResult> {
       }
       if (!row) throw new TagClashError();
       await upsertDetails(tx, input.type, row.id, details.data);
+      // Route the initial assignee through the engine so the custody log opens
+      // in the same transaction as the asset.
+      if (input.assigneeId) {
+        const res = await assignAssetTx(tx, row.id, input.assigneeId, user.email);
+        if (!res.ok) throw new AssignFailure(assignFailureResult(res.error));
+      }
       return { tag: row.tag };
     });
   } catch (err) {
     if (err instanceof TagClashError)
       return { ok: false, error: "Couldn't generate a unique tag. Try again." };
+    if (err instanceof AssignFailure) return err.result;
+    if (isOpenAssignmentRace(err)) return ASSIGNEE_RACE;
     const fk = fkViolationResult(err);
     if (fk) return fk;
     throw err;
@@ -235,7 +276,8 @@ export async function updateAsset(
   tag: string,
   raw: unknown,
 ): Promise<ActionResult> {
-  if (!(await requireWrite())) return FORBIDDEN;
+  const user = await requireWrite();
+  if (!user) return FORBIDDEN;
 
   const parsed = assetInputSchema.safeParse(raw);
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
@@ -260,7 +302,8 @@ export async function updateAsset(
           status: input.status,
           serial: input.serial,
           model: input.model,
-          assigneeId: input.assigneeId,
+          // `assigneeId` is reconciled through the engine below, not set here, so
+          // the custody log stays the single source of the current holder (AC-11).
           locationId: input.locationId,
           vendor: input.vendor,
           spec: input.spec,
@@ -270,12 +313,27 @@ export async function updateAsset(
           updatedAt: now,
         })
         .where(eq(assets.tag, tag))
-        .returning({ id: assets.id });
+        .returning({ id: assets.id, assigneeId: assets.assigneeId });
       if (!updated.length) return false;
       await upsertDetails(tx, input.type, updated[0].id, details.data);
+
+      // Reconcile the assignee change (the returned assigneeId is the pre-update
+      // value, since it isn't in the SET above): open, switch, or return.
+      const current = updated[0].assigneeId;
+      const desired = input.assigneeId;
+      if (desired !== current) {
+        if (desired) {
+          const res = await assignAssetTx(tx, updated[0].id, desired, user.email);
+          if (!res.ok) throw new AssignFailure(assignFailureResult(res.error));
+        } else {
+          await returnAssetTx(tx, updated[0].id, user.email);
+        }
+      }
       return true;
     });
   } catch (err) {
+    if (err instanceof AssignFailure) return err.result;
+    if (isOpenAssignmentRace(err)) return ASSIGNEE_RACE;
     const fk = fkViolationResult(err);
     if (fk) return fk;
     throw err;
