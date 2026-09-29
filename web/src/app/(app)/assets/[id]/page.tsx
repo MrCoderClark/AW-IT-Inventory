@@ -3,6 +3,7 @@ import { Lock } from "lucide-react";
 
 import { AssetDetail } from "@/components/asset-detail";
 import { PagePlaceholder } from "@/components/page-placeholder";
+import { getAssetAssignmentHistory } from "@/db/assignments";
 import { getPrinterCounters } from "@/db/counters";
 import { getInstalledSoftware } from "@/db/software";
 import {
@@ -44,6 +45,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
     reachability,
     counters,
     software,
+    assignmentHistory,
   ] = await Promise.all([
     getAssetById(id),
     getMachineSummary(id),
@@ -56,6 +58,8 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
     getPrinterCounters(id),
     // Tracked-software panel (spec 15, AC-6); empty for non-computers.
     getInstalledSoftware(id),
+    // Assignment history panel (spec 16, AC-7); empty for never-assigned devices.
+    getAssetAssignmentHistory(id),
   ]);
   if (!asset) notFound();
 
@@ -72,6 +76,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
       reachability={reachability}
       counters={counters}
       software={software}
+      assignmentHistory={assignmentHistory}
     />
   );
 }

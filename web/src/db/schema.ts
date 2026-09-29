@@ -31,12 +31,53 @@ export const assetStatus = pgEnum("asset_status", [
   "storage",
 ]);
 
-export const people = pgTable("people", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").notNull(),
-  initials: text("initials").notNull(),
-  email: text("email"),
-});
+// Directory of the staff who use the fleet (spec 16). People live in the
+// inventory DB and carry no aw-auth login link — a fleet has far more employees
+// than login accounts. Extended from the original three columns (id, name,
+// initials, email) into a managed directory: `initials` is always derived from
+// `name` on write (not user-entered); `email` and `employeeId` are unique when
+// present (case-insensitively for email); `status` is a real lifecycle state
+// (archive on offboarding, keeping the person and their history while their
+// devices return to the pool). The new columns carry defaults, so the existing
+// seed rows backfill cleanly.
+export const peopleStatus = pgEnum("people_status", ["active", "archived"]);
+
+export const people = pgTable(
+  "people",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    initials: text("initials").notNull(), // derived from `name` on write
+    email: text("email"),
+    department: text("department"),
+    jobTitle: text("job_title"),
+    phone: text("phone"),
+    employeeId: text("employee_id"),
+    // A person may sit at ANY location node, not just a leaf (unlike a device).
+    // `set null` so archiving/removing a location never blocks on people.
+    officeLocationId: uuid("office_location_id").references(() => locations.id, {
+      onDelete: "set null",
+    }),
+    status: peopleStatus("status").notNull().default("active"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    // Email is unique when present, compared case-insensitively; a blank (null)
+    // email never collides (partial index, Postgres treats NULLs as distinct).
+    uniqueIndex("people_email_lower_uq")
+      .on(sql`lower(${t.email})`)
+      .where(sql`${t.email} is not null`),
+    // Employee id likewise unique when present.
+    uniqueIndex("people_employee_id_uq")
+      .on(t.employeeId)
+      .where(sql`${t.employeeId} is not null`),
+  ],
+);
 
 // A node in the location tree (adjacency list). `parentId` null = a top-level
 // location; otherwise it points at its parent. Depth is unbounded. Devices are
@@ -481,8 +522,56 @@ export const installedSoftware = pgTable(
   ],
 );
 
+// ── Device assignment history (spec 16) ──────────────────────────────────────
+// The custody log: one row per assignment of a device to a person. A row opens
+// when a device is handed out (`assignedAt`/`assignedBy` set, `unassignedAt`
+// null = current) and closes when it comes back (`unassignedAt`/`unassignedBy`
+// set). This is the source of truth for history; `assets.assigneeId` is the
+// denormalized "current holder", written only by the assignment engine in the
+// same transaction so the two never drift (AC-11). `assignedBy`/`unassignedBy`
+// record the acting admin's email from the access token (no FK — admins live in
+// aw-auth, same pattern as `scan_jobs.requestedBy`).
+export const assetAssignments = pgTable(
+  "asset_assignments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // Device gone → its history goes with it.
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    // `restrict`: a person with any assignment history can't be deleted, only
+    // archived (AC-9). The delete action pre-checks; this is the hard guarantee.
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "restrict" }),
+    assignedAt: timestamp("assigned_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    assignedBy: text("assigned_by").notNull(),
+    unassignedAt: timestamp("unassigned_at", { withTimezone: true }),
+    unassignedBy: text("unassigned_by"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    // At most one OPEN assignment per device (AC-5, AC-11), enforced at the DB.
+    uniqueIndex("asset_assignments_open_uq")
+      .on(t.assetId)
+      .where(sql`${t.unassignedAt} is null`),
+    // The person timeline (their current + past devices).
+    index("asset_assignments_person_idx").on(t.personId, t.assignedAt.desc()),
+    // The device timeline (its custody history).
+    index("asset_assignments_asset_idx").on(t.assetId, t.assignedAt.desc()),
+  ],
+);
+
 export type AssetRow = typeof assets.$inferSelect;
 export type PersonRow = typeof people.$inferSelect;
+export type AssetAssignmentRow = typeof assetAssignments.$inferSelect;
 export type MachineRow = typeof machines.$inferSelect;
 export type LocationRow = typeof locations.$inferSelect;
 export type ComputerDetailsRow = typeof computerDetails.$inferSelect;

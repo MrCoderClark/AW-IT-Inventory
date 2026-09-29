@@ -18,6 +18,7 @@ dump: the atomic build steps stay in each feature's spec (`docs/specs/`). Run
 | Printer page counter and daily report | done | [14](../specs/14-printer-page-counter/index.md) |
 | Per-run ignore of discovery switches (collector) | done | — |
 | Software inventory (tracked-software watchlist) | done | [15](../specs/15-software-inventory/index.md) |
+| People directory and device assignments | done | [16](../specs/16-people-directory-assignments/index.md) |
 
 ## Features
 
@@ -303,8 +304,82 @@ title; a computer's detail page shows a tracked-software panel. Viewing is open 
       blank→None, AC-2). Full suites green (web 277, collector 15). AC-2's live WinRM
       registry read on a real host stays a manual/collector-run check (not automatable).
 
+### People directory and device assignments · done
+
+Turn the vestigial `people` table (today only seed rows, no UI) into a managed
+directory of the staff who use the fleet, and add a full device assignment history
+(who held which device, and when). People live in the inventory DB and need no login
+account; managing them and assigning devices both reuse `asset:write`. `assets.assigneeId`
+stays as the denormalized current assignee, kept in sync by a single assignment engine.
+
+**Done when**: an `asset:write` admin can add, edit, and archive people on a `/people`
+directory (search + current device count); assigning or returning a device (from the asset
+form, the person page, or the device page) opens and closes rows in an `asset_assignments`
+log and keeps `assets.assigneeId` correct (at most one open assignment per device); a person
+page shows their current devices and full history and a device page shows its custody history;
+archiving someone returns their devices to the pool and drops them from the picker; delete is
+allowed only for a person with no history; viewing is open to any `asset:read` user.
+
+- [x] Design it (spec): [16](../specs/16-people-directory-assignments/index.md)
+- [x] Build it: `/develop people directory and device assignments` — code in
+      `web/src/db/{schema,people,assignments,queries,seed}.ts`,
+      `web/src/app/(app)/people-actions.ts`, `web/src/app/(app)/assets/actions.ts`,
+      `web/src/lib/{data,person-schema}.ts`,
+      `web/src/components/{person-form-dialog,people-directory,person-detail,asset-detail}.tsx`,
+      `web/src/app/(app)/people/{page,[id]/page}.tsx`,
+      `web/src/app/(app)/assets/[id]/page.tsx`. The asset form assignee change and
+      both people/asset pages all route through the single assignment engine, so
+      `assigneeId` and the `asset_assignments` log stay in step (AC-11). The old
+      fabricated "Audit History" panel on the asset page is replaced by the real
+      custody history.
+  - [x] Foundations: the migration (`people` new columns + `people_status` enum,
+        `asset_assignments` with the open-assignment partial unique index and timeline
+        indexes) and the `src/db/people.ts` module (list/search/count, create/edit,
+        archive/restore, delete-only-without-history, initials + uniqueness)
+        (covers AC-1, AC-2, AC-3, AC-8, AC-9, AC-11 data) — schema written; awaiting
+        the engineer's `npm run db:push` to make the columns/table live (and, to
+        clear seeded-data drift, `npm run db:seed`, now that the seed opens an
+        assignment row per assignee).
+  - [x] Assignment engine + actions: `src/db/assignments.ts` (transactional assign/return,
+        `assigneeId` sync, history reads; transaction-aware `*Tx` cores so the asset form
+        shares one transaction) and the `asset:write`-gated `people-actions.ts`,
+        routing the asset form assignee change through the engine (covers AC-5, AC-6, AC-10, AC-11)
+  - [x] Directory + person pages: `/people` (table, search, active/archived filter, device
+        count, client pagination), the person form dialog, the "People" nav entry, and
+        `/people/[id]` (profile, current devices, history timeline,
+        assign/return/archive/restore/delete controls) (covers AC-1, AC-2, AC-4, AC-8, AC-9)
+  - [x] Device page integration: the asset detail assignment-history panel + assign/return
+        control + active-only assignee picker (covers AC-6, AC-7, AC-8)
+- [x] Verify it: `/check verify people directory and device assignments` — verified live
+      2026-09-29 against the running app + DB. AC-1 (create person, derived initials "VP"),
+      AC-2 (directory list, search, device count, active default + archived filter,
+      pagination), AC-3 (duplicate email rejected case-insensitively), AC-4 (person page
+      profile + current devices + history), AC-5 (assign from person page and asset page,
+      single open per device), AC-6 (return closes with when/by, shows in both histories),
+      AC-7 (device custody history on the asset page), AC-8 (archive returned the held
+      device to the pool, dropped the person from the active picker, restore control shown),
+      AC-9 (delete button hidden once history exists; a clean person deleted), and AC-11
+      (DB check: zero assigneeId/open-assignment drift and zero assets with >1 open
+      assignment across the whole fleet, after all operations) all proven; test data cleaned
+      up. AC-10 negative path (a user WITHOUT `asset:write` sees read-only + 403) BLOCKED:
+      no non-admin account to drive; the positive path (admin mutates, viewing works) is
+      proven and the gate is in every action — for `/test`.
+- [x] Test it: `/test people directory and device assignments` — 70 tests across
+      `web/src/lib/person-schema.test.ts`, `web/src/db/{people,assignments}.test.ts`,
+      `web/src/app/(app)/people-actions.test.ts`, and
+      `web/src/components/{people-directory,person-form-dialog}.test.tsx`. Covers the
+      automatable ACs: initials + validation + uniqueness (AC-1, AC-3), the assignment
+      engine's open/close/sync and single-open invariant (AC-5, AC-6, AC-11), the
+      `asset:write` gate both ways (AC-10), archive/restore/delete-only-without-history
+      (AC-8, AC-9), and the directory (search, device count, archived-hidden, pagination,
+      write-control gate). Full web suite green (349). AC-10's negative runtime path and
+      AC-2's live pagination were also proven in `/check verify`.
+
 _Parked in the specs (not yet enrolled — conditional on a trigger): per-model /
 per-profile counter OID overrides and mono/color + print/copy breakdowns (spec 14,
 "if the fleet grows" / "if wanted"); a weekly/monthly rollup email (spec 14, "if the
 daily report is too frequent"); extending the discovery switch set to phone / monitor
-/ network (spec 13, once those scanners exist)._
+/ network (spec 13, once those scanners exist); an optional `authUserId` link from a
+directory person to an aw-auth login user (spec 16, if self-service "my devices" is wanted);
+plumbing the collector's `logged_on_user` into a one-click suggested assignee (spec 16); and
+an optional note/reason per assignment event (spec 16)._

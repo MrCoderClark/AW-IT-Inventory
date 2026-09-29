@@ -29,7 +29,14 @@ const h = vi.hoisted(() => {
   const getCurrentUser = vi.fn();
   const hasPermission = vi.fn();
   const revalidatePath = vi.fn();
-  return { returning, chain, db, getCurrentUser, hasPermission, revalidatePath };
+  // The assignment engine is the boundary the asset form now routes through
+  // (spec 16, AC-11); spy on its transaction-aware cores.
+  const assignAssetTx = vi.fn();
+  const returnAssetTx = vi.fn();
+  return {
+    returning, chain, db, getCurrentUser, hasPermission, revalidatePath,
+    assignAssetTx, returnAssetTx,
+  };
 });
 
 vi.mock("@/db/index", () => ({ db: h.db }));
@@ -38,6 +45,13 @@ vi.mock("@/lib/auth/session", () => ({
   hasPermission: h.hasPermission,
 }));
 vi.mock("next/cache", () => ({ revalidatePath: h.revalidatePath }));
+vi.mock("@/db/assignments", () => ({
+  assignAssetTx: h.assignAssetTx,
+  returnAssetTx: h.returnAssetTx,
+  // The FK tests below exercise the real FK path (23503), not this race, so a
+  // constant false keeps them unchanged.
+  isOpenAssignmentRace: () => false,
+}));
 // queries.ts is a `server-only` module; mock the one helper the actions use for
 // the leaf check (default: the chosen location is an assignable leaf).
 vi.mock("@/db/queries", () => ({
@@ -61,12 +75,21 @@ const validInput = {
   warrantyUntil: "",
 };
 
+const PERSON = "550e8400-e29b-41d4-a716-446655440000";
+
 beforeEach(() => {
   vi.clearAllMocks();
   // Default: a signed-in user who can write, and an empty query result.
-  h.getCurrentUser.mockResolvedValue({ id: "u1", permissions: ["asset:write"] });
+  h.getCurrentUser.mockResolvedValue({
+    id: "u1",
+    email: "admin@x",
+    permissions: ["asset:write"],
+  });
   h.hasPermission.mockReturnValue(true);
   h.returning.mockResolvedValue([]);
+  // The engine succeeds by default; individual tests override.
+  h.assignAssetTx.mockResolvedValue({ ok: true });
+  h.returnAssetTx.mockResolvedValue({ ok: true, changed: false });
 });
 
 describe("createAsset (AC-2, AC-6, AC-8)", () => {
@@ -218,6 +241,70 @@ describe("updateAsset (AC-3, AC-6, AC-7)", () => {
 
     expect(res.ok).toBe(false);
     expect(h.db.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("assignee reroute through the assignment engine (spec 16, AC-11)", () => {
+  it("createAsset routes the initial assignee through assignAssetTx, never a direct write", async () => {
+    h.returning.mockResolvedValue([{ tag: "OPUS-MON-ABC12", id: "asset-id" }]);
+
+    const res = await createAsset({ ...validInput, assigneeId: PERSON });
+
+    expect(res.ok).toBe(true);
+    expect(h.assignAssetTx).toHaveBeenCalledWith(
+      expect.anything(),
+      "asset-id",
+      PERSON,
+      "admin@x",
+    );
+    // The asset insert payload no longer carries assigneeId (the engine owns it).
+    const insertPayload = (h.chain.values as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as Record<string, unknown>;
+    expect(insertPayload).not.toHaveProperty("assigneeId");
+  });
+
+  it("createAsset rolls back and reports an archived assignee", async () => {
+    h.returning.mockResolvedValue([{ tag: "OPUS-MON-ABC12", id: "asset-id" }]);
+    h.assignAssetTx.mockResolvedValue({ ok: false, error: "person-archived" });
+
+    const res = await createAsset({ ...validInput, assigneeId: PERSON });
+    expect(res.ok).toBe(false);
+    expect(res.ok === false && res.error).toMatch(/archived/i);
+  });
+
+  it("createAsset does not call the engine when there is no assignee", async () => {
+    h.returning.mockResolvedValue([{ tag: "OPUS-MON-ABC12", id: "asset-id" }]);
+    await createAsset(validInput); // assigneeId ""
+    expect(h.assignAssetTx).not.toHaveBeenCalled();
+  });
+
+  it("updateAsset routes an assignee change through assignAssetTx", async () => {
+    h.returning.mockResolvedValue([{ id: "asset-id", assigneeId: null }]);
+    await updateAsset("OPUS-MON-ABC12", { ...validInput, assigneeId: PERSON });
+    expect(h.assignAssetTx).toHaveBeenCalledWith(
+      expect.anything(),
+      "asset-id",
+      PERSON,
+      "admin@x",
+    );
+  });
+
+  it("updateAsset returns the device to the pool when the assignee is cleared", async () => {
+    h.returning.mockResolvedValue([{ id: "asset-id", assigneeId: "old-person" }]);
+    await updateAsset("OPUS-MON-ABC12", { ...validInput, assigneeId: "" });
+    expect(h.returnAssetTx).toHaveBeenCalledWith(
+      expect.anything(),
+      "asset-id",
+      "admin@x",
+    );
+    expect(h.assignAssetTx).not.toHaveBeenCalled();
+  });
+
+  it("updateAsset touches neither path when the assignee is unchanged", async () => {
+    h.returning.mockResolvedValue([{ id: "asset-id", assigneeId: PERSON }]);
+    await updateAsset("OPUS-MON-ABC12", { ...validInput, assigneeId: PERSON });
+    expect(h.assignAssetTx).not.toHaveBeenCalled();
+    expect(h.returnAssetTx).not.toHaveBeenCalled();
   });
 });
 

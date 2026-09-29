@@ -1,25 +1,39 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Copy,
   Loader2,
   Pencil,
+  Plus,
   Printer,
   ScanLine,
   Trash2,
+  Undo2,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { deleteAsset } from "@/app/(app)/assets/actions";
+import {
+  assignAssetAction,
+  returnAssetAction,
+} from "@/app/(app)/people-actions";
 import { requestScan } from "@/app/(app)/scan-actions";
 import {
   AssetFormDialog,
   type PersonOption,
 } from "@/components/asset-form-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -36,6 +50,7 @@ import {
   type Asset,
   type AssetReachability,
   type AssetType,
+  type AssignmentEvent,
   type InstalledSoftwareItem,
   type LocationOption,
   type MachineSummary,
@@ -131,29 +146,46 @@ function Field({ label, value, mono }: { label: string; value: string; mono?: bo
   );
 }
 
-function AuditTimeline({ asset }: { asset: Asset }) {
-  const events = [
-    {
-      what: asset.assignee
-        ? `Assigned to ${asset.assignee.name}`
-        : "Returned to pool",
-      when: fmt(asset.lastSync),
-    },
-    { what: "Provisioned by IT Automation", when: fmt(asset.purchaseDate) },
-    { what: "Received from warehouse", when: fmt(asset.purchaseDate) },
-  ];
+/** The device's real custody history (spec 16, AC-7): each person who held it,
+   with the open and close times. Newest first. */
+function AssignmentTimeline({ history }: { history: AssignmentEvent[] }) {
+  if (history.length === 0) {
+    return (
+      <p className="rounded-xl border border-dashed bg-card/50 p-5 text-sm text-muted-foreground">
+        No assignment history yet.
+      </p>
+    );
+  }
   return (
     <ol className="relative ml-1 border-l pl-5">
-      {events.map((e, i) => (
-        <li key={i} className="relative pb-4 last:pb-0">
+      {history.map((e) => (
+        <li key={e.id} className="relative pb-5 last:pb-0">
           <span
             className={cn(
               "absolute -left-[23px] top-1 size-2.5 rounded-full border-2 bg-card",
-              i === 0 ? "border-primary" : "border-border",
+              e.open ? "border-primary" : "border-border",
             )}
           />
-          <p className="text-sm">{e.what}</p>
-          <p className="font-mono text-[11px] text-muted-foreground">{e.when}</p>
+          <p className="text-sm">
+            <Link
+              href={`/people/${e.personId}`}
+              className="font-medium hover:underline"
+            >
+              {e.personName}
+            </Link>
+          </p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Assigned {fmtDateTime(e.assignedAt)} by {e.assignedBy}
+          </p>
+          {e.open ? (
+            <p className="mt-0.5 text-xs text-[color:var(--status-online)]">
+              Currently held
+            </p>
+          ) : (
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Returned {fmtDateTime(e.unassignedAt)} by {e.unassignedBy}
+            </p>
+          )}
         </li>
       ))}
     </ol>
@@ -173,6 +205,7 @@ export function AssetDetail({
   reachability = null,
   counters = null,
   software = [],
+  assignmentHistory = [],
 }: {
   asset: Asset;
   machine?: MachineSummary;
@@ -200,8 +233,14 @@ export function AssetDetail({
   /** Tracked software found on this computer (spec 15, AC-6); the panel shows for
      Computer assets, with an empty state when none was found. */
   software?: InstalledSoftwareItem[];
+  /** This device's custody history (spec 16, AC-7), newest first. */
+  assignmentHistory?: AssignmentEvent[];
 }) {
   const Icon = TYPE_ICON[asset.type];
+  // Printers / network gear are never assigned to a person.
+  const isAssignable = !TYPE_FIELDS[asset.type].hiddenShared.includes(
+    "assigneeId",
+  );
   const showHealth =
     asset.type === "Computer" || asset.type === "Printer" || Boolean(machine);
 
@@ -210,6 +249,36 @@ export function AssetDetail({
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [isDeleting, startDelete] = React.useTransition();
   const [isScanning, startScan] = React.useTransition();
+  const [isAssigning, startAssign] = React.useTransition();
+  const [assignPerson, setAssignPerson] = React.useState("");
+
+  // Assign this device to the chosen person (AC-5), or return it (AC-6). Both
+  // route through the assignment engine, then refresh to show the new history.
+  function assign() {
+    if (!assignPerson) return;
+    startAssign(async () => {
+      const res = await assignAssetAction(asset.id, assignPerson);
+      if (res.ok) {
+        toast.success(res.message);
+        setAssignPerson("");
+        router.refresh();
+      } else {
+        toast.error(res.error);
+      }
+    });
+  }
+
+  function returnDevice() {
+    startAssign(async () => {
+      const res = await returnAssetAction(asset.id);
+      if (res.ok) {
+        toast.success(res.message);
+        router.refresh();
+      } else {
+        toast.error(res.error);
+      }
+    });
+  }
 
   // Queue a manual scan of just this device (AC-1). The worker picks it up; the
   // page's live-scan data refreshes on its next load once results ingest.
@@ -566,14 +635,69 @@ export function AssetDetail({
         </div>
       )}
 
-      {/* Audit history */}
-      <Separator />
-      <div>
-        <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-          Audit History
-        </p>
-        <AuditTimeline asset={asset} />
-      </div>
+      {/* Assignment (spec 16, AC-5, AC-6, AC-7) — assignable types only */}
+      {isAssignable && (
+        <>
+          <Separator />
+          <div>
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Assignment
+            </p>
+
+            {canWrite && (
+              <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border bg-card p-4">
+                <Select
+                  value={assignPerson || null}
+                  onValueChange={(v) => setAssignPerson(v ?? "")}
+                >
+                  <SelectTrigger className="w-full sm:w-64">
+                    <SelectValue
+                      placeholder={
+                        asset.assignee ? "Reassign to…" : "Assign to…"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {people.length ? (
+                      people.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="" disabled>
+                        No active people — add someone first
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+                <Button
+                  onClick={assign}
+                  disabled={isAssigning || !assignPerson}
+                >
+                  {isAssigning ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Plus className="size-4" />
+                  )}
+                  Assign
+                </Button>
+                {asset.assignee && (
+                  <Button
+                    variant="outline"
+                    onClick={returnDevice}
+                    disabled={isAssigning}
+                  >
+                    <Undo2 className="size-4" /> Return
+                  </Button>
+                )}
+              </div>
+            )}
+
+            <AssignmentTimeline history={assignmentHistory} />
+          </div>
+        </>
+      )}
 
       {/* Actions */}
       <div className="grid max-w-md grid-cols-2 gap-2">
