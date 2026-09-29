@@ -33,6 +33,16 @@ class Health(BaseModel):
     logged_on_user: str | None = None
 
 
+class Software(BaseModel):
+    """One installed program read from a Windows registry Uninstall key (spec 15).
+    Registry values are strings (or absent); `install_date` is left as-is."""
+
+    name: str | None = None
+    version: str | None = None
+    publisher: str | None = None
+    install_date: str | None = None
+
+
 class PrinterInfo(BaseModel):
     description: str | None = None
     model: str | None = None
@@ -53,6 +63,10 @@ class HostResult(BaseModel):
     hardware: Hardware | None = None
     health: Health | None = None
     printer: PrinterInfo | None = None
+    # Installed programs matching interest (spec 15). None = not collected (a
+    # non-Windows host, or a software read that failed); an empty list = read OK,
+    # nothing found. The web app filters this to the watchlist at ingest.
+    software: list[Software] | None = None
     errors: list[str] = Field(default_factory=list)
 
 

@@ -1,8 +1,9 @@
-import { Gauge, Lock, Radar } from "lucide-react";
+import { AppWindow, Gauge, Lock, Radar } from "lucide-react";
 
 import { DiscoveryToggles } from "@/components/discovery-toggles";
 import { PagePlaceholder } from "@/components/page-placeholder";
 import { SendCounterReport } from "@/components/send-counter-report";
+import { TrackedSoftwareCard } from "@/components/tracked-software-card";
 import {
   Card,
   CardContent,
@@ -11,6 +12,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { getDiscoverySettings } from "@/db/discovery";
+import { getTrackedSoftware } from "@/db/software";
 import { hasPermission, requireUser } from "@/lib/auth/session";
 
 // Read fresh: the switches are shared and an admin may have just flipped one.
@@ -31,7 +33,10 @@ export default async function Page() {
   }
 
   const canWrite = hasPermission(user, "scan:write");
-  const settings = await getDiscoverySettings();
+  const [settings, trackedSoftware] = await Promise.all([
+    getDiscoverySettings(),
+    canWrite ? getTrackedSoftware() : Promise.resolve([]),
+  ]);
 
   return (
     <div className="mx-auto flex max-w-[900px] flex-col gap-6">
@@ -77,6 +82,28 @@ export default async function Page() {
           </CardHeader>
           <CardContent>
             <SendCounterReport />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Software watchlist (spec 15, AC-1). Management is scan:write only (AC-7);
+          viewing tracked software lives on the /software page, open to any
+          asset:read user. */}
+      {canWrite && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <AppWindow className="size-5 text-muted-foreground" />
+              <CardTitle>Tracked software</CardTitle>
+            </div>
+            <CardDescription>
+              Choose the software titles to watch across the fleet. A Windows scan
+              records each title it finds on a managed computer; the Software page
+              shows where each is installed and on which versions.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <TrackedSoftwareCard titles={trackedSoftware} />
           </CardContent>
         </Card>
       )}

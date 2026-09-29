@@ -417,6 +417,70 @@ export const printerCounters = pgTable(
   ],
 );
 
+// ── Software inventory (spec 15) ─────────────────────────────────────────────
+// A small, admin-managed watchlist of software titles (`tracked_software`) and
+// the current tracked-software matches per Computer asset (`installed_software`).
+// Both are additive and brand new (no rows to backfill), so NOT NULL columns are
+// safe. The watchlist is read at ingest to filter each machine's installed
+// programs to the tracked titles; matches are stored as current state per
+// Computer asset (deleted and reinserted on each Windows scan of that asset, no
+// history), keyed on `assetId` like `printer_counters`.
+
+// The watchlist: admin-chosen titles, each also its case-insensitive "contains"
+// match term. Unique on `lower(name)` so a title can't be added twice in a
+// different case. Managed on /admin, gated on `scan:write`.
+export const trackedSoftware = pgTable(
+  "tracked_software",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(), // the tracked title AND the match term
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    uniqueIndex("tracked_software_name_lower_uq").on(sql`lower(${t.name})`),
+  ],
+);
+
+// Current tracked software found on a Computer asset. Only Computer assets ever
+// get rows (enforced at ingest). A row is the actual DisplayName found, tied back
+// to the watchlist title it matched. Full-replaced per asset on each scan, so no
+// timestamps beyond `lastSeenAt` (the scan that recorded it).
+export const installedSoftware = pgTable(
+  "installed_software",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    trackedId: uuid("tracked_id")
+      .notNull()
+      .references(() => trackedSoftware.id, { onDelete: "cascade" }),
+    name: text("name").notNull(), // the actual DisplayName, e.g. "Google Chrome"
+    version: text("version"),
+    publisher: text("publisher"),
+    installDate: text("install_date"), // registry value is a string, stored as-is
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    // One row per (asset, tracked title, exact program, version).
+    uniqueIndex("installed_software_asset_tracked_name_version_uq").on(
+      t.assetId,
+      t.trackedId,
+      t.name,
+      t.version,
+    ),
+    // Serves the per-title drill-down and the /software aggregate.
+    index("installed_software_tracked_idx").on(t.trackedId),
+    // Serves the full-replace-per-asset delete and the detail-page panel.
+    index("installed_software_asset_idx").on(t.assetId),
+  ],
+);
+
 export type AssetRow = typeof assets.$inferSelect;
 export type PersonRow = typeof people.$inferSelect;
 export type MachineRow = typeof machines.$inferSelect;
@@ -433,3 +497,5 @@ export type PrinterStatusRow = typeof printerStatus.$inferSelect;
 export type ScanWorkerRow = typeof scanWorkers.$inferSelect;
 export type DiscoverySettingRow = typeof discoverySettings.$inferSelect;
 export type PrinterCounterRow = typeof printerCounters.$inferSelect;
+export type TrackedSoftwareRow = typeof trackedSoftware.$inferSelect;
+export type InstalledSoftwareRow = typeof installedSoftware.$inferSelect;

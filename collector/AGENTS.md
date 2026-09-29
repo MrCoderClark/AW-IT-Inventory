@@ -17,7 +17,7 @@ jobs and runs the printer reachability + daily report schedule).
 | `config.py` | `Config` model (pydantic), YAML load + `.env` load; secrets named via `*_env` fields |
 | `discovery.py` | Host discovery + classification via TCP connect probes (no ICMP/ARP) |
 | `creds.py` | Per-host credential profile resolution (rules matched top-down, ordered fallback) |
-| `collect_windows.py` | WinRM collection: one PowerShell/CIM call returns JSON; tries each profile |
+| `collect_windows.py` | WinRM collection: one PowerShell/CIM call returns JSON; tries each profile; also reads installed software from the registry Uninstall keys (spec 15) |
 | `collect_snmp.py` | SNMP printer collection: identity, status, and the page counter (see Gotchas) |
 | `reachability.py` | Worker's scheduled printer TCP probes, daily SNMP collect, counter report, prune |
 | `worker.py` | Long-running worker: the job claim loop + an in-process APScheduler |
@@ -53,9 +53,10 @@ uv run pytest -q                                              # tests
 - **The fleet Canons answer SNMP v1 only** (imageFORCE, iR series) and silently drop v2c. `snmp_version: "auto"` (the default) tries v2c then falls back to v1, so they read with no config; pin `v1` to skip the v2c timeout on an all-Canon subnet.
 - **`counter_oids` is tried in order, first number wins**, each in its own GET (per the v1 rule above). Default: Canon "Total 2" (`…1602.1.11.1.3.1.4.102`) then the standard `prtMarkerLifeCount`. Put a vendor OID ahead of the standard fallback; the iR1750's total reads via the standard fallback (its Canon `.101` equals the standard value).
 - **WinRM is blocking (run in a thread pool); SNMP is async.** `scan` collects Windows hosts on threads and printers on asyncio; keep that split.
+- **Installed software rides the WinRM collect (spec 15).** `collect_windows` reads the registry Uninstall keys (HKLM 64-bit, `WOW6432Node`, HKCU) in the same PowerShell call, never `Win32_Product` (slow, can trigger MSI repair). Best effort: a software read failure never fails the machine collect (`software=None` then). The collector sends every named program (`HostResult.software`); the web app filters to the watchlist at ingest. Blank registry values (the PS `"$(...)"` coercion yields `""`) normalize to `None`.
 
 ## Related specs
 
-- [04](../docs/specs/04-collector-agent-spec.md) collector agent · [12](../docs/specs/12-scheduled-manual-scans/index.md) scheduled/manual scans + reachability · [13](../docs/specs/13-discovery-type-toggles/index.md) discovery toggles · [14](../docs/specs/14-printer-page-counter/index.md) printer page counter
+- [04](../docs/specs/04-collector-agent-spec.md) collector agent · [12](../docs/specs/12-scheduled-manual-scans/index.md) scheduled/manual scans + reachability · [13](../docs/specs/13-discovery-type-toggles/index.md) discovery toggles · [14](../docs/specs/14-printer-page-counter/index.md) printer page counter · [15](../docs/specs/15-software-inventory/index.md) software inventory
 
 _Drafted by /audit from the repo, worth a quick human pass. Edit freely: once a line stops matching this draft, later runs treat it as curated and will flag rather than overwrite it._
