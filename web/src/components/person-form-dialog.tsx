@@ -178,7 +178,13 @@ export function PersonFormDialog({
                 onValueChange={(v) => set("officeLocationId", v ?? "")}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="No location" />
+                  {/* Base UI Select.Value falls back to the raw value (a uuid)
+                     once the popup closes; map it back to the location path. */}
+                  <SelectValue placeholder="No location">
+                    {(value) =>
+                      locations.find((l) => l.id === value)?.path ?? "No location"
+                    }
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {/* "" clears the location; a person may sit at any node. */}
