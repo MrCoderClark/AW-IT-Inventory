@@ -651,11 +651,17 @@ export function AssetDetail({
                   onValueChange={(v) => setAssignPerson(v ?? "")}
                 >
                   <SelectTrigger className="w-full sm:w-64">
+                    {/* Map the selected value (a person id) back to their name. */}
                     <SelectValue
                       placeholder={
                         asset.assignee ? "Reassign to…" : "Assign to…"
                       }
-                    />
+                    >
+                      {(value) =>
+                        people.find((p) => p.id === value)?.name ??
+                        (asset.assignee ? "Reassign to…" : "Assign to…")
+                      }
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {people.length ? (

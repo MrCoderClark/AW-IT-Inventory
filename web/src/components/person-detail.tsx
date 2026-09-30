@@ -245,7 +245,13 @@ export function PersonDetail({
                 onValueChange={(v) => setAssignTag(v ?? "")}
               >
                 <SelectTrigger className="w-full sm:w-72">
-                  <SelectValue placeholder="Choose a device to assign…" />
+                  {/* Map the selected value (an asset tag) back to its label. */}
+                  <SelectValue placeholder="Choose a device to assign…">
+                    {(value) => {
+                      const a = pickable.find((x) => x.tag === value);
+                      return a ? `${a.name} (${a.tag})` : "Choose a device to assign…";
+                    }}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {pickable.length ? (

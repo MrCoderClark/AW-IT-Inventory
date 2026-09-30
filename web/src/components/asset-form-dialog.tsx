@@ -263,7 +263,12 @@ export function AssetFormDialog({
                   className="w-full"
                   aria-invalid={!!errors.status}
                 >
-                  <SelectValue placeholder="Choose a status" />
+                  <SelectValue placeholder="Choose a status">
+                    {(value) =>
+                      STATUS_META[value as keyof typeof STATUS_META]?.label ??
+                      "Choose a status"
+                    }
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {ASSET_STATUSES.map((s) => (
@@ -282,7 +287,12 @@ export function AssetFormDialog({
                   onValueChange={(v) => set("assigneeId", v ?? "")}
                 >
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Available (unassigned)" />
+                    <SelectValue placeholder="Available (unassigned)">
+                      {(value) =>
+                        people.find((p) => p.id === value)?.name ??
+                        "Available (unassigned)"
+                      }
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {/* Empty string is the "unassigned" sentinel; the schema
@@ -321,7 +331,11 @@ export function AssetFormDialog({
                 onValueChange={(v) => set("locationId", v ?? "")}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="No location" />
+                  <SelectValue placeholder="No location">
+                    {(value) =>
+                      locations.find((l) => l.id === value)?.path ?? "No location"
+                    }
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {/* "" is the "No location" sentinel; the schema coerces it to
