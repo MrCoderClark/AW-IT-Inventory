@@ -19,6 +19,7 @@ dump: the atomic build steps stay in each feature's spec (`docs/specs/`). Run
 | Per-run ignore of discovery switches (collector) | done | — |
 | Software inventory (tracked-software watchlist) | done | [15](../specs/15-software-inventory/index.md) |
 | People directory and device assignments | done | [16](../specs/16-people-directory-assignments/index.md) |
+| OPUS UI redesign (new global direction) | in-progress | [17](../specs/17-ui-redesign/index.md) |
 
 ## Features
 
@@ -374,6 +375,46 @@ allowed only for a person with no history; viewing is open to any `asset:read` u
       (AC-8, AC-9), and the directory (search, device count, archived-hidden, pagination,
       write-control gate). Full web suite green (349). AC-10's negative runtime path and
       AC-2's live pagination were also proven in `/check verify`.
+
+### OPUS UI redesign (new global direction) · in-progress
+
+Move OPUS to a new look (light first, one blue accent, a light sidebar, photographic
+hero headers on list pages), rebuild the printer list and detail pages to the new
+mocks (a tabbed detail with live health, counters, checks, and a derived activity
+feed), add uploaded product images per asset (MinIO object storage), and roll the new
+layouts out to every asset category. An umbrella program (spec 17) with five children,
+built in order. The mocks in `docs/Design/` are the design authority and supersede the
+old teal, dark-first `design-system.md`.
+
+**Done when**: every page renders in the new light, blue theme with the new light
+sidebar (no teal); an `asset:write` user can upload a product image (MinIO, size/type
+limited) shown on detail + list; the printer list matches the list mock (hero,
+Manufacturer/Model/Location filters, table) and the printer detail matches the detail
+mock (product image, Edit/Run Check/Open Management UI, and the five tabs); Run Check
+enqueues an on-demand check via the collector and the Activity feed is derived from
+existing history; and the Computers, Monitors, Phones, and Network pages use the same
+new list and tabbed detail layouts.
+
+- [x] Design it (spec): [17](../specs/17-ui-redesign/index.md)
+- [ ] Build it: `/develop opus ui redesign` (build the children in order)
+  - [x] Design system foundation (child 01): light-first + blue tokens, light sidebar,
+        `HeroHeader` + `Tabs` primitives, light-mode regression pass, teal-literal guard
+        (covers AC-1) — code in `web/src/app/globals.css` (blue tokens, light default),
+        `web/src/app/layout.tsx` (defaultTheme light), `web/src/components/app-sidebar.tsx`
+        (blue active nav), `web/src/components/hero-header.tsx`, `web/src/components/ui/tabs.tsx`,
+        `web/scripts/check-no-teal.mjs` + `web/src/test/no-teal-literal.test.ts`; design doc
+        rewritten (`docs/Design/design-system.md`). Awaiting visual light-mode verify + typecheck.
+  - [ ] Asset image upload (child 02): MinIO storage + upload/view/delete routes +
+        `assets.imageKey`, image on detail + list, `asset:write` gate (covers AC-2)
+  - [ ] Printers redesign (child 03): hero list + Manufacturer/Model/Location filters,
+        tabbed detail (Overview/Network/Counters/Checks/Activity), Run Check (reuses
+        spec 12), Open Management UI, derived Activity feed (covers AC-3, AC-4)
+  - [ ] Computers redesign (child 04): the shared tabbed detail framework + the Computers
+        list and detail (live scan, software, assignment tabs) (covers AC-5)
+  - [ ] Monitors/Phones/Network rollout (child 05): the three thin categories on the
+        shared framework (covers AC-5)
+- [ ] Verify it: `/check verify opus ui redesign`
+- [ ] Test it: `/test opus ui redesign`
 
 _Parked in the specs (not yet enrolled — conditional on a trigger): per-model /
 per-profile counter OID overrides and mono/color + print/copy breakdowns (spec 14,

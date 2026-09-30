@@ -23,12 +23,18 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
       href={item.href}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+        "relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/50",
         active
           ? "bg-sidebar-accent text-sidebar-accent-foreground"
-          : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
+          : "text-muted-foreground hover:bg-muted hover:text-sidebar-foreground",
       )}
     >
+      {active && (
+        <span
+          aria-hidden
+          className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-full bg-sidebar-primary"
+        />
+      )}
       <Icon className="size-[18px] shrink-0" />
       {item.label}
     </Link>

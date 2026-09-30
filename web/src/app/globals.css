@@ -26,24 +26,29 @@
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
+  --color-border-soft: var(--border-soft);
   --color-destructive: var(--destructive);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
   --color-muted-foreground: var(--muted-foreground);
   --color-muted: var(--muted);
+  --color-faint: var(--faint);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary: var(--primary);
+  --color-primary-strong: var(--primary-strong);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
 
-  /* OPUS semantic status colors */
+  /* OPUS semantic status colors (separate from the blue accent) */
   --color-status-deployed: var(--status-deployed);
   --color-status-maintenance: var(--status-maintenance);
   --color-status-online: var(--status-online);
+  --color-status-down: var(--status-down);
   --color-status-storage: var(--status-storage);
   --color-positive: var(--positive);
 
@@ -54,99 +59,116 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+  --radius-control: var(--radius-control);
+  --radius-card: var(--radius-card);
 }
 
 /* ============================================================
    OPUS palette — light theme (default :root) + dark theme (.dark)
-   Teal accent (#0D9488 light / #2DD4BF dark). Dark is the product default
-   (see ThemeProvider defaultTheme="dark").
+   Single blue accent (#2563EB light / #3B82F6 dark). Light is the
+   product default (see ThemeProvider defaultTheme="light"); the dark
+   toggle keeps the same blue accent on dark grounds. Semantic status
+   colors are kept separate from the accent. Direction: spec 17.01 and
+   the mocks in docs/Design/. Components never hardcode a color literal.
    ============================================================ */
 :root {
   --radius: 0.85rem;
+  --radius-control: 10px;
+  --radius-card: 16px;
 
-  --background: #f4f6f8;
-  --foreground: #0f1b22;
+  --background: #f6f8fb;
+  --foreground: #0f172a;
   --card: #ffffff;
-  --card-foreground: #0f1b22;
+  --card-foreground: #0f172a;
   --popover: #ffffff;
-  --popover-foreground: #0f1b22;
+  --popover-foreground: #0f172a;
 
-  --primary: #0d9488;
+  --primary: #2563eb;
+  --primary-strong: #1d4ed8;
   --primary-foreground: #ffffff;
-  --secondary: #edf0f3;
-  --secondary-foreground: #0f1b22;
-  --muted: #eef1f4;
-  --muted-foreground: #5a6b76;
-  --accent: #e2f4f1;
-  --accent-foreground: #0b7a70;
+  --secondary: #eef2f6;
+  --secondary-foreground: #0f172a;
+  --muted: #eef2f6;
+  --muted-foreground: #64748b;
+  --faint: #94a3b8;
+  --accent: #eaf1fe;
+  --accent-foreground: #1d4ed8;
+  --accent-soft: rgba(37, 99, 235, 0.1);
 
   --destructive: #dc2626;
-  --border: #e3e8ec;
-  --input: #e3e8ec;
-  --ring: #0d9488;
+  --border: #e2e8f0;
+  --border-soft: #eef2f6;
+  --input: #e2e8f0;
+  --ring: #2563eb;
 
-  --chart-1: #0d9488;
-  --chart-2: #2563eb;
+  --chart-1: #2563eb;
+  --chart-2: #0ea5e9;
   --chart-3: #d97706;
   --chart-4: #64748b;
   --chart-5: #7c3aed;
 
   --sidebar: #ffffff;
-  --sidebar-foreground: #0f1b22;
-  --sidebar-primary: #0d9488;
+  --sidebar-foreground: #0f172a;
+  --sidebar-primary: #2563eb;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #e2f4f1;
-  --sidebar-accent-foreground: #0b7a70;
-  --sidebar-border: #e9edf0;
-  --sidebar-ring: #0d9488;
+  --sidebar-accent: #eaf1fe;
+  --sidebar-accent-foreground: #1d4ed8;
+  --sidebar-border: #e8edf3;
+  --sidebar-ring: #2563eb;
 
   --status-deployed: #16a34a;
   --status-maintenance: #d97706;
-  --status-online: #0d9488;
+  --status-online: #16a34a;
+  --status-down: #dc2626;
   --status-storage: #64748b;
   --positive: #16a34a;
 }
 
 .dark {
-  --background: #0e1317;
-  --foreground: #f2f6f8;
-  --card: #151c22;
-  --card-foreground: #f2f6f8;
-  --popover: #151c22;
-  --popover-foreground: #f2f6f8;
+  --background: #0b1220;
+  --foreground: #f1f5f9;
+  --card: #111a2b;
+  --card-foreground: #f1f5f9;
+  --popover: #111a2b;
+  --popover-foreground: #f1f5f9;
 
-  --primary: #2dd4bf;
-  --primary-foreground: #04201c;
-  --secondary: #1a222a;
-  --secondary-foreground: #f2f6f8;
-  --muted: #1a222a;
-  --muted-foreground: #93a2ad;
-  --accent: #16302e;
-  --accent-foreground: #5eead4;
+  --primary: #3b82f6;
+  --primary-strong: #2563eb;
+  --primary-foreground: #ffffff;
+  --secondary: #1e293b;
+  --secondary-foreground: #f1f5f9;
+  --muted: #1e293b;
+  --muted-foreground: #94a3b8;
+  --faint: #64748b;
+  --accent: #17274a;
+  --accent-foreground: #93b4fc;
+  --accent-soft: rgba(59, 130, 246, 0.16);
 
   --destructive: #f1736e;
-  --border: #232e37;
-  --input: #26313a;
-  --ring: #2dd4bf;
+  --border: #1e293b;
+  --border-soft: #172033;
+  --input: #24324a;
+  --ring: #3b82f6;
 
-  --chart-1: #2dd4bf;
-  --chart-2: #3b82f6;
+  --chart-1: #3b82f6;
+  --chart-2: #38bdf8;
   --chart-3: #fbbf24;
-  --chart-4: #64748b;
-  --chart-5: #8b5cf6;
+  --chart-4: #94a3b8;
+  --chart-5: #a78bfa;
 
-  --sidebar: #0b1014;
-  --sidebar-foreground: #f2f6f8;
-  --sidebar-primary: #2dd4bf;
-  --sidebar-primary-foreground: #04201c;
-  --sidebar-accent: #16302e;
-  --sidebar-accent-foreground: #5eead4;
-  --sidebar-border: #1c262e;
-  --sidebar-ring: #2dd4bf;
+  --sidebar: #080e1a;
+  --sidebar-foreground: #f1f5f9;
+  --sidebar-primary: #3b82f6;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #17274a;
+  --sidebar-accent-foreground: #bfd3fd;
+  --sidebar-border: #172033;
+  --sidebar-ring: #3b82f6;
 
   --status-deployed: #4ade80;
   --status-maintenance: #fbbf24;
-  --status-online: #2dd4bf;
+  --status-online: #4ade80;
+  --status-down: #f87171;
   --status-storage: #94a3b8;
   --positive: #4ade80;
 }
