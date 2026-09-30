@@ -77,13 +77,15 @@ what already exists wherever possible (the activity feed from reachability and
 counter history, Manufacturer from the existing vendor field, counters as the
 single total OPUS already reads) rather than built new; the two genuinely new
 capabilities the engineer asked for, uploaded images and the async Run Check, are
-built, the first on MinIO (self hosted S3, matching OPUS's on prem, self hosted
-posture) and the second on the existing spec 12 collector path (so the web app
-still never reaches into the fleet).
+built, the first on self hosted, S3 compatible object storage (matching OPUS's on
+prem, self hosted posture) and the second on the existing spec 12 collector path
+(so the web app still never reaches into the fleet).
 
-MinIO over local disk or Postgres bytea: the engineer chose it for real object
-storage that scales and keeps image bytes out of the inventory database and its
-backups, accepting one more on prem service to run. Local disk was simpler but ties
+S3 compatible object storage over local disk or Postgres bytea: chosen for real
+object storage that scales and keeps image bytes out of the inventory database and
+its backups, accepting one more on prem service to run. The app talks the standard
+S3 API through `@aws-sdk/client-s3`, so the concrete store (Garage, SeaweedFS, or
+another) is a deployment choice, not a code dependency. Local disk was simpler but ties
 images to one web host; Postgres bytea bloats the DB. HTTP per protocol
 reachability and a mono/color counter split were both declined for v1 (rendered as
 "not tracked"), keeping this program a redesign rather than a collector rewrite;

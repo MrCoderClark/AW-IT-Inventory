@@ -1,13 +1,14 @@
-# 17.02 Asset image upload (MinIO object storage)
+# 17.02 Asset image upload (S3 compatible object storage)
 
 Child of the [spec 17 umbrella](index.md).
 
 ## Summary
 
-Let an admin upload a product photo for any asset. Images are stored in self hosted
-object storage (MinIO, an S3 compatible service OPUS runs on prem), referenced by a
-key on the asset row, and shown on the asset's detail page and list rows. A generic
-type icon shows when an asset has no image.
+Let an admin upload a product photo for any asset. Images are stored in self
+hosted, S3 compatible object storage (Garage is the recommended on prem store;
+SeaweedFS or any S3 compatible service also works), referenced by a key on the
+asset row, and shown on the asset's detail page and list rows. A generic type
+icon shows when an asset has no image.
 
 ## Requirements
 
@@ -18,31 +19,36 @@ type icon shows when an asset has no image.
 
 **Acceptance criteria**:
 - **AC-2.1**: An `asset:write` user can upload an image (PNG, JPEG, or WebP, at most
-  5 MB) for any asset; it is stored in MinIO and the asset's `imageKey` is set.
+  5 MB) for any asset; it is stored in the object store and the asset's `imageKey`
+  is set.
 - **AC-2.2**: The image shows on the asset detail page and on list rows; an asset
   with no image shows the generic type icon (no broken image).
 - **AC-2.3**: A non image file, a file over the limit, or an upload by a user without
   `asset:write` is rejected with a clear error and nothing is stored.
 - **AC-2.4**: An `asset:write` user can remove an asset's image; the object is
-  deleted from MinIO and `imageKey` is cleared.
+  deleted from the object store and `imageKey` is cleared.
 - **AC-2.5**: Viewing an image is open to any `asset:read` user; the bucket is not
-  public (images are served through the app, never a public MinIO URL).
+  public (images are served through the app, never a public object URL).
 
 ## Decision
 
-**Chosen option**: MinIO for storage, a route handler for upload and a route handler
-that streams the object for viewing (bucket private), an `imageKey` column on
-`assets`. Applies to all asset types.
+**Chosen option**: a self hosted, S3 compatible object store for storage, a route
+handler for upload and a route handler that streams the object for viewing (bucket
+private), an `imageKey` column on `assets`. Applies to all asset types.
 
-**Implementation skills**: none required; use the S3 compatible `minio` JS client
-(recommended over `@aws-sdk/client-s3` for a MinIO only target; runner up is the AWS
-SDK if S3 elsewhere is ever wanted).
+**Implementation skills**: none required; use the `@aws-sdk/client-s3` S3 client
+with `forcePathStyle: true`. It speaks the standard S3 API, so the app is not tied
+to any single vendor and the store can be swapped by config (endpoint plus
+credentials). It is actively maintained, and the image bytes never leave the on prem
+network.
 
-**Rationale (inline)**: MinIO matches OPUS's on prem, self hosted posture and keeps
-image bytes out of the inventory DB and its backups (the engineer's choice over
-local disk and Postgres bytea). Streaming through the app keeps the bucket private
-and reuses the existing cookie auth, so no public object URLs leak and `asset:read`
-gates viewing.
+**Rationale (inline)**: S3 compatible object storage matches OPUS's on prem, self
+hosted posture and keeps image bytes out of the inventory DB and its backups (chosen
+over local disk and Postgres bytea). Streaming through the app keeps the bucket
+private and reuses the existing cookie auth, so no public object URLs leak and
+`asset:read` gates viewing. Building against the plain S3 API (not a vendor specific
+client) means the concrete store (Garage, SeaweedFS, or another) is a deployment
+choice, not a code dependency.
 
 ## Feature design
 
@@ -51,7 +57,7 @@ gates viewing.
 `assets` (extend):
 | Column | Type | Null | Notes |
 |---|---|---|---|
-| imageKey | text | yes | MinIO object key, e.g. `assets/<uuid>/<rand>.webp`; null = no image |
+| imageKey | text | yes | S3 object key, e.g. `assets/<uuid>/<rand>.webp`; null = no image |
 
 The object key, not a URL, is stored, so the endpoint and bucket can change without
 rewriting rows.
@@ -63,14 +69,14 @@ rewriting rows.
 | `/api/assets/[tag]/image` | DELETE | — | ok | cookie + `asset:write` | 403, 404 |
 | `/api/assets/[tag]/image` | GET | — | image bytes (streamed) | cookie + `asset:read` | 404 no image |
 
-Upload validates type (PNG/JPEG/WebP) and size (<= 5 MB) on the server, puts to
-MinIO under a random key, then sets `assets.imageKey` in one step (delete the old
-object first if replacing). GET streams the object from MinIO with the right
+Upload validates type (PNG/JPEG/WebP) and size (<= 5 MB) on the server, puts to the
+object store under a random key, then sets `assets.imageKey` in one step (delete the
+old object first if replacing). GET streams the object from the store with the right
 content type and a cache header; it 404s when `imageKey` is null.
 
 **Key invariants**:
 - `imageKey` points at an object that exists, or is null; replacing an image deletes
-  the superseded object so MinIO does not accumulate orphans.
+  the superseded object so the store does not accumulate orphans.
 - The bucket is private; images are only reachable through the authenticated GET
   route.
 - The GET response sets `Cache-Control: private` (never a shared/public cache),
@@ -80,10 +86,13 @@ content type and a cache header; it 404s when `imageKey` is null.
 **Security model**: upload and delete require `asset:write`; viewing requires
 `asset:read` (the app's normal cookie session). No public bucket, no public URLs.
 
-**Configuration required**:
-- `MINIO_ENDPOINT`, `MINIO_PORT`, `MINIO_USE_SSL`: the MinIO server.
-- `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`: credentials (gitignored `.env`).
-- `MINIO_BUCKET`: the bucket for asset images (created on first use if missing).
+**Configuration required** (gitignored `web/.env`):
+- `S3_ENDPOINT`: the object store URL (e.g. `http://192.168.70.x:3900` for Garage).
+- `S3_REGION`: any value the store accepts (default `us-east-1`).
+- `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`: credentials.
+- `S3_BUCKET`: the bucket for asset images (created on first use if missing).
+- The client always uses `forcePathStyle: true` (self hosted S3 stores are path
+  style, not virtual host style).
 
 **Critical test scenarios**:
 - Happy path: upload a PNG, it stores and shows on detail + list, verifies
@@ -98,14 +107,14 @@ content type and a cache header; it 404s when `imageKey` is null.
 ## Build plan
 
 1. Migration: add `assets.imageKey` (nullable). Satisfies **AC-2.1** (data).
-2. MinIO client + config: a `server-only` `src/lib/storage.ts` wrapping the `minio`
-   client (put, get stream, remove, ensure bucket) from the env config. Satisfies
-   **AC-2.1**, **AC-2.5**.
+2. S3 client + config: a `server-only` `src/lib/storage.ts` wrapping
+   `@aws-sdk/client-s3` (put, get stream, remove, ensure bucket) from the env config,
+   with `forcePathStyle: true`. Satisfies **AC-2.1**, **AC-2.5**.
 3. Upload + delete route (`POST`/`DELETE /api/assets/[tag]/image`), gated on
    `asset:write`, with type + size validation and old object cleanup. Satisfies
    **AC-2.1**, **AC-2.3**, **AC-2.4**.
 4. View route (`GET /api/assets/[tag]/image`), gated on `asset:read`, streams from
-   MinIO or 404s. Satisfies **AC-2.2**, **AC-2.5**.
+   the object store or 404s. Satisfies **AC-2.2**, **AC-2.5**.
 5. UI: an image upload control on the asset form / detail (drop or pick, preview,
    remove) and an image slot on detail + list rows with the type icon fallback.
    Satisfies **AC-2.2**.
@@ -115,10 +124,12 @@ content type and a cache header; it 404s when `imageKey` is null.
 ## Consequences
 
 **Positive**: real product photos across the inventory; bytes stay out of Postgres;
-a reusable storage helper for any future upload.
+a reusable storage helper for any future upload; standard S3 API, so the concrete
+store is swappable and the client is actively maintained.
 
-**Negative / tradeoffs**: MinIO is a new service to deploy, secure, and back up;
-streaming images through the app adds load versus a CDN (acceptable at fleet scale).
+**Negative / tradeoffs**: the object store is a new service to deploy, secure, and
+back up; streaming images through the app adds load versus a CDN (acceptable at
+fleet scale).
 
 **Neutral**: a first use of object storage in OPUS; env and deploy docs need the
-MinIO settings.
+S3 settings, and the store itself (Garage or similar) must be stood up on prem.

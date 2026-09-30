@@ -9,8 +9,8 @@ OPUS moves to a new look: light first, a single blue accent, a restyled light
 sidebar, and photographic hero headers on list pages. The printer list and
 printer detail pages are rebuilt to the new mocks (a rich detail page with tabs),
 and the same new layouts roll out to every asset category. Along the way OPUS
-gains uploaded product images per asset, stored in self hosted object storage
-(MinIO). This umbrella holds the program; four child specs carry the pieces. The
+gains uploaded product images per asset, stored in self hosted, S3 compatible
+object storage. This umbrella holds the program; four child specs carry the pieces. The
 mocks in `docs/Design/` are the design authority and supersede the old
 `design-system.md` (which was teal and dark first).
 
@@ -23,7 +23,7 @@ This is an umbrella. Build the children in order; each is a Tracer Bullet slice
   — the global visual foundation (color tokens, light sidebar, hero header
   component, tabs, cards, typography) every page inherits. The cross child
   contract below is its output. Supports the "new global direction" decision.
-- [02. Asset image upload (MinIO object storage)](02-asset-image-upload.md)
+- [02. Asset image upload (S3 compatible object storage)](02-asset-image-upload.md)
   — self hosted S3 storage, an upload path, and an `imageKey` on every asset, so
   the redesigned pages can show a real product photo. Supports the product image
   in the printer mocks.
@@ -77,7 +77,7 @@ IDed ACs):
 - **AC-1**: Every page renders in the new light, blue accented theme with the new
   light sidebar; no page still shows the old teal accent. (child 01)
 - **AC-2**: An `asset:write` user can upload a product image for an asset, stored
-  in MinIO, and it shows on the asset's detail and list rows; a size/type limit is
+  in the object store, and it shows on the asset's detail and list rows; a size/type limit is
   enforced and viewing is open to `asset:read`. (child 02)
 - **AC-3**: The printers list matches the list mock (hero header with the office
   printer photo, Manufacturer / Model / Location filters, the reachability table,
@@ -96,7 +96,7 @@ IDed ACs):
 
 **Chosen option**: adopt a new light first, blue accented design system as the
 global direction, rebuild the printer pages to the mocks as the flagship, add
-MinIO backed asset image upload, and roll the new layouts out to every asset
+S3 backed asset image upload, and roll the new layouts out to every asset
 category. Structured as this umbrella plus four child specs, built in order.
 
 Reasoning and options: see [rationale.md](rationale.md).
@@ -107,7 +107,7 @@ The umbrella sequences the children; each child carries its own `## Build plan`.
 
 1. **Child 01 (design system)** — the token and shell foundation, applied app
    wide. Everything else builds on it. Satisfies **AC-1**.
-2. **Child 02 (image upload)** — MinIO storage, the upload path, the `imageKey`
+2. **Child 02 (image upload)** — S3 compatible object storage, the upload path, the `imageKey`
    column. The redesigned pages need it for product images. Satisfies **AC-2**.
 3. **Child 03 (printers)** — the flagship list + tabbed detail, the Tracer Bullet
    that proves the new design and the new data patterns end to end. Satisfies
@@ -128,7 +128,7 @@ The umbrella sequences the children; each child carries its own `## Build plan`.
 **Negative / tradeoffs**:
 - A large program touching every page; done as ordered slices to keep each
   shippable and verifiable.
-- A new runtime dependency to operate: MinIO (deploy, secure, back up).
+- A new runtime dependency to operate: a self hosted, S3 compatible object store (deploy, secure, back up).
 - The old `design-system.md` (teal, dark first) is superseded and must be rewritten
   to match, or it misleads.
 

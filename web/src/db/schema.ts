@@ -133,6 +133,10 @@ export const assets = pgTable("assets", {
   warrantyUntil: date("warranty_until"),
   costCenter: text("cost_center"),
   spec: text("spec"),
+  // Object key for the uploaded product photo in S3-compatible storage
+  // (spec 17.02), e.g. `assets/<uuid>/<rand>.webp`; null = no image. The key,
+  // not a URL, so the store endpoint/bucket can change without rewriting rows.
+  imageKey: text("image_key"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

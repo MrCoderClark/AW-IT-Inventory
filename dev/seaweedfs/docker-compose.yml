@@ -1,0 +1,23 @@
+# Local dev object store for OPUS asset images (spec 17.02).
+# SeaweedFS, S3-compatible, with static dev credentials from s3.json so there is
+# no init step: `docker compose up -d` and the S3 API is live on :8333. The app's
+# ensureBucket() creates the bucket on first upload.
+#
+# DEV ONLY. The credentials in s3.json are local, throwaway dev keys. Do not use
+# this compose file or these keys for anything real.
+#
+# Run from this folder:  docker compose up -d
+services:
+  seaweedfs:
+    image: chrislusf/seaweedfs:latest
+    container_name: opus-seaweedfs
+    command: "server -s3 -s3.config=/etc/seaweedfs/s3.json -dir=/data"
+    ports:
+      - "8333:8333" # S3 API (the only port the web app needs)
+    volumes:
+      - ./s3.json:/etc/seaweedfs/s3.json:ro
+      - seaweed-data:/data
+    restart: unless-stopped
+
+volumes:
+  seaweed-data:

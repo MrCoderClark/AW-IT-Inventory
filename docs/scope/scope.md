@@ -381,13 +381,13 @@ allowed only for a person with no history; viewing is open to any `asset:read` u
 Move OPUS to a new look (light first, one blue accent, a light sidebar, photographic
 hero headers on list pages), rebuild the printer list and detail pages to the new
 mocks (a tabbed detail with live health, counters, checks, and a derived activity
-feed), add uploaded product images per asset (MinIO object storage), and roll the new
+feed), add uploaded product images per asset (S3-compatible object storage), and roll the new
 layouts out to every asset category. An umbrella program (spec 17) with five children,
 built in order. The mocks in `docs/Design/` are the design authority and supersede the
 old teal, dark-first `design-system.md`.
 
 **Done when**: every page renders in the new light, blue theme with the new light
-sidebar (no teal); an `asset:write` user can upload a product image (MinIO, size/type
+sidebar (no teal); an `asset:write` user can upload a product image (S3-compatible object storage, size/type
 limited) shown on detail + list; the printer list matches the list mock (hero,
 Manufacturer/Model/Location filters, table) and the printer detail matches the detail
 mock (product image, Edit/Run Check/Open Management UI, and the five tabs); Run Check
@@ -404,8 +404,13 @@ new list and tabbed detail layouts.
         (blue active nav), `web/src/components/hero-header.tsx`, `web/src/components/ui/tabs.tsx`,
         `web/scripts/check-no-teal.mjs` + `web/src/test/no-teal-literal.test.ts`; design doc
         rewritten (`docs/Design/design-system.md`). Awaiting visual light-mode verify + typecheck.
-  - [ ] Asset image upload (child 02): MinIO storage + upload/view/delete routes +
-        `assets.imageKey`, image on detail + list, `asset:write` gate (covers AC-2)
+  - [ ] Asset image upload (child 02): S3-compatible object storage + upload/view/delete routes +
+        `assets.imageKey`, image on detail + list, `asset:write` gate (covers AC-2) — code written:
+        `web/src/db/schema.ts` (`image_key` column), `web/src/lib/storage.ts` (@aws-sdk/client-s3,
+        forcePathStyle), `web/src/db/asset-images.ts`, `web/src/app/api/assets/[tag]/image/route.ts`
+        (GET/POST/DELETE), `web/src/components/asset-image.tsx` + `asset-image-upload.tsx`, wired into
+        `asset-detail.tsx` + `asset-table.tsx`; tests in `route.test.ts` + `storage.test.ts`. NOT done:
+        `npm run db:push` to apply `image_key`, an S3 store (Garage) deployed with `S3_*` env, then verify.
   - [ ] Printers redesign (child 03): hero list + Manufacturer/Model/Location filters,
         tabbed detail (Overview/Network/Counters/Checks/Activity), Run Check (reuses
         spec 12), Open Management UI, derived Activity feed (covers AC-3, AC-4)

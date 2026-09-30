@@ -50,7 +50,7 @@ How the pieces fit, how data flows, and how it deploys on-prem.
 - **Redis** — session/rate-limit store and Celery broker for `aw-auth` (email, lockout
   counters) and optionally the collector's job queue.
 - **Caddy** — TLS termination + reverse proxy (automatic internal certs or your CA).
-- **(optional) MinIO** — S3-compatible object storage for asset photos / printable labels.
+- **(optional) S3-compatible object store (e.g. Garage)** — object storage for asset photos / printable labels.
 
 ---
 

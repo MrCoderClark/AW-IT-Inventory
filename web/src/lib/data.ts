@@ -48,6 +48,9 @@ export interface Asset {
   warrantyUntil: string;
   costCenter: string;
   spec: string;
+  // Object key of the uploaded product photo (spec 17.02); null/absent = no image,
+  // show the type icon. The image is served through /api/assets/[tag]/image.
+  imageKey?: string | null;
   // Extra searchable identifiers from the type detail tables (IP, phone, IMEI,
   // MAC), so the search bar and list search match them (spec 10). Optional
   // because the sample seed data predates the detail tables.

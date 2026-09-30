@@ -1,4 +1,4 @@
-import { Lock } from "lucide-react";
+import { Lock, Printer } from "lucide-react";
 
 import { AssetTable } from "@/components/asset-table";
 import { PagePlaceholder } from "@/components/page-placeholder";
@@ -42,6 +42,9 @@ export default async function Page({ searchParams }: PageProps<"/printers">) {
         view: "printer",
         columnOrder,
         title: "Printers",
+        subtitle: "Manage and view all printer assets in your organization.",
+        icon: <Printer />,
+        backgroundImage: "/heroes/printers.png",
         emptyMessage: "No printers yet.",
       }}
       canWrite={canWrite}

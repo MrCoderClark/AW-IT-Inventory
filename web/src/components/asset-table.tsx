@@ -62,9 +62,10 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { StatusBadge } from "@/components/status-badge";
 import { ReachabilityBadge } from "@/components/reachability-badge";
+import { AssetImage } from "@/components/asset-image";
+import { HeroHeader } from "@/components/hero-header";
 import {
   STATUS_META,
-  TYPE_ICON,
   type Asset,
   type AssetStatus,
   type AssetType,
@@ -224,17 +225,17 @@ const nameColumn: ColumnDef<Asset> = {
       onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
     />
   ),
-  cell: ({ row }) => {
-    const Icon = TYPE_ICON[row.original.type];
-    return (
-      <div className="flex items-center gap-3">
-        <span className="grid size-8 shrink-0 place-items-center rounded-lg border bg-muted text-muted-foreground">
-          <Icon className="size-4" />
-        </span>
-        <span className="font-medium">{row.original.name}</span>
-      </div>
-    );
-  },
+  cell: ({ row }) => (
+    <div className="flex items-center gap-3">
+      <AssetImage
+        tag={row.original.id}
+        imageKey={row.original.imageKey}
+        type={row.original.type}
+        className="size-8 shrink-0 overflow-hidden rounded-lg border"
+      />
+      <span className="font-medium">{row.original.name}</span>
+    </div>
+  ),
 };
 
 const typeColumn: ColumnDef<Asset> = {
@@ -447,6 +448,12 @@ export type AssetTableConfig = {
      Defaults to shown when any locations exist. */
   showLocationFilter?: boolean;
   title?: string;
+  /** Optional hero subtitle (renders the title as a HeroHeader, spec 17.03). */
+  subtitle?: string;
+  /** Optional hero icon shown in a tinted tile left of the title. */
+  icon?: React.ReactNode;
+  /** Optional decorative background photo bled into the hero header. */
+  backgroundImage?: string;
   emptyMessage?: string;
 };
 
@@ -483,6 +490,9 @@ export function AssetTable({
     showTypeFilter = false,
     showLocationFilter = true,
     title,
+    subtitle,
+    icon,
+    backgroundImage,
     emptyMessage,
   } = config;
   const view: ColumnView =
@@ -830,9 +840,23 @@ export function AssetTable({
       </>
     );
 
+  // A hero header (icon tile, subtitle, and/or background photo) when any hero
+  // field is supplied (spec 17.03); otherwise the plain title used elsewhere.
+  const heading =
+    icon || subtitle || backgroundImage ? (
+      <HeroHeader
+        title={title}
+        subtitle={subtitle}
+        icon={icon}
+        backgroundImage={backgroundImage}
+      />
+    ) : (
+      <h1 className="text-2xl font-extrabold tracking-tight">{title}</h1>
+    );
+
   return (
     <div className="mx-auto flex max-w-[1400px] flex-col gap-6">
-      <h1 className="text-2xl font-extrabold tracking-tight">{title}</h1>
+      {heading}
       {card}
       {dialog}
       {picker}
