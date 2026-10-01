@@ -444,9 +444,17 @@ export type AssetTableConfig = {
      Serializable so it passes from the RSC. */
   columnOrder?: string[] | null;
   showTypeFilter?: boolean;
+  /** Show the Status filter dropdown (default true; the printers list hides it). */
+  showStatusFilter?: boolean;
+  /** Show the Manufacturer (vendor) filter dropdown (spec 17.03, AC-3.2). */
+  showVendorFilter?: boolean;
+  /** Show the Model filter dropdown (spec 17.03, AC-3.2). */
+  showModelFilter?: boolean;
   /** Hide the location filter (e.g. on a page already scoped to a location).
      Defaults to shown when any locations exist. */
   showLocationFilter?: boolean;
+  /** Label for the create button (default "New asset"; printers use "New Printer"). */
+  createLabel?: string;
   title?: string;
   /** Optional hero subtitle (renders the title as a HeroHeader, spec 17.03). */
   subtitle?: string;
@@ -488,7 +496,11 @@ export function AssetTable({
     type,
     columnOrder = null,
     showTypeFilter = false,
+    showStatusFilter = true,
+    showVendorFilter = false,
+    showModelFilter = false,
     showLocationFilter = true,
+    createLabel = "New asset",
     title,
     subtitle,
     icon,
@@ -543,8 +555,31 @@ export function AssetTable({
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
   const [isScanning, startScan] = React.useTransition();
 
+  // Manufacturer (vendor) and Model filters (spec 17.03, AC-3.2). Distinct values
+  // from the current rows; both narrow client-side and combine with search,
+  // status, and the server-driven location filter.
+  const [vendorFilter, setVendorFilter] = React.useState("all");
+  const [modelFilter, setModelFilter] = React.useState("all");
+  const vendorOptions = React.useMemo(
+    () => [...new Set(assets.map((a) => a.vendor).filter(Boolean))].sort(),
+    [assets],
+  );
+  const modelOptions = React.useMemo(
+    () => [...new Set(assets.map((a) => a.model).filter(Boolean))].sort(),
+    [assets],
+  );
+  const filteredAssets = React.useMemo(
+    () =>
+      assets.filter(
+        (a) =>
+          (vendorFilter === "all" || a.vendor === vendorFilter) &&
+          (modelFilter === "all" || a.model === modelFilter),
+      ),
+    [assets, vendorFilter, modelFilter],
+  );
+
   const table = useReactTable({
-    data: assets,
+    data: filteredAssets,
     columns,
     state: { sorting, columnFilters, globalFilter, rowSelection },
     meta: { openAsset },
@@ -631,26 +666,60 @@ export function AssetTable({
           </Select>
         )}
 
-        <Select
-          value={statusFilter}
-          onValueChange={(v) =>
-            table
-              .getColumn("status")
-              ?.setFilterValue(v === "all" ? undefined : v)
-          }
-        >
-          <SelectTrigger className="w-[150px]">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            {(Object.keys(STATUS_META) as AssetStatus[]).map((s) => (
-              <SelectItem key={s} value={s}>
-                {STATUS_META[s].label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {showVendorFilter && (
+          <Select value={vendorFilter} onValueChange={(v) => setVendorFilter(v ?? "all")}>
+            <SelectTrigger className="w-[170px]">
+              <SelectValue placeholder="All Manufacturers" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Manufacturers</SelectItem>
+              {vendorOptions.map((v) => (
+                <SelectItem key={v} value={v}>
+                  {v}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
+        {showModelFilter && (
+          <Select value={modelFilter} onValueChange={(v) => setModelFilter(v ?? "all")}>
+            <SelectTrigger className="w-[150px]">
+              <SelectValue placeholder="All Models" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Models</SelectItem>
+              {modelOptions.map((m) => (
+                <SelectItem key={m} value={m}>
+                  {m}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
+        {showStatusFilter && (
+          <Select
+            value={statusFilter}
+            onValueChange={(v) =>
+              table
+                .getColumn("status")
+                ?.setFilterValue(v === "all" ? undefined : v)
+            }
+          >
+            <SelectTrigger className="w-[150px]">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              {(Object.keys(STATUS_META) as AssetStatus[]).map((s) => (
+                <SelectItem key={s} value={s}>
+                  {STATUS_META[s].label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
 
         {showLocationFilter && locations.length > 0 && (
           <Select
@@ -699,7 +768,7 @@ export function AssetTable({
           )}
           {canWrite && (
             <Button onClick={() => setFormOpen(true)}>
-              <Plus className="size-4" /> New asset
+              <Plus className="size-4" /> {createLabel}
             </Button>
           )}
           <Button
