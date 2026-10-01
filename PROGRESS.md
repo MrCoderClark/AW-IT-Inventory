@@ -7,24 +7,30 @@ via a feature branch + PR.
 
 ---
 
-## In progress 🚧 — spec 18 media library, phase 2 (branch `feat/media-resizing`)
+## In progress 🚧 — spec 18 media library UI redesign (branch `feat/media-ui`)
 
 Shared, reusable asset images (spec 18, `docs/specs/18-media-library/`): one upload
 reused across identical devices, deduped by content hash, with a `/media` library.
 Supersedes spec 17.02's single-`imageKey` storage model.
 
-- **Phase 2 (image resizing, sharp) 🚧 code complete, needs `npm install sharp` + verify.**
-  On upload: cap the stored original to a max edge (2000px), bake EXIF orientation,
-  record real `width`/`height`, and generate a 400px WebP `thumbnail`
-  (`web/src/lib/image.ts`, `processImage`), stored as a second object
-  (`newMediaThumbKey`). `createOrReuseMedia` stores original+thumb and records dims;
-  dedup unchanged (SHA still on uploaded bytes). `AssetImage` gained a `variant`
-  prop; the asset table requests `thumb`. `/media` + picker already request the
-  thumbnail (served, with thumb→original fallback for legacy rows). Columns
-  (`thumbnail_key`/`width`/`height`) already exist from phase 1 → no migration.
-  Existing phase-1 rows have null dims/thumb and fall back to the original until
-  re-uploaded (graceful). **Next: `npm install sharp`, restart dev, upload a photo,
-  confirm thumbnails + dimensions; `npm test`; commit.** Phase 3 (rembg) 🔜.
+- **Media UI redesign 🚧 code complete, needs verify.** Rebuilt `/media` to match
+  `docs/Design/Media Library Dashboard Mockup.png`: `HeroHeader` + Upload Image,
+  three stat cards (Total Images / Assets Using Images / Total Size via
+  `getMediaStats`), toolbar with search + **All Types** filter + **Most Used/Recent**
+  sort + grid/list view toggle, richer cards (used-by pill, type·size, ⋯ Edit/Delete
+  menu) linking to a new **media detail page** `/media/[id]` (large preview, Details
+  incl. dimensions/uploaded/by, "Used in Assets" list, Notes) with
+  `media-detail-actions.tsx` (edit dialog + delete). Backend: `listMedia` gained
+  type filter + sort + offset pagination (join+groupBy so "most used" sorts by
+  count), `getMediaStats`, `getMediaDetail`; `GET /api/media` takes `type`/`sort`/
+  `offset` → `nextOffset`. Replacing a shared file is intentionally out of scope
+  (would change every asset using it). **Next: restart dev, walk `/media` + detail;
+  `npm test`; commit.**
+- **Phase 2 (image resizing, sharp) ✅ committed (`feat/media-resizing`).** On upload:
+  cap the stored original to 2000px, bake EXIF orientation, record real `width`/
+  `height`, generate a 400px WebP `thumbnail` (`web/src/lib/image.ts`), stored as a
+  second object. Lists/table/picker render the thumbnail; dedup unchanged. Phase 3
+  (rembg cut-out worker) 🔜.
 - **Phase 1 (reuse core + library) ✅ built, backfilled, verified; `imageKey` dropped.**
   Reuse confirmed end to end (one upload used by two printers, counted correctly).
   Upload names default to the device **model**; `imageId` replaces `imageKey` (column

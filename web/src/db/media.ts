@@ -2,11 +2,23 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 
-import { and, desc, eq, ilike, inArray, lt, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  isNotNull,
+  or,
+  sql,
+  sum,
+} from "drizzle-orm";
 
 import { db } from "@/db/index";
 import { assets, media } from "@/db/schema";
-import type { MediaRow } from "@/db/schema";
+import type { AssetRow, MediaRow } from "@/db/schema";
 import {
   type AllowedImageType,
   newMediaObjectKey,
@@ -147,93 +159,118 @@ export async function getMediaUsageCount(id: string): Promise<number> {
   return row?.n ?? 0;
 }
 
-/** Usage counts for several media ids in one grouped query → {mediaId: count}. */
-async function countUsage(ids: string[]): Promise<Map<string, number>> {
-  const map = new Map<string, number>();
-  if (ids.length === 0) return map;
-  const rows = await db
-    .select({ imageId: assets.imageId, n: sql<number>`count(*)::int` })
+/** Library-wide totals for the dashboard stat cards (spec 18 UI). */
+export type MediaStats = {
+  totalImages: number;
+  assetsUsingImages: number;
+  totalSizeBytes: number;
+};
+
+export async function getMediaStats(): Promise<MediaStats> {
+  const [imgs] = await db
+    .select({ n: count(), size: sum(media.sizeBytes) })
+    .from(media);
+  const [used] = await db
+    .select({ n: count() })
     .from(assets)
-    .where(inArray(assets.imageId, ids))
-    .groupBy(assets.imageId);
-  for (const r of rows) if (r.imageId) map.set(r.imageId, Number(r.n));
-  return map;
+    .where(isNotNull(assets.imageId));
+  return {
+    totalImages: Number(imgs?.n ?? 0),
+    assetsUsingImages: Number(used?.n ?? 0),
+    totalSizeBytes: Number(imgs?.size ?? 0),
+  };
 }
 
-const PAGE = 60;
+const PAGE = 48;
+
+/** Asset-type value (the `asset_type` enum), used by the library type filter. */
+type AssetTypeValue = AssetRow["type"];
+
+export type MediaSort = "recent" | "most-used";
 
 export type MediaListPage = {
   items: MediaWithUsage[];
-  nextCursor: string | null;
+  /** Offset to pass for the next page, or null when there are no more. */
+  nextOffset: number | null;
 };
 
-/** Decode / encode an opaque keyset cursor of `${createdAtISO}|${id}`. */
-function encodeCursor(row: { createdAt: Date; id: string }): string {
-  return Buffer.from(`${row.createdAt.toISOString()}|${row.id}`).toString(
-    "base64url",
-  );
-}
-function decodeCursor(cursor: string): { createdAt: Date; id: string } | null {
-  try {
-    const [iso, id] = Buffer.from(cursor, "base64url")
-      .toString("utf8")
-      .split("|");
-    const createdAt = new Date(iso);
-    if (!id || Number.isNaN(createdAt.getTime())) return null;
-    return { createdAt, id };
-  } catch {
-    return null;
-  }
-}
-
 /**
- * The library listing (AC-5): every image, newest first, with its usage count.
- * Optional case-insensitive name/notes search and keyset pagination.
+ * The library listing (AC-5): images with their usage count, filtered/sorted for
+ * the dashboard. Optional case-insensitive name/notes search, an asset-type filter
+ * (media used by at least one asset of that type), a sort ("recent" default, or
+ * "most-used" by usage count), and offset pagination. Usage is counted in-query via
+ * a left join + groupBy, so "most used" can order by it.
  */
 export async function listMedia(opts?: {
   q?: string;
-  cursor?: string;
+  type?: AssetTypeValue;
+  sort?: MediaSort;
   limit?: number;
+  offset?: number;
 }): Promise<MediaListPage> {
   const limit = Math.min(Math.max(opts?.limit ?? PAGE, 1), 200);
+  const offset = Math.max(opts?.offset ?? 0, 0);
   const q = opts?.q?.trim();
-  const cur = opts?.cursor ? decodeCursor(opts.cursor) : null;
+  const sort = opts?.sort ?? "recent";
 
   const conds = [];
   if (q) {
     const like = `%${q}%`;
     conds.push(or(ilike(media.name, like), ilike(media.notes, like)));
   }
-  if (cur) {
-    // Keyset: strictly "older than" the cursor row in (createdAt, id) order.
+  if (opts?.type) {
+    // Keep only media referenced by at least one asset of the given type.
     conds.push(
-      or(
-        lt(media.createdAt, cur.createdAt),
-        and(eq(media.createdAt, cur.createdAt), lt(media.id, cur.id)),
+      inArray(
+        media.id,
+        db
+          .selectDistinct({ id: assets.imageId })
+          .from(assets)
+          .where(and(isNotNull(assets.imageId), eq(assets.type, opts.type))),
       ),
     );
   }
 
+  const usedBy = count(assets.id);
   const rows = await db
-    .select()
+    .select({ media, usedBy })
     .from(media)
+    .leftJoin(assets, eq(assets.imageId, media.id))
     .where(conds.length ? and(...conds) : undefined)
-    .orderBy(desc(media.createdAt), desc(media.id))
-    .limit(limit + 1);
+    .groupBy(media.id)
+    .orderBy(
+      ...(sort === "most-used"
+        ? [desc(usedBy), asc(media.name)]
+        : [desc(media.createdAt), desc(media.id)]),
+    )
+    .limit(limit + 1)
+    .offset(offset);
 
   const hasMore = rows.length > limit;
   const pageRows = hasMore ? rows.slice(0, limit) : rows;
-
-  // Usage counts in one grouped query over just this page's ids. (A correlated
-  // count subquery inside the select renders wrong in Drizzle and reads 0; a
-  // groupBy aggregate is the reliable pattern.)
-  const usage = await countUsage(pageRows.map((r) => r.id));
   const items: MediaWithUsage[] = pageRows.map((r) => ({
-    ...r,
-    usedBy: usage.get(r.id) ?? 0,
+    ...r.media,
+    usedBy: Number(r.usedBy),
   }));
-  const nextCursor = hasMore ? encodeCursor(items[items.length - 1]) : null;
-  return { items, nextCursor };
+  const nextOffset = hasMore ? offset + limit : null;
+  return { items, nextOffset };
+}
+
+/** One asset that uses a media row, for the detail page's "Used in Assets" list. */
+export type MediaAssetUse = { tag: string; name: string; type: AssetTypeValue };
+
+/** A media row plus its usage count and the assets using it (the detail page). */
+export type MediaDetail = MediaRow & { usedBy: number; assets: MediaAssetUse[] };
+
+export async function getMediaDetail(id: string): Promise<MediaDetail | null> {
+  const row = await getMedia(id);
+  if (!row) return null;
+  const used = await db
+    .select({ tag: assets.tag, name: assets.name, type: assets.type })
+    .from(assets)
+    .where(eq(assets.imageId, id))
+    .orderBy(asc(assets.name));
+  return { ...row, usedBy: used.length, assets: used };
 }
 
 export type UpdateMediaResult =

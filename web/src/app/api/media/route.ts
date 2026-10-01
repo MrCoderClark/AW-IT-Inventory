@@ -27,9 +27,11 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url);
   const q = url.searchParams.get("q") ?? undefined;
-  const cursor = url.searchParams.get("cursor") ?? undefined;
+  const type = parseType(url.searchParams.get("type"));
+  const sort = url.searchParams.get("sort") === "most-used" ? "most-used" : "recent";
+  const offset = Number(url.searchParams.get("offset")) || 0;
 
-  const page = await listMedia({ q, cursor });
+  const page = await listMedia({ q, type, sort, offset });
   return NextResponse.json({
     items: page.items.map((m) => ({
       id: m.id,
@@ -46,8 +48,18 @@ export async function GET(req: Request) {
       thumbUrl: `/api/media/${m.id}?variant=thumb`,
       originalUrl: `/api/media/${m.id}?variant=original`,
     })),
-    nextCursor: page.nextCursor,
+    nextOffset: page.nextOffset,
   });
+}
+
+const ASSET_TYPES = ["Computer", "Monitor", "Printer", "Phone", "Network"] as const;
+type AssetTypeValue = (typeof ASSET_TYPES)[number];
+
+/** Validate the type filter against the known asset types; anything else = no filter. */
+function parseType(raw: string | null): AssetTypeValue | undefined {
+  return ASSET_TYPES.includes(raw as AssetTypeValue)
+    ? (raw as AssetTypeValue)
+    : undefined;
 }
 
 /** Default a library name from the uploaded filename, else a generic title. */

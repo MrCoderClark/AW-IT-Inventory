@@ -29,7 +29,16 @@ const H = vi.hoisted(() => {
   const makeBuilder = () => {
     const b: Record<string, unknown> = {};
     const self = () => b;
-    for (const m of ["from", "where", "orderBy", "limit", "groupBy"]) b[m] = self;
+    for (const m of [
+      "from",
+      "where",
+      "orderBy",
+      "limit",
+      "offset",
+      "groupBy",
+      "leftJoin",
+    ])
+      b[m] = self;
     b.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
       Promise.resolve(state.selectResults.shift() ?? []).then(res, rej);
     return b;
@@ -185,19 +194,22 @@ describe("deleteMedia — in-use guard + cleanup (AC-6)", () => {
 });
 
 describe("listMedia — usage counts (AC-5)", () => {
-  it("attaches usedBy from a grouped count; unreferenced media read 0", async () => {
+  it("attaches usedBy from the grouped join; flattens the media row", async () => {
     const m1 = { id: "m1", name: "A", createdAt: new Date() };
     const m2 = { id: "m2", name: "B", createdAt: new Date() };
+    // One query: join + groupBy returns {media, usedBy} rows.
     H.state.selectResults = [
-      [m1, m2], // page rows
-      [{ imageId: "m1", n: 2 }], // grouped usage (m2 absent → 0)
+      [
+        { media: m1, usedBy: 2 },
+        { media: m2, usedBy: 0 },
+      ],
     ];
     const page = await listMedia();
     expect(page.items.map((i) => [i.id, i.usedBy])).toEqual([
       ["m1", 2],
       ["m2", 0],
     ]);
-    expect(page.nextCursor).toBeNull();
+    expect(page.nextOffset).toBeNull();
   });
 });
 

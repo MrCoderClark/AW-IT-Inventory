@@ -1,15 +1,20 @@
 import { Lock } from "lucide-react";
 
-import { MediaLibrary, type MediaLibraryItem } from "@/components/media-library";
+import {
+  MediaLibrary,
+  type MediaLibraryItem,
+} from "@/components/media-library";
 import { PagePlaceholder } from "@/components/page-placeholder";
-import { listMedia } from "@/db/media";
+import { getMediaStats, listMedia } from "@/db/media";
 import { hasPermission, requireUser } from "@/lib/auth/session";
 
 // Usage counts and the library change on upload/assign/delete; read fresh.
 export const dynamic = "force-dynamic";
 
 /** Shape a media row (+ usage) into the plain item the client grid renders. */
-function toItem(m: Awaited<ReturnType<typeof listMedia>>["items"][number]): MediaLibraryItem {
+function toItem(
+  m: Awaited<ReturnType<typeof listMedia>>["items"][number],
+): MediaLibraryItem {
   return {
     id: m.id,
     name: m.name,
@@ -39,21 +44,14 @@ export default async function Page() {
   }
 
   const canWrite = hasPermission(user, "asset:write");
-  const page = await listMedia();
+  const [page, stats] = await Promise.all([listMedia(), getMediaStats()]);
 
   return (
-    <div className="mx-auto flex max-w-[1100px] flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-extrabold tracking-tight">Media</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          The shared image library. Upload a photo once and reuse it across any
-          number of identical assets. Each image shows how many assets use it.
-        </p>
-      </div>
-
+    <div className="mx-auto w-full max-w-[1280px]">
       <MediaLibrary
         initialItems={page.items.map(toItem)}
-        initialCursor={page.nextCursor}
+        initialNextOffset={page.nextOffset}
+        stats={stats}
         canWrite={canWrite}
       />
     </div>
