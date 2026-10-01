@@ -20,6 +20,7 @@ dump: the atomic build steps stay in each feature's spec (`docs/specs/`). Run
 | Software inventory (tracked-software watchlist) | done | [15](../specs/15-software-inventory/index.md) |
 | People directory and device assignments | done | [16](../specs/16-people-directory-assignments/index.md) |
 | OPUS UI redesign (new global direction) | in-progress | [17](../specs/17-ui-redesign/index.md) |
+| Media library (reusable asset images) | in-progress | [18](../specs/18-media-library/index.md) |
 
 ## Features
 
@@ -420,6 +421,33 @@ new list and tabbed detail layouts.
         shared framework (covers AC-5)
 - [ ] Verify it: `/check verify opus ui redesign`
 - [ ] Test it: `/test opus ui redesign`
+
+### Media library (reusable asset images) · in-progress
+
+Replace the one photo per asset storage (spec 17.02's `imageKey`) with a shared
+media library: an image is uploaded once, kept as its own record with a name and
+notes, and reused across any number of identical assets. Built in three phases:
+the reuse core, then automatic resizing (sharp), then optional background removal
+that runs on your own servers (rembg).
+
+**Done when**: an `asset:write` user can upload an image or pick an existing one
+for an asset; the same photo is stored once (SHA-256 dedup); a `/media` page lists
+images with name, dimensions, and usage count, allows editing metadata, and blocks
+deleting an image still in use; images are thumbnailed and capped on upload; and a
+requested background removal runs on a self hosted worker and shows its cut out.
+
+- [x] Design it (spec): [18](../specs/18-media-library/index.md)
+- [ ] Build it: `/develop media library` (build the phases in order)
+  - [ ] Phase 1 core: the `media` table plus the backfill migration off
+        `assets.imageKey`, hash dedup, the media API and data layer, the `/media`
+        library page and picker, and the upload or pick asset control (covers AC-1
+        to AC-7)
+  - [ ] Phase 2 resize: sharp thumbnail and max dimension cap on upload,
+        dimensions recorded, thumbnails used in lists and pickers (covers AC-8)
+  - [ ] Phase 3 background removal: a rembg worker on the scan job claim pattern, a
+        "Remove background" action, the cut out stored and shown (covers AC-9)
+- [ ] Verify it: `/check verify media library`
+- [ ] Test it: `/test media library`
 
 _Parked in the specs (not yet enrolled — conditional on a trigger): per-model /
 per-profile counter OID overrides and mono/color + print/copy breakdowns (spec 14,

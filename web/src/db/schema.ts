@@ -110,6 +110,58 @@ export const locations = pgTable(
   ],
 );
 
+// ── Shared media library (spec 18) ───────────────────────────────────────────
+// One row per distinct image, reusable across any number of assets (many assets →
+// one media row via `assets.imageId`). This supersedes spec 17.02's one-object-
+// per-asset model: an image is uploaded once and reused, deduped by content hash
+// so the same bytes are stored once no matter how they arrive. Objects live in the
+// private S3 bucket under `media/{id}/...`; bytes only reach a browser through the
+// authenticated app route. "Used by N" is never stored — it is counted at read
+// time from `assets.imageId`, so it can never go stale.
+//
+// `width`/`height`/`thumbnailKey` are created now but stay null until spec 18's
+// phase 2 (sharp) backfills them, so phase 2 is a pure data migration with no DDL.
+// The phase 3 cut-out columns are added by phase 3's migration, not here.
+export const media = pgTable(
+  "media",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(), // human title, used to find and pick an image
+    altText: text("alt_text"), // accessibility text for <img alt>
+    notes: text("notes"), // freeform description or source
+    // Stored image object key, `media/{id}/image.{ext}`. In phase 2 this object is
+    // the original capped to a max dimension, so not always the exact bytes posted.
+    objectKey: text("object_key").notNull(),
+    thumbnailKey: text("thumbnail_key"), // phase 2: `media/{id}/thumb.webp`
+    contentType: text("content_type")
+      .$type<"image/png" | "image/jpeg" | "image/webp">()
+      .notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    width: integer("width"), // read via sharp in phase 2; null for legacy rows
+    height: integer("height"),
+    // SHA-256 of the uploaded bytes: the dedup key. A partial unique index (below)
+    // enforces one media row per distinct content; null is allowed (legacy rows
+    // without a hash) and Postgres treats NULLs as distinct.
+    sha256: text("sha256"),
+    createdBy: text("created_by"), // uploader email from the access token; no FK
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    // At most one stored object per distinct content (AC-3). Partial so legacy
+    // rows with a null hash never collide.
+    uniqueIndex("media_sha256_uq")
+      .on(t.sha256)
+      .where(sql`${t.sha256} is not null`),
+    // The library list orders newest first.
+    index("media_created_idx").on(t.createdAt.desc()),
+  ],
+);
+
 export const assets = pgTable("assets", {
   id: uuid("id").primaryKey().defaultRandom(),
   tag: text("tag").notNull().unique(), // human key, e.g. OPUS-COMP-7491
@@ -133,10 +185,12 @@ export const assets = pgTable("assets", {
   warrantyUntil: date("warranty_until"),
   costCenter: text("cost_center"),
   spec: text("spec"),
-  // Object key for the uploaded product photo in S3-compatible storage
-  // (spec 17.02), e.g. `assets/<uuid>/<rand>.webp`; null = no image. The key,
-  // not a URL, so the store endpoint/bucket can change without rewriting rows.
-  imageKey: text("image_key"),
+  // Shared media library reference (spec 18, superseding spec 17.02's `imageKey`):
+  // many assets → one `media` row, which
+  // is the reuse. `restrict` so a media row an asset still uses can never be
+  // deleted out from under it (the delete path enforces "unused" first; this is
+  // the hard backstop). Null = no image → the UI renders the type icon.
+  imageId: uuid("image_id").references(() => media.id, { onDelete: "restrict" }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),
@@ -573,6 +627,7 @@ export const assetAssignments = pgTable(
   ],
 );
 
+export type MediaRow = typeof media.$inferSelect;
 export type AssetRow = typeof assets.$inferSelect;
 export type PersonRow = typeof people.$inferSelect;
 export type AssetAssignmentRow = typeof assetAssignments.$inferSelect;

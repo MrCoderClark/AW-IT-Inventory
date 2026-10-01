@@ -1,6 +1,6 @@
 import "server-only";
 
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import {
   S3Client,
   PutObjectCommand,
@@ -124,6 +124,20 @@ function isBucketAlreadyOwned(err: unknown): boolean {
    the content type so the stored object is self-describing. */
 export function newImageKey(assetId: string, type: AllowedImageType): string {
   return `assets/${assetId}/${randomBytes(16).toString("hex")}.${EXT_BY_TYPE[type]}`;
+}
+
+/** The object key for a media-library image (spec 18): `media/{id}/image.{ext}`.
+   Stable per media row (the id is already random), so no random suffix is needed. */
+export function newMediaObjectKey(
+  mediaId: string,
+  type: AllowedImageType,
+): string {
+  return `media/${mediaId}/image.${EXT_BY_TYPE[type]}`;
+}
+
+/** Hex SHA-256 of an image's bytes — the media dedup key (spec 18, AC-3). */
+export function sha256Hex(bytes: Buffer): string {
+  return createHash("sha256").update(bytes).digest("hex");
 }
 
 /** Store an image under `key`. Ensures the bucket first. */

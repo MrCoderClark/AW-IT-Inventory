@@ -2,11 +2,13 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { ImageUp, Loader2, Trash2 } from "lucide-react";
+import { ImageUp, Images, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { AssetImage } from "@/components/asset-image";
+import { MediaPickerDialog } from "@/components/media-picker-dialog";
 import { Button } from "@/components/ui/button";
+import { setAssetImage } from "@/app/(app)/media-actions";
 import type { AssetType } from "@/lib/data";
 import { cn } from "@/lib/utils";
 
@@ -18,28 +20,36 @@ const ACCEPT_ATTR = ACCEPTED.join(",");
 const MAX_BYTES = 5 * 1024 * 1024;
 
 /**
- * The asset product photo on the detail page (spec 17.02): shows the current
- * image (or the type icon), and for `asset:write` users, upload/replace (pick or
- * drop a file) and remove. Validates type and size client-side for quick
- * feedback; the route re-validates and is the real gate.
+ * The asset product photo control on the detail page (spec 18, superseding spec
+ * 17.02). Shows the current image (or the type icon), and for `asset:write` users:
+ *   - Upload new  — adds the file to the shared media library, then assigns it.
+ *   - Choose from library — reuse an existing library image (the whole point of
+ *     spec 18: one upload, many identical devices).
+ *   - Remove — clears the asset's pointer; the library image stays for reuse.
+ * Uploading is two steps (POST /api/media → `setAssetImage`), so an identical photo
+ * already in the library is deduped rather than re-stored.
  */
 export function AssetImageUpload({
   tag,
-  imageKey,
+  imageId,
   type,
   name,
+  model,
   canWrite = false,
   showButtons = true,
   boxClassName,
   iconClassName,
 }: {
   tag: string;
-  imageKey?: string | null;
+  imageId?: string | null;
   type: AssetType;
   name: string;
+  /** The device model, used as the default library name on upload — the image is
+     shared across identical devices, so the model identifies it, not one asset. */
+  model?: string | null;
   canWrite?: boolean;
-  /** Show the Upload/Replace/Remove button row under the image (default true).
-     The printer detail header hides it and uses click/drag on the image. */
+  /** Show the button row under the image (default true). The printer detail header
+     hides it and uses click/drag on the image to upload. */
   showButtons?: boolean;
   /** Override the image box size/shape (default a 28-unit square). */
   boxClassName?: string;
@@ -50,8 +60,21 @@ export function AssetImageUpload({
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [busy, setBusy] = React.useState(false);
   const [dragOver, setDragOver] = React.useState(false);
+  const [pickerOpen, setPickerOpen] = React.useState(false);
 
-  async function upload(file: File) {
+  /** Assign (or clear) the asset's media pointer via the server action. */
+  async function assign(mediaId: string | null, successMsg: string) {
+    const res = await setAssetImage(tag, mediaId);
+    if (res.ok) {
+      toast.success(res.message ?? successMsg);
+      router.refresh();
+    } else {
+      toast.error(res.error ?? "Could not update the photo.");
+    }
+  }
+
+  /** Upload a new file into the library, then assign it to this asset. */
+  async function uploadNew(file: File) {
     if (!ACCEPTED.includes(file.type)) {
       toast.error("Please choose a PNG, JPEG, or WebP image.");
       return;
@@ -64,19 +87,31 @@ export function AssetImageUpload({
     try {
       const body = new FormData();
       body.append("file", file);
-      const res = await fetch(`/api/assets/${encodeURIComponent(tag)}/image`, {
-        method: "POST",
-        body,
-      });
-      if (res.ok) {
-        toast.success("Photo updated.");
-        router.refresh();
-      } else {
+      // Default the library name to the device model — the image is reused across
+      // identical devices, so the model identifies it, not one asset's name/tag.
+      // No model → let the API fall back to the uploaded file name. Editable on /media.
+      const title = model?.trim();
+      if (title) body.append("name", title);
+      const res = await fetch("/api/media", { method: "POST", body });
+      if (!res.ok) {
         const data = await res.json().catch(() => null);
         toast.error(data?.error ?? "Upload failed.");
+        return;
       }
+      const data = await res.json();
+      await assign(data.media.id, "Photo updated.");
     } catch {
       toast.error("Upload failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function chooseFromLibrary(mediaId: string) {
+    setPickerOpen(false);
+    setBusy(true);
+    try {
+      await assign(mediaId, "Photo updated.");
     } finally {
       setBusy(false);
     }
@@ -85,18 +120,7 @@ export function AssetImageUpload({
   async function remove() {
     setBusy(true);
     try {
-      const res = await fetch(`/api/assets/${encodeURIComponent(tag)}/image`, {
-        method: "DELETE",
-      });
-      if (res.ok) {
-        toast.success("Photo removed.");
-        router.refresh();
-      } else {
-        const data = await res.json().catch(() => null);
-        toast.error(data?.error ?? "Could not remove the photo.");
-      }
-    } catch {
-      toast.error("Could not remove the photo.");
+      await assign(null, "Photo removed.");
     } finally {
       setBusy(false);
     }
@@ -105,7 +129,7 @@ export function AssetImageUpload({
   function onPick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = ""; // allow re-picking the same file
-    if (file) void upload(file);
+    if (file) void uploadNew(file);
   }
 
   function onDrop(e: React.DragEvent) {
@@ -113,7 +137,7 @@ export function AssetImageUpload({
     setDragOver(false);
     if (!canWrite || busy) return;
     const file = e.dataTransfer.files?.[0];
-    if (file) void upload(file);
+    if (file) void uploadNew(file);
   }
 
   return (
@@ -145,9 +169,9 @@ export function AssetImageUpload({
       >
         <AssetImage
           tag={tag}
-          imageKey={imageKey}
+          imageId={imageId}
           type={type}
-          alt={imageKey ? `Photo of ${name}` : ""}
+          alt={imageId ? `Photo of ${name}` : ""}
           className="size-full"
           iconClassName={iconClassName ?? "size-10"}
         />
@@ -172,7 +196,7 @@ export function AssetImageUpload({
       )}
 
       {canWrite && showButtons && (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -180,20 +204,33 @@ export function AssetImageUpload({
             disabled={busy}
           >
             <ImageUp className="size-4" />
-            {imageKey ? "Replace" : "Upload"}
+            {imageId ? "Replace" : "Upload new"}
           </Button>
-          {imageKey && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={remove}
-              disabled={busy}
-            >
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPickerOpen(true)}
+            disabled={busy}
+          >
+            <Images className="size-4" />
+            Choose from library
+          </Button>
+          {imageId && (
+            <Button variant="ghost" size="sm" onClick={remove} disabled={busy}>
               <Trash2 className="size-4" />
               Remove
             </Button>
           )}
         </div>
+      )}
+
+      {canWrite && (
+        <MediaPickerDialog
+          open={pickerOpen}
+          onOpenChange={setPickerOpen}
+          onPick={chooseFromLibrary}
+          currentId={imageId}
+        />
       )}
     </div>
   );

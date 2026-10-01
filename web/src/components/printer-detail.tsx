@@ -474,11 +474,11 @@ export function PrinterDetail({
         <div className="flex items-start gap-5">
           <AssetImageUpload
             tag={asset.id}
-            imageKey={asset.imageKey}
+            imageId={asset.imageId}
             type="Printer"
             name={asset.name}
+            model={asset.model}
             canWrite={canWrite}
-            showButtons={false}
             boxClassName="h-[150px] w-[210px] max-w-full"
             iconClassName="size-12"
           />

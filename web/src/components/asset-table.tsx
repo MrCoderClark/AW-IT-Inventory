@@ -229,7 +229,7 @@ const nameColumn: ColumnDef<Asset> = {
     <div className="flex items-center gap-3">
       <AssetImage
         tag={row.original.id}
-        imageKey={row.original.imageKey}
+        imageId={row.original.imageId}
         type={row.original.type}
         className="size-8 shrink-0 overflow-hidden rounded-lg border"
       />

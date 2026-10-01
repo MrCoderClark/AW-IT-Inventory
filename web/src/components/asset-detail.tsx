@@ -341,9 +341,10 @@ export function AssetDetail({
       <div className="flex items-start gap-5">
         <AssetImageUpload
           tag={asset.id}
-          imageKey={asset.imageKey}
+          imageId={asset.imageId}
           type={asset.type}
           name={asset.name}
+          model={asset.model}
           canWrite={canWrite}
         />
         <div className="flex min-w-0 flex-col gap-3 pt-0.5">

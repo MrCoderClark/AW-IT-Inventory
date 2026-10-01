@@ -3,51 +3,53 @@ import "server-only";
 import { eq } from "drizzle-orm";
 
 import { db } from "@/db/index";
-import { assets } from "@/db/schema";
+import { assets, media } from "@/db/schema";
+import type { MediaRow } from "@/db/schema";
 
 /**
- * The single writer of `assets.imageKey` (spec 17.02). Keeps the object-store
- * key on the asset row in step with what actually lives in the store: the route
- * puts/removes the object, these helpers move the pointer. Looked up by the
- * human tag (the URL key), never the internal id.
+ * The single writer of `assets.imageId` (spec 18, superseding spec 17.02's
+ * `imageKey`). Points an asset at a shared `media` library row, or clears it. The
+ * media row owns the stored bytes and its own lifecycle (`src/db/media.ts`); these
+ * helpers only move the asset→media pointer. Looked up by the human tag (the URL
+ * key), never the internal id.
  */
 
-export type AssetImageRef = { id: string; imageKey: string | null };
+export type AssetImageRef = { id: string; imageId: string | null };
 
-/** The asset's internal id and current image key, or null when no such tag. */
+/** The asset's internal id and current media id, or null when no such tag. */
 export async function getAssetImageRef(
   tag: string,
 ): Promise<AssetImageRef | null> {
-  const rows = await db
-    .select({ id: assets.id, imageKey: assets.imageKey })
+  const [row] = await db
+    .select({ id: assets.id, imageId: assets.imageId })
     .from(assets)
     .where(eq(assets.tag, tag))
     .limit(1);
-  return rows[0] ?? null;
+  return row ?? null;
 }
 
-/** Point the asset at a newly stored object. */
-export async function setAssetImageKey(
+/** The media row an asset currently points at (joined by tag), or null when the
+   asset has no image or no such tag. Used to serve the asset's image variant. */
+export async function getAssetMedia(
+  tag: string,
+): Promise<{ assetId: string; media: MediaRow | null } | null> {
+  const [row] = await db
+    .select({ assetId: assets.id, imageId: assets.imageId, media })
+    .from(assets)
+    .leftJoin(media, eq(media.id, assets.imageId))
+    .where(eq(assets.tag, tag))
+    .limit(1);
+  if (!row) return null;
+  return { assetId: row.assetId, media: row.imageId ? row.media : null };
+}
+
+/** Point the asset at a media row (or clear it with null). */
+export async function setAssetImageId(
   assetId: string,
-  imageKey: string,
+  mediaId: string | null,
 ): Promise<void> {
   await db
     .update(assets)
-    .set({ imageKey, updatedAt: new Date() })
+    .set({ imageId: mediaId, updatedAt: new Date() })
     .where(eq(assets.id, assetId));
-}
-
-/** Clear the asset's image pointer, returning the key it held (so the caller can
-   delete that object), or null when there was none. */
-export async function clearAssetImageKey(
-  assetId: string,
-): Promise<string | null> {
-  const rows = await db
-    .update(assets)
-    .set({ imageKey: null, updatedAt: new Date() })
-    .where(eq(assets.id, assetId))
-    .returning({ imageKey: assets.imageKey });
-  // `returning` runs after the SET, so this is always null; the caller passes
-  // the prior key it already read. Kept for symmetry / future use.
-  return rows[0]?.imageKey ?? null;
 }
