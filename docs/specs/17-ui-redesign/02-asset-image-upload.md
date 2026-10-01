@@ -2,6 +2,13 @@
 
 Child of the [spec 17 umbrella](index.md).
 
+> **⚠️ Superseded by [spec 18 (media library)](../18-media-library/index.md).** The
+> one-object-per-asset storage model below (the `assets.imageKey` column) has been
+> replaced by a shared, content-deduplicated `media` table referenced by
+> `assets.imageId`; the `imageKey` column was dropped. The upload, type/size
+> validation, and private-serving ideas here carry forward. Read this spec for that
+> background, but build against spec 18.
+
 ## Summary
 
 Let an admin upload a product photo for any asset. Images are stored in self

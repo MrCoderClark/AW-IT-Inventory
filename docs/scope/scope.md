@@ -438,12 +438,14 @@ requested background removal runs on a self hosted worker and shows its cut out.
 
 - [x] Design it (spec): [18](../specs/18-media-library/index.md)
 - [ ] Build it: `/develop media library` (build the phases in order)
-  - [ ] Phase 1 core: the `media` table plus the backfill migration off
+  - [x] Phase 1 core: the `media` table plus the backfill migration off
         `assets.imageKey`, hash dedup, the media API and data layer, the `/media`
         library page and picker, and the upload or pick asset control (covers AC-1
         to AC-7)
-  - [ ] Phase 2 resize: sharp thumbnail and max dimension cap on upload,
-        dimensions recorded, thumbnails used in lists and pickers (covers AC-8)
+  - [x] Phase 2 resize: sharp thumbnail and max dimension cap on upload,
+        dimensions recorded, thumbnails used in lists and pickers (covers AC-8).
+        Plus a `/media` dashboard redesign (hero, stat cards, filter/sort/view
+        toggle) and a `/media/[id]` detail page, to the design mockup.
   - [ ] Phase 3 background removal: a rembg worker on the scan job claim pattern, a
         "Remove background" action, the cut out stored and shown (covers AC-9)
 - [ ] Verify it: `/check verify media library`
