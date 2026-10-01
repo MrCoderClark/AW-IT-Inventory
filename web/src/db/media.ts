@@ -10,10 +10,12 @@ import type { MediaRow } from "@/db/schema";
 import {
   type AllowedImageType,
   newMediaObjectKey,
+  newMediaThumbKey,
   putImage,
   removeImage,
   sha256Hex,
 } from "@/lib/storage";
+import { processImage } from "@/lib/image";
 
 /**
  * The shared media library data layer (spec 18, phase 1). The single owner of the
@@ -89,9 +91,16 @@ export async function createOrReuseMedia(input: {
 
   const id = randomUUID();
   const objectKey = newMediaObjectKey(id, input.contentType);
-  // Store the object before the row, so a failed store never leaves a row pointing
-  // at missing bytes. If the row insert then loses the dedup race, we remove this.
-  await putImage(objectKey, input.bytes, input.contentType);
+  const thumbnailKey = newMediaThumbKey(id);
+
+  // Cap the original, read its real dimensions, and build a thumbnail (phase 2).
+  // The hash above was taken on the uploaded bytes, so dedup is unaffected.
+  const processed = await processImage(input.bytes, input.contentType);
+
+  // Store the objects before the row, so a failed store never leaves a row pointing
+  // at missing bytes. If the row insert then loses the dedup race, we remove them.
+  await putImage(objectKey, processed.original, input.contentType);
+  await putImage(thumbnailKey, processed.thumbnail, "image/webp");
 
   try {
     const [row] = await db
@@ -100,8 +109,11 @@ export async function createOrReuseMedia(input: {
         id,
         name: input.name,
         objectKey,
+        thumbnailKey,
         contentType: input.contentType,
-        sizeBytes: input.bytes.byteLength,
+        sizeBytes: processed.original.byteLength,
+        width: processed.width,
+        height: processed.height,
         sha256: sha,
         createdBy: input.createdBy,
       })
@@ -110,8 +122,9 @@ export async function createOrReuseMedia(input: {
   } catch (err) {
     if (isMediaDedupRace(err)) {
       // Someone else inserted the same content between our lookup and insert.
-      // Drop the object we just wrote (the winner has its own) and return theirs.
+      // Drop the objects we just wrote (the winner has its own) and return theirs.
       await removeImage(objectKey);
+      await removeImage(thumbnailKey);
       const winner = await findBySha(sha);
       if (winner) return winner;
     }

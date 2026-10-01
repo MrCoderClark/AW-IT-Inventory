@@ -135,6 +135,11 @@ export function newMediaObjectKey(
   return `media/${mediaId}/image.${EXT_BY_TYPE[type]}`;
 }
 
+/** The object key for a media row's WebP thumbnail (spec 18, phase 2). */
+export function newMediaThumbKey(mediaId: string): string {
+  return `media/${mediaId}/thumb.webp`;
+}
+
 /** Hex SHA-256 of an image's bytes — the media dedup key (spec 18, AC-3). */
 export function sha256Hex(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("hex");

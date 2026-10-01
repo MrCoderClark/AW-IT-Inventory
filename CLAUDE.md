@@ -66,9 +66,13 @@ uv run python main.py scan --target 192.168.72.0/24 --ingest  # scan + ingest
 
 ## Working conventions
 
-- **Branch per phase.** Create the feature branch **before** writing any code; never
-  accumulate work on `main`. Merge via GitHub PR. End commit messages with:
-  `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`
+- **Branch before coding — always.** Before writing ANY code, check the current
+  branch. If the work isn't part of what that branch already covers (a new phase,
+  feature, or fix), **stop and create a new branch first** — no exceptions, and
+  never code directly on `main`. When unsure whether the work belongs on the current
+  branch, ask or branch; don't accumulate unrelated changes. Create the feature
+  branch **before** the first edit, not after. Merge via GitHub PR. End commit
+  messages with: `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`
 - **The user runs all terminal commands** (npm, uv, git, servers). Agents: provide
   exact copy-pasteable commands; don't execute them unless explicitly asked.
 - **Shell is PowerShell.** Use `Invoke-RestMethod` for API testing (not `curl.exe` —

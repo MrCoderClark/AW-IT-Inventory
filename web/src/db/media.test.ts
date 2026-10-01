@@ -66,8 +66,19 @@ vi.mock("@/db/index", () => ({
 vi.mock("@/lib/storage", () => ({
   sha256Hex: () => "deadbeef",
   newMediaObjectKey: (id: string) => `media/${id}/image.png`,
+  newMediaThumbKey: (id: string) => `media/${id}/thumb.webp`,
   putImage: H.putImageMock,
   removeImage: H.removeImageMock,
+}));
+// Phase 2: createOrReuseMedia runs sharp processing before storing. Stub it so the
+// data-layer logic (dedup, cleanup) is what's under test, not image encoding.
+vi.mock("@/lib/image", () => ({
+  processImage: vi.fn(async (bytes: Buffer) => ({
+    original: bytes,
+    width: 100,
+    height: 50,
+    thumbnail: Buffer.from("thumb"),
+  })),
 }));
 
 import {
@@ -111,7 +122,7 @@ describe("createOrReuseMedia — dedup (AC-3)", () => {
     H.state.insertReturning = [created];
     const row = await createOrReuseMedia(upload);
     expect(row).toEqual(created);
-    expect(H.putImageMock).toHaveBeenCalledOnce();
+    expect(H.putImageMock).toHaveBeenCalledTimes(2); // original + thumbnail
     expect(H.removeImageMock).not.toHaveBeenCalled();
   });
 
@@ -125,8 +136,8 @@ describe("createOrReuseMedia — dedup (AC-3)", () => {
     });
     const row = await createOrReuseMedia(upload);
     expect(row).toEqual(winner);
-    expect(H.putImageMock).toHaveBeenCalledOnce(); // we did store our loser object…
-    expect(H.removeImageMock).toHaveBeenCalledOnce(); // …then cleaned it up
+    expect(H.putImageMock).toHaveBeenCalledTimes(2); // stored loser original + thumb…
+    expect(H.removeImageMock).toHaveBeenCalledTimes(2); // …then cleaned both up
   });
 
   it("rethrows a non-dedup insert error (no object cleanup)", async () => {

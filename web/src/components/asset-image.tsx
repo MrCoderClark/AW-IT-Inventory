@@ -15,6 +15,7 @@ export function AssetImage({
   alt = "",
   className,
   iconClassName,
+  variant,
 }: {
   tag: string;
   imageId?: string | null;
@@ -23,13 +24,17 @@ export function AssetImage({
   alt?: string;
   className?: string;
   iconClassName?: string;
+  /** Which stored size to request (spec 18 phase 2). Small/list contexts pass
+     "thumb" for the lightweight WebP; the detail pages use the default original. */
+  variant?: "thumb" | "original";
 }) {
   if (imageId) {
+    const q = `?v=${encodeURIComponent(imageId)}${variant ? `&variant=${variant}` : ""}`;
     return (
       // eslint-disable-next-line @next/next/no-img-element -- streamed from our
       // own private route, not an optimizable static/remote asset.
       <img
-        src={`/api/assets/${encodeURIComponent(tag)}/image?v=${encodeURIComponent(imageId)}`}
+        src={`/api/assets/${encodeURIComponent(tag)}/image${q}`}
         alt={alt}
         className={cn("object-cover", className)}
       />
