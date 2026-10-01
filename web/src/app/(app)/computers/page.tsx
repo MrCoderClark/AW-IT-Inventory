@@ -1,4 +1,4 @@
-import { Lock } from "lucide-react";
+import { Cpu, Lock } from "lucide-react";
 
 import { AssetTable } from "@/components/asset-table";
 import { PagePlaceholder } from "@/components/page-placeholder";
@@ -45,6 +45,14 @@ export default async function Page({
         view: "computer",
         columnOrder,
         title: "Computers",
+        subtitle: "Manage and view all computer assets in your organization.",
+        icon: <Cpu />,
+        // New list layout (spec 17.04, AC-4.1): restyled header (no photo hero),
+        // the type's filters, and a "New Computer" button.
+        showStatusFilter: true,
+        showVendorFilter: true,
+        showModelFilter: true,
+        createLabel: "New Computer",
         emptyMessage: "No computers yet.",
       }}
       canWrite={canWrite}

@@ -1,6 +1,6 @@
 import "server-only";
 
-import sharp from "sharp";
+import sharp, { type Sharp } from "sharp";
 
 import type { AllowedImageType } from "@/lib/storage";
 
@@ -31,7 +31,7 @@ export type ProcessedImage = {
   thumbnail: Buffer;
 };
 
-function reencode(pipeline: sharp.Sharp, type: AllowedImageType): sharp.Sharp {
+function reencode(pipeline: Sharp, type: AllowedImageType): Sharp {
   switch (type) {
     case "image/png":
       return pipeline.png();

@@ -7,7 +7,34 @@ via a feature branch + PR.
 
 ---
 
-## In progress 🚧 — spec 18 media library UI redesign (branch `feat/media-ui`)
+## In progress 🚧 — spec 17.04 computers redesign (branch `feat/computers-redesign`)
+
+Resuming the spec 17 UI redesign program. Child 04 (computers) is the flagship,
+highest-regression slice: three subsystems (live scan, software, assignment) move
+into tabs.
+
+- **17.04 computers 🚧 code complete, type-check + 410 tests green; needs UI verify.**
+  - New shared detail primitives `web/src/components/detail-ui.tsx` (`Panel`,
+    `InfoField`, `Dot`, `StatusRow`, fmt helpers) — the reusable framework child 05
+    will also consume. (printer-detail still uses its own local copies; migrating it
+    onto `detail-ui` is a follow-up — left untouched to avoid regressing the shipped,
+    untested printers page.)
+  - New `web/src/components/computer-detail.tsx`: tabbed detail (Overview / Live scan
+    / Software / Assignment / Activity) reusing `detail-ui` + the `Tabs` shell;
+    Overview leads with Asset Information + Live-scan/Assignment snapshots + the
+    spec-10 Computer Details; Activity is derived from assignment history + last scan.
+    No new data — reads specs 10/15/16, the machine summary, and the media image.
+  - Route: `assets/[id]/page.tsx` sends Computers to `ComputerDetail` (monitor/phone/
+    network still use the generic `AssetDetail`).
+  - List: `computers/page.tsx` now uses the new layout (hero header w/o photo, Status
+    + Vendor + Model filters, "New Computer") — config-driven via `AssetTable`.
+  - Test: `computer-detail.test.tsx` (tabs render; live scan / software / assignment
+    content present). **Next: UI verify a computer detail + list; commit.**
+  - 🔜 **17.05** (monitor / phone / network thin categories) remains to finish spec 17.
+
+---
+
+## Shipped earlier — spec 18 media library UI redesign (branch `feat/media-ui`)
 
 Shared, reusable asset images (spec 18, `docs/specs/18-media-library/`): one upload
 reused across identical devices, deduped by content hash, with a `/media` library.
