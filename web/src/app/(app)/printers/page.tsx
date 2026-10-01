@@ -45,6 +45,12 @@ export default async function Page({ searchParams }: PageProps<"/printers">) {
         subtitle: "Manage and view all printer assets in your organization.",
         icon: <Printer />,
         backgroundImage: "/heroes/printers.png",
+        // Match the mock: Manufacturer / Model / Location filters, no Status
+        // dropdown, and a "New Printer" button (spec 17.03, AC-3.1, AC-3.2).
+        showVendorFilter: true,
+        showModelFilter: true,
+        showStatusFilter: false,
+        createLabel: "New Printer",
         emptyMessage: "No printers yet.",
       }}
       canWrite={canWrite}
