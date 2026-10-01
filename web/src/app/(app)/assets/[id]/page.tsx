@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { Lock } from "lucide-react";
 
 import { AssetDetail } from "@/components/asset-detail";
+import { ComputerDetail } from "@/components/computer-detail";
 import { PrinterDetail } from "@/components/printer-detail";
 import { PagePlaceholder } from "@/components/page-placeholder";
 import { getAssetAssignmentHistory } from "@/db/assignments";
@@ -66,8 +67,44 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
     );
   }
 
-  // Non-printer assets: the generic detail. All key off the same route tag, so
-  // fetch them together.
+  // Computers get the redesigned, tabbed detail (spec 17.04): spec-10 fields, live
+  // scan health, tracked software (spec 15), and assignment (spec 16) move into tabs.
+  if (asset.type === "Computer") {
+    const [
+      machine,
+      assigneeId,
+      people,
+      locations,
+      assetDetails,
+      software,
+      assignmentHistory,
+    ] = await Promise.all([
+      getMachineSummary(id),
+      canWrite ? getAssetAssigneeId(id) : Promise.resolve(null),
+      canWrite ? getPeople() : Promise.resolve([]),
+      canWrite ? getLeafLocationOptions() : Promise.resolve([]),
+      getAssetDetails(id),
+      getInstalledSoftware(id),
+      getAssetAssignmentHistory(id),
+    ]);
+    return (
+      <ComputerDetail
+        asset={asset}
+        machine={machine}
+        details={assetDetails?.row ?? null}
+        software={software}
+        assignmentHistory={assignmentHistory}
+        assigneeId={assigneeId ?? null}
+        people={people}
+        locations={locations}
+        canWrite={canWrite}
+        canScan={canScan}
+      />
+    );
+  }
+
+  // Other non-printer assets (monitor / phone / network): the generic detail. All
+  // key off the same route tag, so fetch them together.
   const [
     machine,
     assigneeId,
