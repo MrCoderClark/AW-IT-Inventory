@@ -1,4 +1,4 @@
-import { Lock } from "lucide-react";
+import { Lock, Network } from "lucide-react";
 
 import { AssetTable } from "@/components/asset-table";
 import { PagePlaceholder } from "@/components/page-placeholder";
@@ -42,6 +42,12 @@ export default async function Page({ searchParams }: PageProps<"/network">) {
         view: "network",
         columnOrder,
         title: "Network",
+        subtitle: "Manage and view all network devices in your organization.",
+        icon: <Network />,
+        showStatusFilter: true,
+        showVendorFilter: true,
+        showModelFilter: true,
+        createLabel: "New Network Device",
         emptyMessage: "No network gear yet.",
       }}
       canWrite={canWrite}

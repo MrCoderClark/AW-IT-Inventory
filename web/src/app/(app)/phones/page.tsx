@@ -1,4 +1,4 @@
-import { Lock } from "lucide-react";
+import { Lock, Smartphone } from "lucide-react";
 
 import { AssetTable } from "@/components/asset-table";
 import { PagePlaceholder } from "@/components/page-placeholder";
@@ -42,6 +42,12 @@ export default async function Page({ searchParams }: PageProps<"/phones">) {
         view: "phone",
         columnOrder,
         title: "Phones",
+        subtitle: "Manage and view all phone assets in your organization.",
+        icon: <Smartphone />,
+        showStatusFilter: true,
+        showVendorFilter: true,
+        showModelFilter: true,
+        createLabel: "New Phone",
         emptyMessage: "No phones yet.",
       }}
       canWrite={canWrite}

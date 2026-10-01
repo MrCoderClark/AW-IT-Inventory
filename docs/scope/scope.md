@@ -19,7 +19,7 @@ dump: the atomic build steps stay in each feature's spec (`docs/specs/`). Run
 | Per-run ignore of discovery switches (collector) | done | — |
 | Software inventory (tracked-software watchlist) | done | [15](../specs/15-software-inventory/index.md) |
 | People directory and device assignments | done | [16](../specs/16-people-directory-assignments/index.md) |
-| OPUS UI redesign (new global direction) | in-progress | [17](../specs/17-ui-redesign/index.md) |
+| OPUS UI redesign (new global direction) | done | [17](../specs/17-ui-redesign/index.md) |
 | Media library (reusable asset images) | in-progress | [18](../specs/18-media-library/index.md) |
 
 ## Features
@@ -377,7 +377,7 @@ allowed only for a person with no history; viewing is open to any `asset:read` u
       write-control gate). Full web suite green (349). AC-10's negative runtime path and
       AC-2's live pagination were also proven in `/check verify`.
 
-### OPUS UI redesign (new global direction) · in-progress
+### OPUS UI redesign (new global direction) · done
 
 Move OPUS to a new look (light first, one blue accent, a light sidebar, photographic
 hero headers on list pages), rebuild the printer list and detail pages to the new
@@ -397,7 +397,7 @@ existing history; and the Computers, Monitors, Phones, and Network pages use the
 new list and tabbed detail layouts.
 
 - [x] Design it (spec): [17](../specs/17-ui-redesign/index.md)
-- [ ] Build it: `/develop opus ui redesign` (build the children in order)
+- [x] Build it: `/develop opus ui redesign` (built the children in order)
   - [x] Design system foundation (child 01): light-first + blue tokens, light sidebar,
         `HeroHeader` + `Tabs` primitives, light-mode regression pass, teal-literal guard
         (covers AC-1) — code in `web/src/app/globals.css` (blue tokens, light default),
@@ -405,20 +405,21 @@ new list and tabbed detail layouts.
         (blue active nav), `web/src/components/hero-header.tsx`, `web/src/components/ui/tabs.tsx`,
         `web/scripts/check-no-teal.mjs` + `web/src/test/no-teal-literal.test.ts`; design doc
         rewritten (`docs/Design/design-system.md`). Awaiting visual light-mode verify + typecheck.
-  - [ ] Asset image upload (child 02): S3-compatible object storage + upload/view/delete routes +
+  - [x] Asset image upload (child 02): S3-compatible object storage + upload/view/delete routes +
         `assets.imageKey`, image on detail + list, `asset:write` gate (covers AC-2) — code written:
         `web/src/db/schema.ts` (`image_key` column), `web/src/lib/storage.ts` (@aws-sdk/client-s3,
         forcePathStyle), `web/src/db/asset-images.ts`, `web/src/app/api/assets/[tag]/image/route.ts`
         (GET/POST/DELETE), `web/src/components/asset-image.tsx` + `asset-image-upload.tsx`, wired into
         `asset-detail.tsx` + `asset-table.tsx`; tests in `route.test.ts` + `storage.test.ts`. NOT done:
         `npm run db:push` to apply `image_key`, an S3 store (Garage) deployed with `S3_*` env, then verify.
-  - [ ] Printers redesign (child 03): hero list + Manufacturer/Model/Location filters,
+  - [x] Printers redesign (child 03): hero list + Manufacturer/Model/Location filters,
         tabbed detail (Overview/Network/Counters/Checks/Activity), Run Check (reuses
         spec 12), Open Management UI, derived Activity feed (covers AC-3, AC-4)
-  - [ ] Computers redesign (child 04): the shared tabbed detail framework + the Computers
-        list and detail (live scan, software, assignment tabs) (covers AC-5)
-  - [ ] Monitors/Phones/Network rollout (child 05): the three thin categories on the
-        shared framework (covers AC-5)
+  - [x] Computers redesign (child 04): the shared tabbed detail framework
+        (`detail-ui.tsx`) + the Computers list and detail (live scan, software,
+        assignment tabs) (covers AC-5)
+  - [x] Monitors/Phones/Network rollout (child 05): the three thin categories on the
+        shared framework (`thin-detail.tsx`) (covers AC-5)
 - [ ] Verify it: `/check verify opus ui redesign`
 - [ ] Test it: `/test opus ui redesign`
 
