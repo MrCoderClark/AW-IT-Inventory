@@ -48,6 +48,9 @@ export interface Asset {
   warrantyUntil: string;
   costCenter: string;
   spec: string;
+  // Object key of the uploaded product photo (spec 17.02); null/absent = no image,
+  // show the type icon. The image is served through /api/assets/[tag]/image.
+  imageKey?: string | null;
   // Extra searchable identifiers from the type detail tables (IP, phone, IMEI,
   // MAC), so the search bar and list search match them (spec 10). Optional
   // because the sample seed data predates the detail tables.
@@ -98,6 +101,46 @@ export interface PrinterCounters {
   latestDelta: number | null;
   latestNote: "first-reading" | "counter-reset" | null;
   history: CounterHistoryDay[];
+}
+
+/* ---------------- Printer detail: network health & activity (spec 17.03) ---- */
+
+/** One protocol's latest probe on the Network Health card (spec 17.03, AC-3.5).
+   `latencyMs` is null for SNMP: the collector times only the TCP probe, so an
+   SNMP latency would be invented data and is never shown. */
+export interface PrinterProtocolCheck {
+  reachable: boolean;
+  latencyMs: number | null;
+  checkedAt: string; // ISO
+}
+
+/** The Network Health card for one printer (spec 17.03, AC-3.5): the reachable
+   rollup plus the latest TCP and SNMP probes. HTTP is deliberately absent
+   (shown as "not tracked" in the UI, a spec 12 follow-up). */
+export interface PrinterNetworkHealth {
+  state: ReachabilityState;
+  lastCheckedAt: string | null; // ISO
+  ip: string | null;
+  tcp: PrinterProtocolCheck | null;
+  snmp: PrinterProtocolCheck | null; // latencyMs always null (never timed)
+}
+
+/** The kind of a derived activity row (spec 17.03, AC-3.6). */
+export type PrinterActivityKind =
+  | "health-check"
+  | "counter-sync"
+  | "status-update";
+
+/** One row in the printer activity feed (spec 17.03, AC-3.6), derived from the
+   existing spec 12 checks and spec 14 counter history. Nothing here is stored:
+   Health Check and Counter Sync are straight reads; Status Update is replayed
+   from `printer_checks` through the shared down rule. */
+export interface PrinterActivityEvent {
+  kind: PrinterActivityKind;
+  at: string; // ISO
+  title: string; // "Health Check" | "Counter Sync" | "Status Update"
+  detail: string;
+  ok: boolean; // dot color: healthy/neutral (true) vs down (false)
 }
 
 /* ---------------- Software inventory (spec 15) ---------------- */

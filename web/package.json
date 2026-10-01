@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "check:no-teal": "node scripts/check-no-teal.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
@@ -16,6 +17,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1143.0",
     "@base-ui/react": "^1.7.0",
     "@tanstack/react-table": "^8.21.3",
     "class-variance-authority": "^0.7.1",

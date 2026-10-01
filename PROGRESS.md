@@ -7,6 +7,43 @@ via a feature branch + PR.
 
 ---
 
+## In progress 🚧 — spec 17 UI redesign (branch `feat/printers-ui-redesign`)
+
+Umbrella program (spec 17, `docs/specs/17-ui-redesign/`): light-first + blue design
+system, asset image upload, then rebuild printers / computers / thin categories.
+Scope tracker: `docs/scope/scope.md` → "OPUS UI redesign". Build children in order.
+
+- **Child 01 (design system) ✅ built, verified, tested, committed.** Blue tokens +
+  light default (`globals.css`, `layout.tsx`), light sidebar with blue active item,
+  `HeroHeader` + `Tabs` primitives, teal-literal guard (`scripts/check-no-teal.mjs` +
+  `no-teal-literal.test.ts`), design doc rewritten. `/check verify` walked every page
+  in light (pass); `/test` green. `HeroHeader`/`Tabs` are built but only mounted in
+  child 03. Hero photo staged at `web/public/heroes/printers.png`.
+- **Child 02 (asset image upload) 🚧 code complete + tested, NOT committed, NOT verified.**
+  Decision changed mid-flight: **MinIO is archived (Feb 2026), so it is fully removed**
+  from all specs; storage is now `@aws-sdk/client-s3` (installed, `forcePathStyle`)
+  against a self-hosted S3-compatible store. Code: `assets.image_key` column (schema),
+  `web/src/lib/storage.ts`, `web/src/db/asset-images.ts`, route
+  `web/src/app/api/assets/[tag]/image/route.ts` (GET/POST/DELETE), UI
+  `asset-image.tsx` + `asset-image-upload.tsx` wired into `asset-detail.tsx` +
+  `asset-table.tsx`. Tests: `route.test.ts` + `storage.test.ts` (20 pass). `tsc` clean.
+
+  **Resume child 02 here (in order):**
+  1. Start Docker Desktop (installed at `C:\Program Files\Docker\Docker`; the engine
+     was not running, which made `docker` commands hang — wait for "Engine running").
+  2. `cd dev/seaweedfs && docker compose up -d` (local dev S3 store, SeaweedFS on
+     `:8333`; creds in `dev/seaweedfs/s3.json` = `opusdev` / `opusdevsecret123`).
+  3. Add to `web/.env`: `S3_ENDPOINT=http://localhost:8333`, `S3_REGION=us-east-1`,
+     `S3_ACCESS_KEY_ID=opusdev`, `S3_SECRET_ACCESS_KEY=opusdevsecret123`,
+     `S3_BUCKET=opus-assets` (bucket auto-created on first upload).
+  4. `cd web && npm run db:push` to apply the `image_key` column.
+  5. Restart the web dev server, upload a photo on an asset detail page, then
+     `/check verify opus ui redesign`.
+  6. Commit child 02 (code + tests + the MinIO-removal spec edits + `dev/seaweedfs/`).
+- **Children 03 (printers) / 04 (computers) / 05 (thin categories) 🔜** — not started.
+
+---
+
 ## Shipped
 
 ### Pipeline — end to end ✅ (2026-08-26)

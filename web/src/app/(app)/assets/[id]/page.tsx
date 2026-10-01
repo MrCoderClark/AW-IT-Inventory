@@ -2,10 +2,12 @@ import { notFound } from "next/navigation";
 import { Lock } from "lucide-react";
 
 import { AssetDetail } from "@/components/asset-detail";
+import { PrinterDetail } from "@/components/printer-detail";
 import { PagePlaceholder } from "@/components/page-placeholder";
 import { getAssetAssignmentHistory } from "@/db/assignments";
 import { getPrinterCounters } from "@/db/counters";
 import { getInstalledSoftware } from "@/db/software";
+import { getPrinterActivity, getPrinterNetworkHealth } from "@/db/printers";
 import {
   getAssetAssigneeId,
   getAssetById,
@@ -33,35 +35,58 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
   const { id } = await params;
   const canWrite = hasPermission(user, "asset:write");
   const canScan = hasPermission(user, "scan:write");
-  // All key off the same route tag, so fetch them together. Reachability returns
-  // null for non-printers (spec 12, AC-8).
+
+  const asset = await getAssetById(id);
+  if (!asset) notFound();
+
+  // Printers get the redesigned, tabbed detail page (spec 17.03); every other
+  // type keeps the generic detail component until child 04 rolls the framework out.
+  if (asset.type === "Printer") {
+    const [details, reachability, networkHealth, counters, activity, locations] =
+      await Promise.all([
+        getAssetDetails(id),
+        getPrinterReachability(id),
+        getPrinterNetworkHealth(id),
+        getPrinterCounters(id),
+        getPrinterActivity(id, 20),
+        canWrite ? getLeafLocationOptions() : Promise.resolve([]),
+      ]);
+    return (
+      <PrinterDetail
+        asset={asset}
+        details={details?.row ?? null}
+        reachability={reachability}
+        networkHealth={networkHealth}
+        counters={counters}
+        activity={activity}
+        canWrite={canWrite}
+        canScan={canScan}
+        locations={locations}
+      />
+    );
+  }
+
+  // Non-printer assets: the generic detail. All key off the same route tag, so
+  // fetch them together.
   const [
-    asset,
     machine,
     assigneeId,
     people,
     locations,
     assetDetails,
-    reachability,
-    counters,
     software,
     assignmentHistory,
   ] = await Promise.all([
-    getAssetById(id),
     getMachineSummary(id),
     canWrite ? getAssetAssigneeId(id) : Promise.resolve(null),
     canWrite ? getPeople() : Promise.resolve([]),
     canWrite ? getLeafLocationOptions() : Promise.resolve([]),
     getAssetDetails(id),
-    getPrinterReachability(id),
-    // Page-counter panel (spec 14, AC-3); null for non-printers.
-    getPrinterCounters(id),
     // Tracked-software panel (spec 15, AC-6); empty for non-computers.
     getInstalledSoftware(id),
     // Assignment history panel (spec 16, AC-7); empty for never-assigned devices.
     getAssetAssignmentHistory(id),
   ]);
-  if (!asset) notFound();
 
   return (
     <AssetDetail
@@ -73,8 +98,8 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
       locations={locations}
       details={assetDetails?.row ?? null}
       assigneeId={assigneeId ?? null}
-      reachability={reachability}
-      counters={counters}
+      reachability={null}
+      counters={null}
       software={software}
       assignmentHistory={assignmentHistory}
     />

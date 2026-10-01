@@ -1,0 +1,11 @@
+{
+  "identities": [
+    {
+      "name": "opus-web-dev",
+      "credentials": [
+        { "accessKey": "opusdev", "secretKey": "opusdevsecret123" }
+      ],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}

@@ -108,7 +108,7 @@ Phased so value ships early and risk is front-loaded onto the hard parts (auth, 
 
 ### Later / optional
 - Optional installed agent for roaming laptops. WebAuthn/passkeys. Label printing.
-- AD/Entra directory sync for people. Object storage (MinIO) for asset photos.
+- AD/Entra directory sync for people. Object storage (S3-compatible, e.g. Garage) for asset photos.
 
 ---
 

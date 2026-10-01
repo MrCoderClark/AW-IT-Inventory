@@ -72,6 +72,19 @@ export async function requestScan(
   };
 }
 
+/**
+ * Run an on-demand reachability check for one printer (spec 17.03, AC-3.7). No
+ * new scan mechanism: it is the spec 12 manual scan scoped to this one printer,
+ * so the collector runs the TCP probe and posts results the normal way. SNMP and
+ * counters still refresh on the daily sweep (the manual path probes TCP only).
+ */
+export async function runPrinterCheckAction(tag: unknown): Promise<ActionResult> {
+  if (typeof tag !== "string" || !tag) {
+    return { ok: false, error: "Missing printer." };
+  }
+  return requestScan("selected", [tag]);
+}
+
 /** Cancel a still-pending scan job (AC-4 UI). */
 export async function cancelScanJob(jobId: unknown): Promise<ActionResult> {
   const user = await requireScanWrite();

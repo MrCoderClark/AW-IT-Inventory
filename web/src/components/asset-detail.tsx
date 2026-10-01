@@ -45,8 +45,8 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { StatusBadge } from "@/components/status-badge";
 import { ReachabilityBadge } from "@/components/reachability-badge";
+import { AssetImageUpload } from "@/components/asset-image-upload";
 import {
-  TYPE_ICON,
   type Asset,
   type AssetReachability,
   type AssetType,
@@ -236,7 +236,6 @@ export function AssetDetail({
   /** This device's custody history (spec 16, AC-7), newest first. */
   assignmentHistory?: AssignmentEvent[];
 }) {
-  const Icon = TYPE_ICON[asset.type];
   // Printers / network gear are never assigned to a person.
   const isAssignable = !TYPE_FIELDS[asset.type].hiddenShared.includes(
     "assigneeId",
@@ -338,29 +337,33 @@ export function AssetDetail({
         Back to inventory
       </button>
 
-      {/* Header */}
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <span className="grid size-9 place-items-center rounded-lg bg-accent text-primary">
-            <Icon className="size-[18px]" />
-          </span>
-          <span className="text-[11px] font-semibold uppercase tracking-wider">
+      {/* Header: product photo (with upload for writers) + identity */}
+      <div className="flex items-start gap-5">
+        <AssetImageUpload
+          tag={asset.id}
+          imageKey={asset.imageKey}
+          type={asset.type}
+          name={asset.name}
+          canWrite={canWrite}
+        />
+        <div className="flex min-w-0 flex-col gap-3 pt-0.5">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             {asset.type}
           </span>
-        </div>
-        <h1 className="text-2xl font-bold tracking-tight">{asset.name}</h1>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => {
-              navigator.clipboard?.writeText(asset.id);
-              toast.success("Asset ID copied", { description: asset.id });
-            }}
-            className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2 py-1 font-mono text-xs font-semibold hover:bg-accent hover:text-accent-foreground"
-          >
-            {asset.id}
-            <Copy className="size-3" />
-          </button>
-          <StatusBadge status={asset.status} />
+          <h1 className="text-2xl font-bold tracking-tight">{asset.name}</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => {
+                navigator.clipboard?.writeText(asset.id);
+                toast.success("Asset ID copied", { description: asset.id });
+              }}
+              className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2 py-1 font-mono text-xs font-semibold hover:bg-accent hover:text-accent-foreground"
+            >
+              {asset.id}
+              <Copy className="size-3" />
+            </button>
+            <StatusBadge status={asset.status} />
+          </div>
         </div>
       </div>
 
