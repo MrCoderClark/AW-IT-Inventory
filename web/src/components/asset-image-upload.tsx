@@ -29,12 +29,22 @@ export function AssetImageUpload({
   type,
   name,
   canWrite = false,
+  showButtons = true,
+  boxClassName,
+  iconClassName,
 }: {
   tag: string;
   imageKey?: string | null;
   type: AssetType;
   name: string;
   canWrite?: boolean;
+  /** Show the Upload/Replace/Remove button row under the image (default true).
+     The printer detail header hides it and uses click/drag on the image. */
+  showButtons?: boolean;
+  /** Override the image box size/shape (default a 28-unit square). */
+  boxClassName?: string;
+  /** Override the fallback icon size. */
+  iconClassName?: string;
 }) {
   const router = useRouter();
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -117,7 +127,8 @@ export function AssetImageUpload({
         onDragLeave={() => setDragOver(false)}
         onDrop={onDrop}
         className={cn(
-          "relative size-28 overflow-hidden rounded-(--radius-card) ring-1 ring-foreground/10",
+          "relative overflow-hidden rounded-(--radius-card) ring-1 ring-foreground/10",
+          boxClassName ?? "size-28",
           canWrite && "cursor-pointer",
           dragOver && "ring-2 ring-primary",
         )}
@@ -138,7 +149,7 @@ export function AssetImageUpload({
           type={type}
           alt={imageKey ? `Photo of ${name}` : ""}
           className="size-full"
-          iconClassName="size-10"
+          iconClassName={iconClassName ?? "size-10"}
         />
         {busy && (
           <span className="absolute inset-0 grid place-items-center bg-card/60">
@@ -147,16 +158,21 @@ export function AssetImageUpload({
         )}
       </div>
 
+      {/* Always rendered for writers, so click/drag on the image works even when
+         the button row is hidden (the printer detail header). */}
       {canWrite && (
+        <input
+          ref={inputRef}
+          type="file"
+          accept={ACCEPT_ATTR}
+          onChange={onPick}
+          className="sr-only"
+          aria-label="Asset photo file"
+        />
+      )}
+
+      {canWrite && showButtons && (
         <div className="flex items-center gap-2">
-          <input
-            ref={inputRef}
-            type="file"
-            accept={ACCEPT_ATTR}
-            onChange={onPick}
-            className="sr-only"
-            aria-label="Asset photo file"
-          />
           <Button
             variant="outline"
             size="sm"

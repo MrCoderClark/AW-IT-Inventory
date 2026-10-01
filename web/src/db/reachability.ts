@@ -27,7 +27,16 @@ import {
  * email per episode, one recovery email per recovery.
  */
 
-const DOWN_THRESHOLD = 2;
+export const DOWN_THRESHOLD = 2;
+
+/**
+ * The single source of the "down" rule (spec 12, AC-7): a printer is down once it
+ * has failed this many checks in a row. Extracted so `recordChecks` (the live
+ * rollup) and the spec 17.03 activity replay both call it and cannot drift.
+ */
+export function isDownFailures(consecutiveFailures: number): boolean {
+  return consecutiveFailures >= DOWN_THRESHOLD;
+}
 
 /** A printer the worker should probe: its asset id and current IP. */
 export type PrinterTarget = { assetId: string; ipAddress: string };
@@ -122,7 +131,7 @@ export async function recordChecks(
         prev?.lastAlertState ?? "up";
 
       const consecutiveFailures = check.reachable ? 0 : prevFailures + 1;
-      const isDown = consecutiveFailures >= DOWN_THRESHOLD;
+      const isDown = isDownFailures(consecutiveFailures);
       // downSince: stamped when the printer first crosses into `down`, held while
       // it stays down, cleared on any successful check.
       const downSince = !isDown
