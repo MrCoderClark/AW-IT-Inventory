@@ -7,12 +7,24 @@ via a feature branch + PR.
 
 ---
 
-## In progress 🚧 — spec 18 media library, phase 1 (branch `feat/media-library`)
+## In progress 🚧 — spec 18 media library, phase 2 (branch `feat/media-resizing`)
 
 Shared, reusable asset images (spec 18, `docs/specs/18-media-library/`): one upload
 reused across identical devices, deduped by content hash, with a `/media` library.
 Supersedes spec 17.02's single-`imageKey` storage model.
 
+- **Phase 2 (image resizing, sharp) 🚧 code complete, needs `npm install sharp` + verify.**
+  On upload: cap the stored original to a max edge (2000px), bake EXIF orientation,
+  record real `width`/`height`, and generate a 400px WebP `thumbnail`
+  (`web/src/lib/image.ts`, `processImage`), stored as a second object
+  (`newMediaThumbKey`). `createOrReuseMedia` stores original+thumb and records dims;
+  dedup unchanged (SHA still on uploaded bytes). `AssetImage` gained a `variant`
+  prop; the asset table requests `thumb`. `/media` + picker already request the
+  thumbnail (served, with thumb→original fallback for legacy rows). Columns
+  (`thumbnail_key`/`width`/`height`) already exist from phase 1 → no migration.
+  Existing phase-1 rows have null dims/thumb and fall back to the original until
+  re-uploaded (graceful). **Next: `npm install sharp`, restart dev, upload a photo,
+  confirm thumbnails + dimensions; `npm test`; commit.** Phase 3 (rembg) 🔜.
 - **Phase 1 (reuse core + library) ✅ built, backfilled, verified; `imageKey` dropped.**
   Reuse confirmed end to end (one upload used by two printers, counted correctly).
   Upload names default to the device **model**; `imageId` replaces `imageKey` (column
