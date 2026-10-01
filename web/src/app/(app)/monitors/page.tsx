@@ -1,4 +1,4 @@
-import { Lock } from "lucide-react";
+import { Lock, Monitor } from "lucide-react";
 
 import { AssetTable } from "@/components/asset-table";
 import { PagePlaceholder } from "@/components/page-placeholder";
@@ -42,6 +42,12 @@ export default async function Page({ searchParams }: PageProps<"/monitors">) {
         view: "monitor",
         columnOrder,
         title: "Monitors",
+        subtitle: "Manage and view all monitor assets in your organization.",
+        icon: <Monitor />,
+        showStatusFilter: true,
+        showVendorFilter: true,
+        showModelFilter: true,
+        createLabel: "New Monitor",
         emptyMessage: "No monitors yet.",
       }}
       canWrite={canWrite}

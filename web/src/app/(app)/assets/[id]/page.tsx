@@ -1,9 +1,9 @@
 import { notFound } from "next/navigation";
 import { Lock } from "lucide-react";
 
-import { AssetDetail } from "@/components/asset-detail";
 import { ComputerDetail } from "@/components/computer-detail";
 import { PrinterDetail } from "@/components/printer-detail";
+import { ThinAssetDetail } from "@/components/thin-detail";
 import { PagePlaceholder } from "@/components/page-placeholder";
 import { getAssetAssignmentHistory } from "@/db/assignments";
 import { getPrinterCounters } from "@/db/counters";
@@ -103,42 +103,27 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
     );
   }
 
-  // Other non-printer assets (monitor / phone / network): the generic detail. All
-  // key off the same route tag, so fetch them together.
-  const [
-    machine,
-    assigneeId,
-    people,
-    locations,
-    assetDetails,
-    software,
-    assignmentHistory,
-  ] = await Promise.all([
-    getMachineSummary(id),
-    canWrite ? getAssetAssigneeId(id) : Promise.resolve(null),
-    canWrite ? getPeople() : Promise.resolve([]),
-    canWrite ? getLeafLocationOptions() : Promise.resolve([]),
-    getAssetDetails(id),
-    // Tracked-software panel (spec 15, AC-6); empty for non-computers.
-    getInstalledSoftware(id),
-    // Assignment history panel (spec 16, AC-7); empty for never-assigned devices.
-    getAssetAssignmentHistory(id),
-  ]);
+  // Thin categories (monitor / phone / network): the shared tabbed detail (spec
+  // 17.05). Monitors/phones carry assignment; network carries only its own fields.
+  const [assigneeId, people, locations, assetDetails, assignmentHistory] =
+    await Promise.all([
+      canWrite ? getAssetAssigneeId(id) : Promise.resolve(null),
+      canWrite ? getPeople() : Promise.resolve([]),
+      canWrite ? getLeafLocationOptions() : Promise.resolve([]),
+      getAssetDetails(id),
+      // Assignment history (spec 16, AC-7); empty for never-assigned / network gear.
+      getAssetAssignmentHistory(id),
+    ]);
 
   return (
-    <AssetDetail
+    <ThinAssetDetail
       asset={asset}
-      machine={machine}
-      canWrite={canWrite}
-      canScan={canScan}
+      details={assetDetails?.row ?? null}
+      assignmentHistory={assignmentHistory}
+      assigneeId={assigneeId ?? null}
       people={people}
       locations={locations}
-      details={assetDetails?.row ?? null}
-      assigneeId={assigneeId ?? null}
-      reachability={null}
-      counters={null}
-      software={software}
-      assignmentHistory={assignmentHistory}
+      canWrite={canWrite}
     />
   );
 }

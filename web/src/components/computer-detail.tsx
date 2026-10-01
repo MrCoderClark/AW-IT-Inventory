@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Activity as ActivityIcon,
@@ -23,34 +22,30 @@ import {
   MoreHorizontal,
   Package,
   Pencil,
-  Plus,
   Printer,
   ScanLine,
   ShieldCheck,
   Tag as TagIcon,
   Trash2,
-  Undo2,
   User,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { deleteAsset } from "@/app/(app)/assets/actions";
-import {
-  assignAssetAction,
-  returnAssetAction,
-} from "@/app/(app)/people-actions";
 import { requestScan } from "@/app/(app)/scan-actions";
 import {
   AssetFormDialog,
   type PersonOption,
 } from "@/components/asset-form-dialog";
 import { AssetImageUpload } from "@/components/asset-image-upload";
+import { AssignmentControls } from "@/components/assignment-controls";
 import {
-  Dot,
+  ActivityTable,
+  AssignmentTimeline,
   InfoField,
   Panel,
+  deriveActivity,
   fmtDate,
-  fmtDateTime,
 } from "@/components/detail-ui";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
@@ -69,13 +64,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Tabs, TabsList, TabsPanel, TabsTab } from "@/components/ui/tabs";
 import {
   type Asset,
@@ -86,7 +74,6 @@ import {
 } from "@/lib/data";
 import type { AssetFormValues } from "@/lib/asset-schema";
 import { TYPE_FIELDS, detailsToFormValues, type TypeField } from "@/lib/asset-fields";
-import { cn } from "@/lib/utils";
 
 /** Format one spec-10 computer field for display. */
 function fmtField(field: TypeField, row: Record<string, unknown> | null): string {
@@ -97,133 +84,11 @@ function fmtField(field: TypeField, row: Record<string, unknown> | null): string
   return String(v);
 }
 
-/** A derived activity event (assignment history + the last scan). Newest first. */
-type ActivityEvent = { at: string; title: string; detail: string; ok: boolean };
-
-function deriveActivity(
-  history: AssignmentEvent[],
-  machine?: MachineSummary,
-): ActivityEvent[] {
-  const events: ActivityEvent[] = [];
-  for (const e of history) {
-    events.push({
-      at: e.assignedAt,
-      title: "Assigned",
-      detail: `To ${e.personName} by ${e.assignedBy}`,
-      ok: true,
-    });
-    if (e.unassignedAt) {
-      events.push({
-        at: e.unassignedAt,
-        title: "Returned",
-        detail: `From ${e.personName}${e.unassignedBy ? ` by ${e.unassignedBy}` : ""}`,
-        ok: false,
-      });
-    }
-  }
-  if (machine?.lastSeen) {
-    events.push({
-      at: machine.lastSeen,
-      title: "Scanned",
-      detail: machine.status ? `Collector · ${machine.status}` : "Collector sweep",
-      ok: true,
-    });
-  }
-  return events.sort((a, b) => +new Date(b.at) - +new Date(a.at));
-}
-
-function ActivityTable({ events }: { events: ActivityEvent[] }) {
-  if (events.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        No activity yet. Assignments and collector scans appear here.
-      </p>
-    );
-  }
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            <th className="pb-2 pr-4 font-semibold">Date &amp; Time</th>
-            <th className="pb-2 pr-4 font-semibold">Event</th>
-            <th className="pb-2 font-semibold">Details</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y">
-          {events.map((e, i) => (
-            <tr key={`${e.title}-${e.at}-${i}`}>
-              <td className="whitespace-nowrap py-2.5 pr-4 text-muted-foreground tabular-nums">
-                {fmtDateTime(e.at)}
-              </td>
-              <td className="whitespace-nowrap py-2.5 pr-4 font-medium">
-                {e.title}
-              </td>
-              <td className="py-2.5">
-                <Dot
-                  color={e.ok ? "var(--status-online)" : "var(--muted-foreground)"}
-                >
-                  {e.detail}
-                </Dot>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-/** The device's custody history (spec 16, AC-7), newest first. */
-function AssignmentTimeline({ history }: { history: AssignmentEvent[] }) {
-  if (history.length === 0) {
-    return (
-      <p className="rounded-xl border border-dashed bg-card/50 p-5 text-sm text-muted-foreground">
-        No assignment history yet.
-      </p>
-    );
-  }
-  return (
-    <ol className="relative ml-1 border-l pl-5">
-      {history.map((e) => (
-        <li key={e.id} className="relative pb-5 last:pb-0">
-          <span
-            className={cn(
-              "absolute -left-[23px] top-1 size-2.5 rounded-full border-2 bg-card",
-              e.open ? "border-primary" : "border-border",
-            )}
-          />
-          <p className="text-sm">
-            <Link
-              href={`/people/${e.personId}`}
-              className="font-medium hover:underline"
-            >
-              {e.personName}
-            </Link>
-          </p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            Assigned {fmtDateTime(e.assignedAt)} by {e.assignedBy}
-          </p>
-          {e.open ? (
-            <p className="mt-0.5 text-xs text-[color:var(--status-online)]">
-              Currently held
-            </p>
-          ) : (
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Returned {fmtDateTime(e.unassignedAt)} by {e.unassignedBy}
-            </p>
-          )}
-        </li>
-      ))}
-    </ol>
-  );
-}
-
 /**
  * The redesigned, tabbed computer detail page (spec 17.04). Reuses the shared
- * detail UI (`detail-ui`) and the `Tabs` shell; maps today's computer panels —
- * spec-10 fields, live scan health, tracked software (spec 15), assignment +
- * history (spec 16) — onto tabs without changing any behavior.
+ * detail UI (`detail-ui`), the `Tabs` shell, and `AssignmentControls`; maps today's
+ * computer panels — spec-10 fields, live scan health, tracked software (spec 15),
+ * assignment + history (spec 16) — onto tabs without changing any behavior.
  */
 export function ComputerDetail({
   asset,
@@ -254,40 +119,12 @@ export function ComputerDetail({
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [isDeleting, startDelete] = React.useTransition();
   const [isScanning, startScan] = React.useTransition();
-  const [isAssigning, startAssign] = React.useTransition();
-  const [assignPerson, setAssignPerson] = React.useState("");
 
   const computerFields = TYPE_FIELDS.Computer.fields;
   const activity = React.useMemo(
     () => deriveActivity(assignmentHistory, machine),
     [assignmentHistory, machine],
   );
-
-  function assign() {
-    if (!assignPerson) return;
-    startAssign(async () => {
-      const res = await assignAssetAction(asset.id, assignPerson);
-      if (res.ok) {
-        toast.success(res.message);
-        setAssignPerson("");
-        router.refresh();
-      } else {
-        toast.error(res.error);
-      }
-    });
-  }
-
-  function returnDevice() {
-    startAssign(async () => {
-      const res = await returnAssetAction(asset.id);
-      if (res.ok) {
-        toast.success(res.message);
-        router.refresh();
-      } else {
-        toast.error(res.error);
-      }
-    });
-  }
 
   function scanNow() {
     startScan(async () => {
@@ -458,7 +295,6 @@ export function ComputerDetail({
             </Panel>
 
             <div className="flex flex-col gap-5">
-              {/* Live scan snapshot */}
               <Panel
                 icon={<MonitorCog />}
                 title="Live Scan"
@@ -483,7 +319,6 @@ export function ComputerDetail({
                 )}
               </Panel>
 
-              {/* Assignment snapshot */}
               <Panel
                 icon={<User />}
                 title="Assignment"
@@ -599,49 +434,11 @@ export function ComputerDetail({
         <TabsPanel value="assignment" className="flex flex-col gap-5">
           {canWrite && (
             <Panel icon={<User />} title="Assign Device">
-              <div className="flex flex-wrap items-center gap-2">
-                <Select
-                  value={assignPerson || null}
-                  onValueChange={(v) => setAssignPerson(v ?? "")}
-                >
-                  <SelectTrigger className="w-full sm:w-64">
-                    <SelectValue
-                      placeholder={asset.assignee ? "Reassign to…" : "Assign to…"}
-                    >
-                      {(value) =>
-                        people.find((p) => p.id === value)?.name ??
-                        (asset.assignee ? "Reassign to…" : "Assign to…")
-                      }
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {people.length ? (
-                      people.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.name}
-                        </SelectItem>
-                      ))
-                    ) : (
-                      <SelectItem value="" disabled>
-                        No active people — add someone first
-                      </SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-                <Button onClick={assign} disabled={isAssigning || !assignPerson}>
-                  {isAssigning ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <Plus className="size-4" />
-                  )}
-                  Assign
-                </Button>
-                {asset.assignee && (
-                  <Button variant="outline" onClick={returnDevice} disabled={isAssigning}>
-                    <Undo2 className="size-4" /> Return
-                  </Button>
-                )}
-              </div>
+              <AssignmentControls
+                assetId={asset.id}
+                hasAssignee={!!asset.assignee}
+                people={people}
+              />
             </Panel>
           )}
           <Panel icon={<ActivityIcon />} title="Assignment History">
