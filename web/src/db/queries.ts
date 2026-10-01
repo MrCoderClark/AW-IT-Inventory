@@ -55,7 +55,7 @@ const assetSelect = {
   warrantyUntil: assets.warrantyUntil,
   costCenter: assets.costCenter,
   spec: assets.spec,
-  imageKey: assets.imageKey,
+  imageId: assets.imageId,
   assigneeName: people.name,
   assigneeInitials: people.initials,
   // Searchable identifiers from the type detail tables (only one type ever has a
@@ -82,7 +82,7 @@ type Row = {
   warrantyUntil: string | null;
   costCenter: string | null;
   spec: string | null;
-  imageKey: string | null;
+  imageId: string | null;
   assigneeName: string | null;
   assigneeInitials: string | null;
   computerIp: string | null;
@@ -114,7 +114,7 @@ function toAsset(r: Row, pathById: Map<string, string>): Asset {
     warrantyUntil: r.warrantyUntil ?? "",
     costCenter: r.costCenter ?? "",
     spec: r.spec ?? "",
-    imageKey: r.imageKey ?? null,
+    imageId: r.imageId ?? null,
     search: [
       r.computerIp,
       r.printerIp,

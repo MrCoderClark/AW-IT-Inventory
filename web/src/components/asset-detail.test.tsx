@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
@@ -28,6 +29,11 @@ vi.mock("@/app/(app)/scan-actions", () => ({
 vi.mock("@/app/(app)/people-actions", () => ({
   assignAssetAction: vi.fn(),
   returnAssetAction: vi.fn(),
+}));
+// The asset photo control imports the media server action (spec 18), which pulls
+// in the db client (server-only) too; stub it so the import never loads the DB.
+vi.mock("@/app/(app)/media-actions", () => ({
+  setAssetImage: vi.fn(),
 }));
 
 function makeAsset(overrides: Partial<Asset> = {}): Asset {

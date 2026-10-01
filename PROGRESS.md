@@ -7,7 +7,36 @@ via a feature branch + PR.
 
 ---
 
-## In progress 🚧 — spec 17 UI redesign (branch `feat/printers-ui-redesign`)
+## In progress 🚧 — spec 18 media library, phase 1 (branch `feat/media-library`)
+
+Shared, reusable asset images (spec 18, `docs/specs/18-media-library/`): one upload
+reused across identical devices, deduped by content hash, with a `/media` library.
+Supersedes spec 17.02's single-`imageKey` storage model.
+
+- **Phase 1 (reuse core + library) ✅ built, backfilled, verified; `imageKey` dropped.**
+  Reuse confirmed end to end (one upload used by two printers, counted correctly).
+  Upload names default to the device **model**; `imageId` replaces `imageKey` (column
+  dropped after backfill). Vitest green. One-time `backfill-media.ts`/`diag-media.ts`
+  removed after use. Pending: commit + spec-18 follow-ups (scope enroll, AGENTS sync,
+  note 17.02 superseded). Phases 2 (sharp resizing) / 3 (rembg cut-out worker) 🔜.
+  - Schema: new `media` table (+ partial-unique `media_sha256_uq`), `assets.imageId`
+    (FK→media, `restrict`); `assets.imageKey` kept temporarily, dropped after backfill.
+  - Data layer `web/src/db/media.ts` (create-or-reuse-by-hash with 23505 dedup-race
+    handling, list+usage, update, delete-unused with 23503→in-use); `asset-images.ts`
+    reworked onto `imageId`.
+  - API: `GET/POST /api/media`, `GET/PATCH/DELETE /api/media/[id]`, shared
+    `web/src/lib/media-serve.ts`; `GET /api/assets/[tag]/image` reworked to resolve
+    through media (POST/DELETE removed); `setAssetImage` server action
+    (`web/src/app/(app)/media-actions.ts`).
+  - UI: `/media` page + `media-library.tsx` (grid/search/upload/edit/delete),
+    `media-picker-dialog.tsx`, asset photo control reworked (Upload new / Choose from
+    library / Remove), `AssetImage` serves via `imageId`; Media nav entry.
+  - Tests: `media.test.ts` (dedup race, delete guard, usage count, classifiers),
+    asset-image `route.test.ts` rewritten for GET-only.
+
+---
+
+## Previously in progress 🚧 — spec 17 UI redesign (branch `feat/printers-ui-redesign`)
 
 Umbrella program (spec 17, `docs/specs/17-ui-redesign/`): light-first + blue design
 system, asset image upload, then rebuild printers / computers / thin categories.
