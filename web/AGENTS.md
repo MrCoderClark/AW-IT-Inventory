@@ -185,6 +185,47 @@ page (assign/return + real custody history, replacing the old audit timeline).
 Form validation is `src/lib/person-schema.ts` (zod, same client + server pattern
 as `asset-schema.ts`; the client always submits a full `PersonFormValues`).
 
+## Media library (spec 18)
+
+Shared, reusable asset images: an image is uploaded once, stored once (content-hash
+dedup), and reused across any number of assets. Supersedes spec 17.02's one-object-
+per-asset `imageKey` model — assets now carry `imageId` (FK → `media`, `onDelete:
+restrict`); the `imageKey` column was dropped after a backfill.
+
+One `server-only` module `src/db/media.ts` owns the `media` table: `createOrReuseMedia`
+(the SHA-256 of the **uploaded** bytes is the dedup key, so identical uploads collapse
+to one row/object; a lost insert race on the partial-unique `media_sha256_uq` is caught
+like `isOpenAssignmentRace` and returns the winning row), `listMedia` (name/notes
+search + asset-type filter + sort by recent/most-used + offset pagination; usage is
+counted in-query via a left join + `groupBy` — a correlated count subquery in the
+`select` reads 0 in Drizzle, so don't use one), `getMediaStats`, `getMediaDetail`,
+`getMediaUsageCount`, `updateMediaMeta`, and `deleteMedia` (blocked while any asset
+uses it; the `restrict` FK's 23503 becomes a clean "in use" result, and deleting a row
+also removes its S3 objects). `src/db/asset-images.ts` is the single writer of
+`assets.imageId` (`getAssetMedia` resolves an asset tag → its media row for serving).
+
+Image processing is `src/lib/image.ts` (`processImage`, **sharp**): on upload the
+stored original is capped to 2000px (EXIF orientation baked in), real `width`/`height`
+are recorded, and a 400px WebP `thumbnail` is stored as a second object. Dedup is on
+the uploaded bytes, before processing. Bytes reach the browser only through
+authenticated app routes via `src/lib/media-serve.ts` (`serveMediaVariant`, with a
+thumb→original fallback); the bucket stays private. `sharp` is a dependency, so the
+media/asset-image routes are `runtime = "nodejs"`.
+
+API: `GET`/`POST /api/media`, `GET`/`PATCH`/`DELETE /api/media/[id]`;
+`GET /api/assets/[tag]/image` resolves an asset through media and serves a variant (its
+old upload POST/DELETE are gone — upload via `POST /api/media`, then assign with the
+`setAssetImage` server action in `src/app/(app)/media-actions.ts`). Managing media
+reuses `asset:write`; viewing/picking is open to any `asset:read` user (no new
+permission). Surfaces: `/media` (dashboard: hero, stat cards, search / type filter /
+sort, grid-or-list, upload/edit/delete) and `/media/[id]` (preview, details incl.
+dimensions, "used in assets", notes); plus the asset photo control
+(`asset-image-upload.tsx`: upload new / choose from library / remove) and
+`media-picker-dialog.tsx`. Upload defaults the library name to the device **model**.
+Legacy rows predating the resize phase have null dimensions and fall back to serving
+the original; a media row's bytes are immutable (replacing a shared file is deliberately
+not offered, since it would change every asset using it).
+
 ## Testing note: `server-only` under Vitest
 
 `vitest.config.mts` aliases `server-only` to a no-op stub

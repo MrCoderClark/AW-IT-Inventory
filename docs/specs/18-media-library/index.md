@@ -268,12 +268,12 @@ to the type icon), rather than failing the whole migration.
 
 ## Follow-up
 
-- [ ] Enroll a scope row for the media library (via `/scope`) so this spec links
-  a buildable feature and its status tracks the build.
+- [x] Enroll a scope row for the media library (`docs/scope/scope.md`); phases 1
+  and 2 marked done there.
 - [ ] Pick the exact rembg model (U^2-Net vs BiRefNet) at phase 3 build time.
-- [ ] After build, record `sharp` and `rembg` plus the `src/db/media.ts` module in
-  `web/AGENTS.md` and the collector conventions via `/sync`.
-- [ ] Add a short note to spec 17.02 that its `imageKey` storage model is
+- [x] Record `sharp` + `src/db/media.ts`/`src/lib/image.ts`/`media-serve.ts` in
+  `web/AGENTS.md`. (rembg + the collector cut-out worker get recorded at phase 3.)
+- [x] Add a short note to spec 17.02 that its `imageKey` storage model is
   superseded by spec 18.
 - [ ] A per asset gallery (multiple images per asset) is out of scope now; revisit
   if it is actually wanted.
