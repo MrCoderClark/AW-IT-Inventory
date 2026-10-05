@@ -20,7 +20,7 @@ dump: the atomic build steps stay in each feature's spec (`docs/specs/`). Run
 | Software inventory (tracked-software watchlist) | done | [15](../specs/15-software-inventory/index.md) |
 | People directory and device assignments | done | [16](../specs/16-people-directory-assignments/index.md) |
 | OPUS UI redesign (new global direction) | done | [17](../specs/17-ui-redesign/index.md) |
-| Media library (reusable asset images) | in-progress | [18](../specs/18-media-library/index.md) |
+| Media library (reusable asset images) | done | [18](../specs/18-media-library/index.md) |
 
 ## Features
 
@@ -423,7 +423,7 @@ new list and tabbed detail layouts.
 - [ ] Verify it: `/check verify opus ui redesign`
 - [ ] Test it: `/test opus ui redesign`
 
-### Media library (reusable asset images) · in-progress
+### Media library (reusable asset images) · done
 
 Replace the one photo per asset storage (spec 17.02's `imageKey`) with a shared
 media library: an image is uploaded once, kept as its own record with a name and
@@ -438,7 +438,7 @@ deleting an image still in use; images are thumbnailed and capped on upload; and
 requested background removal runs on a self hosted worker and shows its cut out.
 
 - [x] Design it (spec): [18](../specs/18-media-library/index.md)
-- [ ] Build it: `/develop media library` (build the phases in order)
+- [x] Build it: `/develop media library` (built the phases in order)
   - [x] Phase 1 core: the `media` table plus the backfill migration off
         `assets.imageKey`, hash dedup, the media API and data layer, the `/media`
         library page and picker, and the upload or pick asset control (covers AC-1
@@ -447,8 +447,9 @@ requested background removal runs on a self hosted worker and shows its cut out.
         dimensions recorded, thumbnails used in lists and pickers (covers AC-8).
         Plus a `/media` dashboard redesign (hero, stat cards, filter/sort/view
         toggle) and a `/media/[id]` detail page, to the design mockup.
-  - [ ] Phase 3 background removal: a rembg worker on the scan job claim pattern, a
-        "Remove background" action, the cut out stored and shown (covers AC-9)
+  - [x] Phase 3 background removal: a rembg worker (collector `cutout` command, opt-in
+        `cutout` extra) on the scan-job claim pattern, a "Remove background" action, the
+        cut out stored and shown (covers AC-9)
 - [ ] Verify it: `/check verify media library`
 - [ ] Test it: `/test media library`
 

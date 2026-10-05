@@ -18,12 +18,14 @@ const H = vi.hoisted(() => {
     insertError: (Error & { code?: string; constraint_name?: string }) | null;
     deleteReturning: unknown[];
     deleteError: (Error & { code?: string }) | null;
+    updates: Record<string, unknown>[];
   } = {
     selectResults: [],
     insertReturning: [],
     insertError: null,
     deleteReturning: [],
     deleteError: null,
+    updates: [],
   };
 
   const makeBuilder = () => {
@@ -63,19 +65,40 @@ const H = vi.hoisted(() => {
     }),
   }));
 
+  const updateMock = vi.fn(() => ({
+    set: (obj: Record<string, unknown>) => {
+      state.updates.push(obj);
+      return { where: () => Promise.resolve() };
+    },
+  }));
+
   const putImageMock = vi.fn(() => Promise.resolve());
   const removeImageMock = vi.fn(() => Promise.resolve());
 
-  return { state, selectMock, insertMock, deleteMock, putImageMock, removeImageMock };
+  return {
+    state,
+    selectMock,
+    insertMock,
+    deleteMock,
+    updateMock,
+    putImageMock,
+    removeImageMock,
+  };
 });
 
 vi.mock("@/db/index", () => ({
-  db: { select: H.selectMock, insert: H.insertMock, delete: H.deleteMock },
+  db: {
+    select: H.selectMock,
+    insert: H.insertMock,
+    delete: H.deleteMock,
+    update: H.updateMock,
+  },
 }));
 vi.mock("@/lib/storage", () => ({
   sha256Hex: () => "deadbeef",
   newMediaObjectKey: (id: string) => `media/${id}/image.png`,
   newMediaThumbKey: (id: string) => `media/${id}/thumb.webp`,
+  newMediaCutoutKey: (id: string) => `media/${id}/cutout.png`,
   putImage: H.putImageMock,
   removeImage: H.removeImageMock,
 }));
@@ -91,11 +114,13 @@ vi.mock("@/lib/image", () => ({
 }));
 
 import {
+  completeCutout,
   createOrReuseMedia,
   deleteMedia,
   isMediaDedupRace,
   isMediaInUseViolation,
   listMedia,
+  requestCutout,
 } from "./media";
 
 const bytes = Buffer.from([1, 2, 3, 4]);
@@ -113,6 +138,7 @@ beforeEach(() => {
   H.state.insertError = null;
   H.state.deleteReturning = [];
   H.state.deleteError = null;
+  H.state.updates = [];
 });
 
 describe("createOrReuseMedia — dedup (AC-3)", () => {
@@ -210,6 +236,58 @@ describe("listMedia — usage counts (AC-5)", () => {
       ["m2", 0],
     ]);
     expect(page.nextOffset).toBeNull();
+  });
+});
+
+describe("requestCutout — enqueue (AC-9)", () => {
+  it("not-found when the media row is gone", async () => {
+    H.state.selectResults = [[]]; // getMedia → none
+    expect(await requestCutout("m1")).toEqual({ ok: false, error: "not-found" });
+    expect(H.state.updates).toHaveLength(0);
+  });
+
+  it("busy when a job is already pending/processing", async () => {
+    H.state.selectResults = [[{ id: "m1", cutoutStatus: "processing" }]];
+    expect(await requestCutout("m1")).toEqual({ ok: false, error: "busy" });
+    expect(H.state.updates).toHaveLength(0);
+  });
+
+  it("enqueues as pending from a terminal/absent state", async () => {
+    H.state.selectResults = [[{ id: "m1", cutoutStatus: "failed" }]];
+    expect(await requestCutout("m1")).toEqual({ ok: true, status: "pending" });
+    expect(H.state.updates[0]).toMatchObject({ cutoutStatus: "pending" });
+  });
+});
+
+describe("completeCutout — fenced result (AC-9)", () => {
+  it("drops a result from a worker that no longer owns the job", async () => {
+    H.state.selectResults = [[{ status: "processing", workerId: "other" }]];
+    const res = await completeCutout("m1", "me", { ok: false });
+    expect(res).toEqual({ ok: false });
+    expect(H.state.updates).toHaveLength(0);
+    expect(H.putImageMock).not.toHaveBeenCalled();
+  });
+
+  it("stores the PNG and marks done on success", async () => {
+    H.state.selectResults = [[{ status: "processing", workerId: "w1" }]];
+    const res = await completeCutout("m1", "w1", {
+      ok: true,
+      cutoutBytes: Buffer.from("png"),
+    });
+    expect(res).toEqual({ ok: true });
+    expect(H.putImageMock).toHaveBeenCalledOnce();
+    expect(H.state.updates[0]).toMatchObject({
+      cutoutStatus: "done",
+      cutoutKey: "media/m1/cutout.png",
+    });
+  });
+
+  it("marks failed without storing on failure", async () => {
+    H.state.selectResults = [[{ status: "processing", workerId: "w1" }]];
+    const res = await completeCutout("m1", "w1", { ok: false });
+    expect(res).toEqual({ ok: true });
+    expect(H.putImageMock).not.toHaveBeenCalled();
+    expect(H.state.updates[0]).toMatchObject({ cutoutStatus: "failed" });
   });
 });
 

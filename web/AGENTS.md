@@ -226,6 +226,18 @@ Legacy rows predating the resize phase have null dimensions and fall back to ser
 the original; a media row's bytes are immutable (replacing a shared file is deliberately
 not offered, since it would change every asset using it).
 
+Background removal (spec 18 phase 3) is a cut-out job on the `media` row following
+the `scan_jobs` claim pattern, not a bare flag: `requestCutout` enqueues (`pending`),
+`claimCutoutJob` atomically takes the oldest pending row (`FOR UPDATE SKIP LOCKED`,
+stamping `processing`/worker/attempts and reclaiming jobs stuck past a timeout, like
+`claimNextJob`), `completeCutout` stores the PNG as `cutoutKey` (`done`) or marks
+`failed`, **fenced** by the worker id so a reclaimed job's late result is dropped.
+The collector's `cutout` worker (opt-in `rembg`) pulls `POST /api/media/cutout/claim`
+(returns the original bytes base64 — the outbound worker never touches S3), runs
+rembg, and posts the cut-out to `POST /api/media/cutout/[id]/result`. `media-serve`
+serves the `cutout` variant; `/media/[id]` has the request/status/preview control
+(`media-cutout-control.tsx`) and auto-polls while a job runs.
+
 ## Testing note: `server-only` under Vitest
 
 `vitest.config.mts` aliases `server-only` to a no-op stub

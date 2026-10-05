@@ -140,6 +140,12 @@ export function newMediaThumbKey(mediaId: string): string {
   return `media/${mediaId}/thumb.webp`;
 }
 
+/** The object key for a media row's background-removed cut-out (spec 18, phase 3).
+   Always a PNG (transparency). */
+export function newMediaCutoutKey(mediaId: string): string {
+  return `media/${mediaId}/cutout.png`;
+}
+
 /** Hex SHA-256 of an image's bytes — the media dedup key (spec 18, AC-3). */
 export function sha256Hex(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("hex");

@@ -30,6 +30,7 @@ from discovery import discover
 from ingest import get_discovery_settings, post_scan
 from models import HostResult, RunReport
 from report import print_summary, write_report
+from cutout_worker import run_cutout_worker
 from worker import run_worker
 
 console = Console()
@@ -287,6 +288,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     worker.add_argument("--config", default="config.yaml")
     worker.set_defaults(func=run_worker)
+
+    cutout = sub.add_parser(
+        "cutout",
+        help="Run the rembg background-removal worker (spec 18 phase 3). Needs the "
+        "cutout extra: `uv sync --extra cutout`.",
+    )
+    cutout.add_argument("--config", default="config.yaml")
+    cutout.set_defaults(func=run_cutout_worker)
     return parser
 
 

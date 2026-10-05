@@ -30,7 +30,7 @@ export async function serveMediaVariant(
   // Resolve the variant to a concrete object key, applying the fallback rules.
   let key: string | null;
   if (variant === "cutout") {
-    key = null; // phase 3 column not present yet
+    key = row.cutoutKey ?? null; // 404 until a cut-out has been produced (phase 3)
   } else if (variant === "thumb") {
     key = row.thumbnailKey ?? row.objectKey;
   } else {

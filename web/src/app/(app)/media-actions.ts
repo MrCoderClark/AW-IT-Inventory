@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { getAssetImageRef, setAssetImageId } from "@/db/asset-images";
-import { getMedia } from "@/db/media";
+import { getMedia, requestCutout } from "@/db/media";
 import { getCurrentUser, hasPermission } from "@/lib/auth/session";
 import type { ActionResult } from "@/lib/data";
 
@@ -50,4 +50,31 @@ export async function setAssetImage(
     ok: true,
     message: mediaId ? "Photo updated." : "Photo removed.",
   };
+}
+
+const CUTOUT_FORBIDDEN: ActionResult = {
+  ok: false,
+  error: "You don't have permission to edit library images.",
+};
+
+/**
+ * Request (or retry) background removal for a library image (spec 18 phase 3,
+ * AC-9). Enqueues a cut-out job the rembg worker will pick up. Gated on
+ * `asset:write`, rechecked server-side.
+ */
+export async function requestCutoutAction(mediaId: unknown): Promise<ActionResult> {
+  const user = await getCurrentUser();
+  if (!hasPermission(user, "asset:write")) return CUTOUT_FORBIDDEN;
+  if (typeof mediaId !== "string" || !mediaId)
+    return { ok: false, error: "Unknown image." };
+
+  const res = await requestCutout(mediaId);
+  if (!res.ok) {
+    if (res.error === "not-found")
+      return { ok: false, error: "That image is no longer in the library." };
+    return { ok: false, error: "Background removal is already running for this image." };
+  }
+
+  revalidatePath(`/media/${mediaId}`);
+  return { ok: true, message: "Background removal queued." };
 }

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronRight, Lock } from "lucide-react";
 
+import { MediaCutoutControl, type CutoutUiStatus } from "@/components/media-cutout-control";
 import { MediaDetailActions } from "@/components/media-detail-actions";
 import { PagePlaceholder } from "@/components/page-placeholder";
 import { getMediaDetail } from "@/db/media";
@@ -82,6 +83,12 @@ export default async function Page({
               className="aspect-[4/3] w-full bg-accent-soft object-contain"
             />
           </div>
+          <MediaCutoutControl
+            mediaId={media.id}
+            status={(media.cutoutStatus ?? "none") as CutoutUiStatus}
+            hasCutout={!!media.cutoutKey}
+            canWrite={canWrite}
+          />
         </div>
 
         {/* Details */}
