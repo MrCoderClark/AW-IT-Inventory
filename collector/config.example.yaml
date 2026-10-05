@@ -16,27 +16,46 @@ snmp_community: public
 # so "auto" (or "v1") is needed for it; pin "v1" to skip the v2c timeout.
 snmp_version: auto
 
-# WinRM local-admin credential profiles. `username` uses `.\name` for a local
-# account. Secrets come from the named environment variable.
+# WinRM local-admin credential profiles. Secrets come from the named environment
+# variable (never stored here).
+#
+# ⚠️ For a LOCAL account use a BARE username (`infotech`), NOT `.\infotech`:
+# pywinrm's NTLM sends the `.\` prefix as the domain "." literally, which the target
+# rejects (even though PowerShell's `.\user` works). The collector normalizes a
+# leading `.\` away for you, but write it bare to be clear. Use `DOMAIN\user` or
+# `user@domain` for a domain account.
+#
+# Note: on a DOMAIN-joined machine, a local account also needs
+#   HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System
+#     \LocalAccountTokenFilterPolicy = 1 (DWORD)
+# or WinRM returns "Access is denied" (UAC remote token filtering). Push it by GPO
+# for the fleet; the more secure alternative is a domain scan account in each
+# machine's local Administrators. You can list several profiles for the SAME
+# account with different passwords — they're tried in order (first that authenticates
+# wins), handy when a fallback password is in play.
 profiles:
   - id: win10-infotech
-    username: ".\\infotech"
+    username: "infotech"
     password_env: PW_WIN10_INFOTECH
+  # Same local account, a fallback password tried next.
+  - id: win10-infotech-fallback
+    username: "infotech"
+    password_env: PW_WIN10_INFOTECH_FALLBACK
   - id: wg-intech
-    username: ".\\Intech"
+    username: "Intech"
     password_env: PW_WG_INTECH
   - id: ad-infotech
-    username: ".\\Infotech"
+    username: "Infotech"
     password_env: PW_AD_INFOTECH
 
 # Which profiles to try per host, in order (first that authenticates wins).
 rules:
   - match: { subnet: 192.168.72.0/24 }   # workgroup
-    try: [wg-intech, win10-infotech]
-  - match: { subnet: 192.168.70.0/24 }   # domain
-    try: [ad-infotech, win10-infotech]
+    try: [wg-intech, win10-infotech, win10-infotech-fallback]
+  - match: { subnet: 192.168.70.0/24 }   # domain (the local account works here too)
+    try: [win10-infotech, win10-infotech-fallback, ad-infotech]
   - match: { any: true }                 # fallback: try everything
-    try: [ad-infotech, win10-infotech, wg-intech]
+    try: [win10-infotech, win10-infotech-fallback, ad-infotech, wg-intech]
 
 concurrency: 64
 connect_timeout: 0.6

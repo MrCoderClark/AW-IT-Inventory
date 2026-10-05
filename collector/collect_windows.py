@@ -120,6 +120,18 @@ def _parse(data: dict) -> tuple[Hardware, Health, str | None, list[Software]]:
     return hardware, health, data.get("hostname"), software
 
 
+def _winrm_username(username: str) -> str:
+    """Normalize a credential username for pywinrm's NTLM.
+
+    pywinrm sends a ``.\\name`` prefix as the NTLM *domain* ``.`` literally, which
+    the target rejects (``InvalidCredentialsError``) — even though PowerShell's
+    WSMan accepts ``.\\name``. A **bare** username authenticates against the host's
+    local SAM, so strip a leading ``.\\`` (local-account shorthand). ``DOMAIN\\user``
+    and ``user@domain`` are left untouched.
+    """
+    return username[2:] if username.startswith(".\\") else username
+
+
 def collect_windows(
     ip: str, open_ports: list[int], profiles: list[CredentialProfile], config: Config
 ) -> dict:
@@ -142,7 +154,7 @@ def collect_windows(
         try:
             session = winrm.Session(
                 endpoint,
-                auth=(prof.username, prof.password),
+                auth=(_winrm_username(prof.username), prof.password),
                 transport=config.winrm_transport,
                 server_cert_validation="ignore",
             )
