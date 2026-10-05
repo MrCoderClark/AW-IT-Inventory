@@ -7,7 +7,35 @@ via a feature branch + PR.
 
 ---
 
-## In progress 🚧 — spec 17.05 thin categories (branch `feat/thin-categories-redesign`)
+## In progress 🚧 — scan overwrites asset fields (branch `feat/scan-updates-asset`)
+
+Make a collector scan authoritative over an asset's **technical** fields (user
+request). On ingest, a matched asset's `serial` / `model` / `vendor` and (for a
+Computer) `computer_details` `cpu` / `ramGb` / `operatingSystem` / `storage` are
+overwritten from the scan — **only where the scan returned a value** (a field the
+collector didn't read never blanks an existing one), and human/admin fields (name,
+location, cost center, dates, assignee) are never touched. Implemented in
+`web/src/db/ingest.ts` (`applyScanToAsset`, best-effort; `computer_details` upserted
+since the 1:1 row may not exist yet). Test: `web/src/db/ingest.test.ts`. Type-check +
+407 tests green. **Next: scan a machine, confirm its asset fields update; commit.**
+Note: this was the fix for the earlier "0 reachable" report, which turned out to be a
+DHCP/IP mismatch (the entered IP wasn't the machine) — no collector change needed for
+that; this enrichment is the follow-on the user asked for.
+
+---
+
+## Shipped — spec 17 UI redesign complete (merged)
+
+All five children merged to `main`: 01 design system, 02 image upload (later
+superseded by spec 18 media), 03 printers, 04 computers (`feat/computers-redesign`,
+PR #37), 05 monitors/phones/network (`feat/thin-categories-redesign`, PR #38). Every
+asset type is on the new list layout + shared tabbed detail framework (`detail-ui.tsx`
+/ `Tabs`). Follow-up: migrate `printer-detail.tsx` onto `detail-ui` (still has local
+primitive copies).
+
+---
+
+## Earlier in progress — spec 17.05 thin categories (branch `feat/thin-categories-redesign`)
 
 Finishing the spec 17 UI redesign: every asset type now on the new list layout +
 shared tabbed detail framework.

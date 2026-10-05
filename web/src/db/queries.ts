@@ -478,6 +478,9 @@ export async function getMachineSummary(
     .from(machines)
     .innerJoin(assets, eq(machines.assetId, assets.id))
     .where(eq(assets.tag, id))
+    // An asset can have more than one machine row (e.g. a failed scan keyed by IP
+    // plus a successful one keyed by hardware UUID/serial). Show the latest scan.
+    .orderBy(desc(machines.lastSeenAt))
     .limit(1);
   return rows[0] ? toMachineSummary(rows[0]) : undefined;
 }
@@ -489,7 +492,10 @@ export async function getMachineSummaries(): Promise<
   const rows = await db
     .select(machineSummarySelect)
     .from(machines)
-    .innerJoin(assets, eq(machines.assetId, assets.id));
+    .innerJoin(assets, eq(machines.assetId, assets.id))
+    // Oldest first, so when an asset has more than one machine row the newest scan
+    // is written last and wins (see getMachineSummary).
+    .orderBy(asc(machines.lastSeenAt));
 
   const map: Record<string, MachineSummary> = {};
   for (const r of rows) {

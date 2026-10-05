@@ -14,9 +14,19 @@ import {
 } from "./schema";
 
 // Loose shapes matching the collector's HostResult payload.
+interface IngestDisk {
+  model?: string | null;
+  size_gb?: number | null;
+  media_type?: string | null;
+}
 interface IngestHardware {
   serial?: string | null;
   hardware_uuid?: string | null;
+  manufacturer?: string | null;
+  model?: string | null;
+  cpu?: string | null;
+  ram_gb?: number | null;
+  disks?: IngestDisk[] | null;
   [k: string]: unknown;
 }
 interface IngestHealth {
@@ -60,6 +70,78 @@ export interface IngestResult {
 function clean(value: string | null | undefined): string | null {
   const v = (value ?? "").trim();
   return v || null;
+}
+
+/** A human storage summary from the scanned disks, e.g. "476 GB + 931 GB". */
+function summarizeDisks(disks: IngestDisk[] | null | undefined): string | null {
+  if (!Array.isArray(disks)) return null;
+  const parts = disks
+    .map((d) => (typeof d.size_gb === "number" ? `${Math.round(d.size_gb)} GB` : null))
+    .filter((p): p is string => p != null);
+  return parts.length ? parts.join(" + ") : null;
+}
+
+/**
+ * Overwrite an asset's technical fields from a scan (the user's chosen behavior:
+ * the scan is authoritative). Only fields the scan actually returned a value for are
+ * written — a field the collector didn't read never blanks an existing value — and
+ * only the technical fields the scan can know (serial/model/vendor and, for a
+ * computer, cpu/ram/os/storage). Human and admin fields (name, location, cost
+ * center, dates, assignee) are never touched. Best-effort: a failure here must not
+ * fail the machine ingest.
+ */
+async function applyScanToAsset(
+  assetId: string,
+  assetType: string | null,
+  hw: IngestHardware | null,
+  health: IngestHealth | null,
+  serial: string | null,
+  now: Date,
+): Promise<void> {
+  // Shared asset fields the scan can supply.
+  const assetSet: Partial<{
+    serial: string | null;
+    model: string | null;
+    vendor: string | null;
+  }> = {};
+  if (serial) assetSet.serial = serial;
+  const model = clean(hw?.model);
+  if (model) assetSet.model = model;
+  const vendor = clean(hw?.manufacturer);
+  if (vendor) assetSet.vendor = vendor;
+  if (Object.keys(assetSet).length) {
+    await db
+      .update(assets)
+      .set({ ...assetSet, updatedAt: now })
+      .where(eq(assets.id, assetId));
+  }
+
+  // Computer-specific detail fields (spec 10), from the WinRM collect.
+  if (assetType === "Computer" && hw) {
+    const detailSet: Partial<{
+      cpu: string | null;
+      ramGb: number | null;
+      operatingSystem: string | null;
+      storage: string | null;
+    }> = {};
+    const cpu = clean(hw.cpu);
+    if (cpu) detailSet.cpu = cpu;
+    if (typeof hw.ram_gb === "number") detailSet.ramGb = Math.round(hw.ram_gb);
+    const os = [clean(health?.os_name), clean(health?.os_version)]
+      .filter(Boolean)
+      .join(" ");
+    if (os) detailSet.operatingSystem = os;
+    const storage = summarizeDisks(hw.disks);
+    if (storage) detailSet.storage = storage;
+
+    if (Object.keys(detailSet).length) {
+      // The 1:1 detail row may not exist yet (created on first manual save), so upsert.
+      await db
+        .insert(computerDetails)
+        .values({ assetId, ...detailSet })
+        .onConflictDoUpdate({ target: computerDetails.assetId, set: detailSet });
+    }
+  }
 }
 
 export async function ingestScan(payload: IngestPayload): Promise<IngestResult> {
@@ -174,6 +256,14 @@ export async function ingestScan(payload: IngestPayload): Promise<IngestResult> 
         .update(assets)
         .set({ lastSync: now, updatedAt: now })
         .where(eq(assets.id, assetId));
+
+      // Overwrite the asset's technical fields from the scan (best-effort). A
+      // failure here must never fail the machine ingest.
+      try {
+        await applyScanToAsset(assetId, assetType, hw, h.health ?? null, serial, now);
+      } catch (err) {
+        console.error(`[ingest] asset enrich failed for asset ${assetId}:`, err);
+      }
 
       // Record today's printer page-counter snapshot (spec 14, AC-2). Rides this
       // existing ingest: any matched printer that returned a numeric life counter
