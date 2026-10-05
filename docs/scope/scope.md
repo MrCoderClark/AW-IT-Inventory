@@ -21,6 +21,12 @@ dump: the atomic build steps stay in each feature's spec (`docs/specs/`). Run
 | People directory and device assignments | done | [16](../specs/16-people-directory-assignments/index.md) |
 | OPUS UI redesign (new global direction) | done | [17](../specs/17-ui-redesign/index.md) |
 | Media library (reusable asset images) | done | [18](../specs/18-media-library/index.md) |
+| Scan → asset enrichment + scheduled computer sweep | done | — |
+| CSV export (asset tables) | planned | — |
+| Reports (warranty/aging/software/assignments) | planned | — |
+| Notifications (top-nav bell: alerts, scan fails, warranty) | planned | — |
+| Compliance (BitLocker/AV/patch) — needs collector data | planned | — |
+| QR scan / label printing (asset tables & detail) | parked (niche) | — |
 
 ## Features
 
