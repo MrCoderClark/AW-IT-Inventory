@@ -7,6 +7,26 @@ via a feature branch + PR.
 
 ---
 
+## In progress 🚧 — scheduled computer sweep (branch `feat/scheduled-computer-sweep`)
+
+A recurring, targeted scan of the computers an admin **manually added** (a Computer
+asset with an IP), on the worker's scheduler — not a subnet discovery.
+
+- **Code complete, web tsc + tests green, collector 22 pass; needs live verify.**
+  - Web: `listComputerScanTargets` (`queries.ts`, Computer assets with a
+    `computer_details.ipAddress`) + `GET /api/scan/computers` (service `scan:dequeue`,
+    mirrors `/api/scan/printers`) + route test.
+  - Collector: `sweep.py` `run_computer_sweep` (fetch targets → WinRM-collect those
+    IPs computers-only → ingest; **bypasses the discovery toggles** since the IPs are
+    explicit); `computer_sweep_times` config knob; wired into the worker scheduler
+    (`worker.py`) as a cron job per time; `config.example.yaml` documents it; tests in
+    `test_sweep.py`.
+  - Local `config.yaml` set to `computer_sweep_times: ["12:00"]` (daily). **Next:
+    restart the worker (it logs "computer sweep 12:00" in the schedule line); it fires
+    daily and scans every manually-added computer. Commit.**
+
+---
+
 ## In progress 🚧 — scan overwrites asset fields (branch `feat/scan-updates-asset`)
 
 Make a collector scan authoritative over an asset's **technical** fields (user

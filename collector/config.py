@@ -77,6 +77,11 @@ class Config(BaseModel):
     # or DST. None = the host's local zone. e.g. "America/New_York".
     schedule_timezone: str | None = None
     daily_snmp_time: str = "08:00"  # which check of the day also does full SNMP
+    # Scheduled computer sweep: times of day (HH:MM, local to schedule_timezone) to
+    # WinRM-collect every manually-entered computer (a Computer asset with an IP).
+    # A targeted scan of listed hosts, NOT a subnet discovery, so it bypasses the
+    # discovery toggles. Empty = off.
+    computer_sweep_times: list[str] = Field(default_factory=list)
     reachability_ports: list[int] = Field(default_factory=lambda: [9100, 631, 515])
     reachability_timeout: float = 1.5  # TCP connect timeout (seconds)
     reachability_retention_days: int = 365  # prune printer_checks older than this

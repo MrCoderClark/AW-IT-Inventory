@@ -77,6 +77,10 @@ worker_poll_interval: 5.0            # seconds between manual-scan-queue polls
 schedule_times: ["08:00", "13:00", "18:00"]
 # schedule_timezone: America/New_York  # default: the host's local zone
 daily_snmp_time: "08:00"             # which daily check also does full SNMP
+# Scheduled computer sweep: times of day to WinRM-collect every manually-entered
+# computer (a Computer asset with an IP). Targeted (the IPs you added), NOT a subnet
+# discovery, so it bypasses the discovery toggles. Empty/omitted = off.
+computer_sweep_times: ["12:00"]
 reachability_ports: [9100, 631, 515]
 reachability_timeout: 1.5            # TCP connect timeout, seconds
 reachability_retention_days: 365

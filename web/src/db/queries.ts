@@ -504,6 +504,27 @@ export async function getMachineSummaries(): Promise<
   return map;
 }
 
+/** A computer the collector's scheduled sweep should scan: its asset id and the
+   manually-entered IP (computer_details.ipAddress). */
+export type ComputerScanTarget = { assetId: string; ipAddress: string };
+
+/** Every Computer asset with a manually-entered IP — the targets for the worker's
+   scheduled computer sweep. Only explicitly-entered IPs (not discovered), so the
+   sweep scans exactly the machines an admin added, never a subnet. */
+export async function listComputerScanTargets(): Promise<ComputerScanTarget[]> {
+  const rows = await db
+    .select({
+      assetId: computerDetails.assetId,
+      ipAddress: computerDetails.ipAddress,
+    })
+    .from(computerDetails)
+    .innerJoin(assets, eq(assets.id, computerDetails.assetId))
+    .where(eq(assets.type, "Computer"));
+  return rows.filter(
+    (r): r is ComputerScanTarget => !!r.ipAddress && r.ipAddress.trim().length > 0,
+  );
+}
+
 /* ---------------- Discovered-devices inbox ---------------- */
 
 /** Minimal asset list for the manual "link to existing asset" picker. */
