@@ -184,6 +184,7 @@ export function ComputerDetail({
           <AssetImageUpload
             tag={asset.id}
             imageId={asset.imageId}
+            imageVersion={asset.imageVersion}
             type="Computer"
             name={asset.name}
             model={asset.model}

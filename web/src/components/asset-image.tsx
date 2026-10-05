@@ -16,6 +16,7 @@ export function AssetImage({
   className,
   iconClassName,
   variant,
+  version,
 }: {
   tag: string;
   imageId?: string | null;
@@ -27,9 +28,13 @@ export function AssetImage({
   /** Which stored size to request (spec 18 phase 2). Small/list contexts pass
      "thumb" for the lightweight WebP; the detail pages use the default original. */
   variant?: "thumb" | "original";
+  /** Cache-buster token (spec 18 phase 3). Pass the asset's `imageVersion` so the
+     shown image updates when the cut-out is toggled; falls back to `imageId`. */
+  version?: string | null;
 }) {
   if (imageId) {
-    const q = `?v=${encodeURIComponent(imageId)}${variant ? `&variant=${variant}` : ""}`;
+    const v = version || imageId;
+    const q = `?v=${encodeURIComponent(v)}${variant ? `&variant=${variant}` : ""}`;
     return (
       // eslint-disable-next-line @next/next/no-img-element -- streamed from our
       // own private route, not an optimizable static/remote asset.

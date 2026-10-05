@@ -370,6 +370,20 @@ export async function requestCutout(id: string): Promise<RequestCutoutResult> {
   return { ok: true, status: "pending" };
 }
 
+/** Toggle whether assets using this image display the cut-out (spec 18 phase 3).
+   Returns false when no such media row. */
+export async function setPreferCutout(
+  id: string,
+  prefer: boolean,
+): Promise<{ ok: boolean }> {
+  const [row] = await db
+    .update(media)
+    .set({ preferCutout: prefer, updatedAt: new Date() })
+    .where(eq(media.id, id))
+    .returning({ id: media.id });
+  return { ok: !!row };
+}
+
 export type ClaimedCutout = {
   mediaId: string;
   objectKey: string;

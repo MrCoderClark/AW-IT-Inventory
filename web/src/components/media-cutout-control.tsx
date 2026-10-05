@@ -5,8 +5,12 @@ import { useRouter } from "next/navigation";
 import { Loader2, RotateCcw, Scissors } from "lucide-react";
 import { toast } from "sonner";
 
-import { requestCutoutAction } from "@/app/(app)/media-actions";
+import {
+  requestCutoutAction,
+  setMediaPreferCutout,
+} from "@/app/(app)/media-actions";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 
 export type CutoutUiStatus = "none" | "pending" | "processing" | "done" | "failed";
 
@@ -36,6 +40,7 @@ export function MediaCutoutControl({
   hasCutout,
   canWrite,
   version,
+  preferCutout,
 }: {
   mediaId: string;
   status: CutoutUiStatus;
@@ -44,10 +49,33 @@ export function MediaCutoutControl({
   /** Bumped each time a new cut-out is produced (e.g. `cutoutAttempts`), so the
      preview URL changes and the browser doesn't show a stale cached cut-out. */
   version: number;
+  /** Whether assets using this image currently display the cut-out. */
+  preferCutout: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = React.useState(false);
+  const [prefer, setPrefer] = React.useState(preferCutout);
+  const [togglingPrefer, setTogglingPrefer] = React.useState(false);
   const running = status === "pending" || status === "processing";
+
+  React.useEffect(() => setPrefer(preferCutout), [preferCutout]);
+
+  async function togglePrefer(next: boolean) {
+    setPrefer(next); // optimistic
+    setTogglingPrefer(true);
+    try {
+      const res = await setMediaPreferCutout(mediaId, next);
+      if (res.ok) {
+        toast.success(res.message ?? "Updated.");
+        router.refresh();
+      } else {
+        setPrefer(!next); // revert
+        toast.error(res.error);
+      }
+    } finally {
+      setTogglingPrefer(false);
+    }
+  }
 
   // Poll while a job runs: re-render the server component for fresh status/result.
   React.useEffect(() => {
@@ -112,6 +140,22 @@ export function MediaCutoutControl({
           )
         )}
       </div>
+
+      {hasCutout && status === "done" && canWrite && (
+        <label className="mt-3 flex items-center justify-between gap-3 rounded-lg border bg-muted/30 px-3 py-2">
+          <span className="min-w-0">
+            <span className="block text-sm font-medium">Show cut-out on assets</span>
+            <span className="block text-xs text-muted-foreground">
+              Every asset using this image displays the transparent version.
+            </span>
+          </span>
+          <Switch
+            checked={prefer}
+            disabled={togglingPrefer}
+            onCheckedChange={togglePrefer}
+          />
+        </label>
+      )}
 
       {hasCutout && status === "done" && (
         <div
