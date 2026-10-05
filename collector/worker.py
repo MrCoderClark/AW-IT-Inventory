@@ -36,6 +36,7 @@ from reachability import (
     run_reachability_check,
     run_retention_prune,
 )
+from sweep import run_computer_sweep
 
 console = Console()
 
@@ -289,6 +290,13 @@ def _build_scheduler(config: Config, tokens: "TokenCache"):
             console.print(f"  [red]counter report job error:[/red] {e}")
             tokens.invalidate()
 
+    def computer_sweep_job() -> None:
+        try:
+            run_computer_sweep(config, tokens.get())
+        except Exception as e:  # noqa: BLE001 — must never kill the scheduler
+            console.print(f"  [red]computer sweep job error:[/red] {e}")
+            tokens.invalidate()
+
     scheduled: list[str] = []
     for t in config.schedule_times:
         try:
@@ -335,11 +343,32 @@ def _build_scheduler(config: Config, tokens: "TokenCache"):
             f"'{config.counter_report_time}'.[/yellow]"
         )
 
+    # Scheduled computer sweep (opt-in): WinRM-collect every manually-entered
+    # computer at each configured time. Bypasses the discovery toggles (targeted).
+    sweep_scheduled: list[str] = []
+    for t in config.computer_sweep_times:
+        try:
+            hour, minute = (int(x) for x in t.split(":"))
+        except ValueError:
+            console.print(
+                f"[yellow]Skipping malformed computer_sweep_time '{t}'.[/yellow]"
+            )
+            continue
+        scheduler.add_job(
+            computer_sweep_job,
+            CronTrigger(hour=hour, minute=minute, timezone=tz),
+            id=f"computer-sweep-{t}",
+            replace_existing=True,
+            misfire_grace_time=600,
+        )
+        sweep_scheduled.append(t)
+
     zone = config.schedule_timezone or "host local"
     console.print(
         f"[bold]Reachability schedule[/bold] ({zone}): "
         f"{', '.join(scheduled) if scheduled else 'none'} · prune 03:15 · "
-        f"counter report {report_scheduled}."
+        f"counter report {report_scheduled} · "
+        f"computer sweep {', '.join(sweep_scheduled) if sweep_scheduled else 'off'}."
     )
     return scheduler
 
