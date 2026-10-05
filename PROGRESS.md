@@ -7,7 +7,7 @@ via a feature branch + PR.
 
 ---
 
-## In progress 🚧 — assets display the cut-out (toggle) (branch `feat/asset-use-cutout`)
+## Shipped ✅ — assets display the cut-out (toggle) (merged, `feat/asset-use-cutout`)
 
 Per-image toggle so assets using a library image show the **cut-out** (transparent)
 instead of the original, and back (spec 18 phase 3 follow-on).
@@ -28,7 +28,7 @@ instead of the original, and back (spec 18 phase 3 follow-on).
 
 ---
 
-## In progress 🚧 — spec 18 Phase 3: background removal (branch `feat/media-cutout`)
+## Shipped ✅ — spec 18 Phase 3: background removal (merged, `feat/media-cutout` + `fix/rembg-cpu-extra`)
 
 rembg background removal for library images (spec 18, AC-9): request a cut-out, a
 self-hosted worker produces a transparent PNG, the page shows it; failed/stuck jobs
@@ -61,7 +61,7 @@ retry. Async claim/result flow mirroring `scan_jobs`.
 
 ---
 
-## In progress 🚧 — scheduled computer sweep (branch `feat/scheduled-computer-sweep`)
+## Shipped ✅ — scheduled computer sweep (merged, `feat/scheduled-computer-sweep`)
 
 A recurring, targeted scan of the computers an admin **manually added** (a Computer
 asset with an IP), on the worker's scheduler — not a subnet discovery.
@@ -81,7 +81,7 @@ asset with an IP), on the worker's scheduler — not a subnet discovery.
 
 ---
 
-## In progress 🚧 — scan overwrites asset fields (branch `feat/scan-updates-asset`)
+## Shipped ✅ — scan overwrites asset fields (merged, `feat/scan-updates-asset`)
 
 Make a collector scan authoritative over an asset's **technical** fields (user
 request). On ingest, a matched asset's `serial` / `model` / `vendor` and (for a
@@ -265,7 +265,49 @@ Scan the fleet → authenticate as a service account → ingest → reconcile �
 
 ## Next / backlog 🔜
 
-- **Docker Compose** — package web + aw-auth + collector for on-prem deploy.
-- **Schedule the collector** — periodic scans.
+### Web app — stubs & missing features (from the 2026-10-05 comb-through)
+
+Surfaces that exist in the UI but aren't wired to anything real:
+
+- **Reports page** (`/reports`) 🔜 — currently a `PagePlaceholder`. Build real reports
+  from existing data: warranty expiry, asset aging, software/license, assignment
+  summaries. *High value, buildable now.* (Recommended next.)
+- **Export (CSV)** 🔜 — the **Export** button on every asset table only toasts
+  "Export started"; no CSV is produced. Stream a real CSV of the current view.
+  `web/src/components/asset-table.tsx` (~line 778). *Quick win.*
+- **Notifications** 🔜 — the **bell icon** in the top nav is decorative. Wire it to
+  real notifications: printer down/recovery (spec 12 already detects these), scan-job
+  failures, warranty expiry, newly discovered devices. Needs a notifications store +
+  a dropdown/panel; the bell shows an unread count.
+- **Compliance page** (`/compliance`) 🔜 — placeholder. Intended: BitLocker, AV, patch
+  level, local-admin exceptions. **Blocked on collector work** — the collector does not
+  gather these yet (only hardware/health/software). Collector additions first, then the
+  web view.
+- **Scan QR** 🔜 — asset-table button toasts "coming later"; would be browser-camera
+  QR → open the matching asset. *Niche.*
+- **Print label** 🔜 — detail-page button toasts "coming later"; needs a label format /
+  printer integration. *Niche.*
+
+### Web app — small cleanups
+
+- **`printer-detail.tsx` → `detail-ui`** — migrate it onto the shared primitives
+  (spec 17.04 left it on local copies to avoid regressing the untested printers page).
+- **Ingest orphan cleanup** — remove the stale IP-keyed `machines` row after a
+  fail→success scan transition (the latest-scan query already hides it; this removes it).
+
+### Collector / infra
+
+- **Collector: report all profile failures** — not just the last tried (would shorten
+  WinRM credential debugging).
 - **WMI-over-DCOM fallback** — scan hosts that only expose SMB (no WinRM).
-- **MFA (TOTP)**, **refresh-token reuse detection UI**, **DRF service-account CRUD**, **reports/compliance views**.
+- **NSSM service wrappers** — package web + aw-auth + collector `worker` as Windows
+  services for prod (the final deploy step; Docker Compose intentionally **not** used).
+
+### aw-auth (not web-focused)
+
+- **MFA (TOTP)**, **refresh-token reuse detection UI**, **DRF service-account CRUD**.
+
+### Done since this list was written
+
+- ~~Schedule the collector~~ ✅ — printer reachability schedule (spec 12) + scheduled
+  computer sweep (`feat/scheduled-computer-sweep`).
