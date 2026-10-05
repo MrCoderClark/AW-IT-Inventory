@@ -88,6 +88,7 @@ export default async function Page({
             status={(media.cutoutStatus ?? "none") as CutoutUiStatus}
             hasCutout={!!media.cutoutKey}
             canWrite={canWrite}
+            version={media.cutoutAttempts ?? 0}
           />
         </div>
 

@@ -26,17 +26,28 @@ from worker import WORKER_VERSION, TokenCache, _worker_id
 console = Console()
 
 
-def _remove_background(image_bytes: bytes) -> bytes:
-    """Run rembg → a PNG with the background removed. Imported lazily so the heavy
-    dependency is only required when this worker actually runs."""
+# Cache one rembg session per model — loading the model is expensive, so reuse it
+# across jobs instead of reloading per image.
+_sessions: dict[str, object] = {}
+
+
+def _remove_background(image_bytes: bytes, model: str = "u2net") -> bytes:
+    """Run rembg with a specific model → a PNG with the background removed. Imported
+    lazily so the heavy dependency loads only when a job is processed. A pinned
+    lightweight model matters: rembg's new default (`bria-rmbg-2.0`, ~1 GB) OOMs
+    modest machines, so we default to `u2net`."""
     try:
-        from rembg import remove
+        from rembg import new_session, remove
     except ImportError as e:  # pragma: no cover - exercised only without the extra
         raise RuntimeError(
             "rembg is not installed. Install the cutout extra "
             "(`uv sync --extra cutout`), then re-run `python main.py cutout`."
         ) from e
-    return remove(image_bytes)
+    session = _sessions.get(model)
+    if session is None:
+        session = new_session(model)
+        _sessions[model] = session
+    return remove(image_bytes, session=session)
 
 
 def _claim(config, token: str, worker_id: str) -> dict | None:
@@ -96,9 +107,10 @@ def process_one(config, tokens: TokenCache, worker_id: str, job: dict) -> None:
         _post_result(config, tokens.get(), media_id, worker_id, ok=False, error="original missing")
         return
 
-    console.print(f"[bold]Cut-out[/bold] {media_id}: removing background …")
+    model = getattr(config, "cutout_model", "u2net")
+    console.print(f"[bold]Cut-out[/bold] {media_id}: removing background ({model}) …")
     try:
-        cutout = _remove_background(base64.b64decode(img_b64))
+        cutout = _remove_background(base64.b64decode(img_b64), model)
         out_b64 = base64.b64encode(cutout).decode("ascii")
         if _post_result(config, tokens.get(), media_id, worker_id, ok=True, cutout_b64=out_b64):
             console.print(f"  [green]done[/green] — {media_id}")

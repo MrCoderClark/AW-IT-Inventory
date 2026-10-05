@@ -18,8 +18,9 @@ dependencies = [
 
 [project.optional-dependencies]
 # Background removal worker (spec 18 phase 3). Heavy (onnxruntime + a model
-# download), so it's opt-in: `uv sync --extra cutout`, then `uv run python main.py cutout`.
-cutout = ["rembg>=2.0.56"]
+# download), so it's opt-in: `uv sync --extra cutout`. The `[cpu]` extra is required —
+# plain `rembg` ships no inference backend ("No onnxruntime backend found").
+cutout = ["rembg[cpu]>=2.0.56"]
 
 [dependency-groups]
 dev = ["pytest>=8.0"]

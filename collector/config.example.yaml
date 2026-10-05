@@ -76,6 +76,10 @@ worker_poll_interval: 5.0            # seconds between manual-scan-queue polls
 # a calmer cadence than the scan loop; raise it to reduce chatter (a requested
 # cut-out starts within this window).
 cutout_poll_interval: 60.0
+# rembg model for background removal. `u2net` (~176 MB) is a good default; `u2netp`
+# (~5 MB) is lighter/faster for low-memory hosts. Avoid rembg's new default
+# `bria-rmbg-2.0` (~1 GB) — it runs out of memory on modest machines.
+cutout_model: u2net
 # The printer reachability schedule (spec 12): TCP-probe every printer at these
 # times; the first also runs a full SNMP collect. Needs `apscheduler` installed.
 schedule_times: ["08:00", "13:00", "18:00"]

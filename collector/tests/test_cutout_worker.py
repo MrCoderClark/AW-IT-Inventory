@@ -40,7 +40,7 @@ def _capture_post(monkeypatch) -> dict:
 
 def test_process_one_posts_cutout_on_success(monkeypatch):
     captured = _capture_post(monkeypatch)
-    monkeypatch.setattr(cutout_worker, "_remove_background", lambda b: b"PNGBYTES")
+    monkeypatch.setattr(cutout_worker, "_remove_background", lambda b, m="u2net": b"PNGBYTES")
     job = {"mediaId": "m1", "imageB64": base64.b64encode(b"img").decode()}
 
     cutout_worker.process_one(Config(ingest_url="http://web"), _FakeTokens(), "w1", job)
@@ -61,7 +61,7 @@ def test_process_one_fails_when_original_missing(monkeypatch):
 def test_process_one_fails_on_rembg_error(monkeypatch):
     captured = _capture_post(monkeypatch)
 
-    def boom(_b):
+    def boom(_b, _m="u2net"):
         raise RuntimeError("model missing")
 
     monkeypatch.setattr(cutout_worker, "_remove_background", boom)
