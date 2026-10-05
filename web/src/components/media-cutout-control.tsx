@@ -35,11 +35,15 @@ export function MediaCutoutControl({
   status,
   hasCutout,
   canWrite,
+  version,
 }: {
   mediaId: string;
   status: CutoutUiStatus;
   hasCutout: boolean;
   canWrite: boolean;
+  /** Bumped each time a new cut-out is produced (e.g. `cutoutAttempts`), so the
+     preview URL changes and the browser doesn't show a stale cached cut-out. */
+  version: number;
 }) {
   const router = useRouter();
   const [busy, setBusy] = React.useState(false);
@@ -121,7 +125,7 @@ export function MediaCutoutControl({
         >
           {/* eslint-disable-next-line @next/next/no-img-element -- private route */}
           <img
-            src={`/api/media/${mediaId}?variant=cutout`}
+            src={`/api/media/${mediaId}?variant=cutout&v=${version}`}
             alt="Background-removed cut-out"
             className="max-h-64 w-auto object-contain"
           />

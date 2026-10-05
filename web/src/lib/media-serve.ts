@@ -45,9 +45,14 @@ export async function serveMediaVariant(
     headers: {
       "Content-Type": obj.contentType,
       // Private: bytes sit behind an asset:read cookie, so a shared proxy must
-      // never serve one session's image to another. The object is immutable
-      // (content-addressed), so it can be cached hard by the private client cache.
-      "Cache-Control": "private, max-age=31536000, immutable",
+      // never serve one session's image to another. The original/thumbnail are
+      // content-addressed (never change) → cache hard. The cut-out CAN change (a
+      // Redo regenerates it under the same URL) → must revalidate, or the browser
+      // keeps showing the old one.
+      "Cache-Control":
+        variant === "cutout"
+          ? "private, no-cache"
+          : "private, max-age=31536000, immutable",
     },
   });
 }

@@ -75,6 +75,10 @@ class Config(BaseModel):
     # is on-demand, so it polls on a calmer cadence than the 5s scan-job loop — a
     # requested cut-out starts within this window. Raise it to reduce chatter.
     cutout_poll_interval: float = 60.0
+    # rembg model for background removal. `u2net` (~176 MB) is a good default;
+    # `u2netp` (~5 MB) is lighter/faster for low-memory hosts. DON'T use rembg's
+    # new default `bria-rmbg-2.0` (~1 GB) — it OOMs modest machines.
+    cutout_model: str = "u2net"
     # Times of day the printer reachability checks fire (local to schedule_tz).
     schedule_times: list[str] = Field(default_factory=lambda: ["08:00", "13:00", "18:00"])
     # Explicit zone for the schedule so fire times don't drift with the host OS
