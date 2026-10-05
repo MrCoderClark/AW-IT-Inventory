@@ -53,6 +53,10 @@ export interface Asset {
   // 17.02's imageKey); null/absent = no image, show the type icon. The image is
   // served through /api/assets/[tag]/image, which resolves it through media.
   imageId?: string | null;
+  // Cache-buster for the asset image URL (spec 18 phase 3): encodes the media id
+  // plus whether the cut-out is being displayed, so toggling the cut-out updates
+  // the shown image instead of serving a stale cached one. Falls back to imageId.
+  imageVersion?: string | null;
   // Extra searchable identifiers from the type detail tables (IP, phone, IMEI,
   // MAC), so the search bar and list search match them (spec 10). Optional
   // because the sample seed data predates the detail tables.

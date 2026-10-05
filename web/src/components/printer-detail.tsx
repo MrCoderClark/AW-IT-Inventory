@@ -475,6 +475,7 @@ export function PrinterDetail({
           <AssetImageUpload
             tag={asset.id}
             imageId={asset.imageId}
+            imageVersion={asset.imageVersion}
             type="Printer"
             name={asset.name}
             model={asset.model}

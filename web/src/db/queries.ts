@@ -24,6 +24,7 @@ import {
   computerDetails,
   locations,
   machines,
+  media,
   monitorDetails,
   networkDetails,
   people,
@@ -56,6 +57,12 @@ const assetSelect = {
   costCenter: assets.costCenter,
   spec: assets.spec,
   imageId: assets.imageId,
+  // Cut-out display state (spec 18 phase 3) for the image cache-buster: the asset
+  // image route serves the cut-out when `preferCutout` is on, so the version token
+  // must change when that (or the cut-out itself) changes.
+  imagePreferCutout: media.preferCutout,
+  imageCutoutKey: media.cutoutKey,
+  imageCutoutAttempts: media.cutoutAttempts,
   assigneeName: people.name,
   assigneeInitials: people.initials,
   // Searchable identifiers from the type detail tables (only one type ever has a
@@ -83,6 +90,9 @@ type Row = {
   costCenter: string | null;
   spec: string | null;
   imageId: string | null;
+  imagePreferCutout: boolean | null;
+  imageCutoutKey: string | null;
+  imageCutoutAttempts: number | null;
   assigneeName: string | null;
   assigneeInitials: string | null;
   computerIp: string | null;
@@ -115,6 +125,15 @@ function toAsset(r: Row, pathById: Map<string, string>): Asset {
     costCenter: r.costCenter ?? "",
     spec: r.spec ?? "",
     imageId: r.imageId ?? null,
+    // Cache-buster for the asset image: changes when the asset points at a
+    // different image, when the cut-out is toggled on/off, or when it's redone.
+    imageVersion: r.imageId
+      ? `${r.imageId}:${
+          r.imagePreferCutout && r.imageCutoutKey
+            ? `c${r.imageCutoutAttempts ?? 0}`
+            : "o"
+        }`
+      : null,
     search: [
       r.computerIp,
       r.printerIp,
@@ -138,6 +157,7 @@ function selectAssets() {
     .select(assetSelect)
     .from(assets)
     .leftJoin(people, eq(assets.assigneeId, people.id))
+    .leftJoin(media, eq(assets.imageId, media.id))
     .leftJoin(computerDetails, eq(assets.id, computerDetails.assetId))
     .leftJoin(printerDetails, eq(assets.id, printerDetails.assetId))
     .leftJoin(phoneDetails, eq(assets.id, phoneDetails.assetId))

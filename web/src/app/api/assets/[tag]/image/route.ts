@@ -31,6 +31,10 @@ export async function GET(req: Request, context: Context) {
   if (!ref || !ref.media)
     return NextResponse.json({ error: "no image" }, { status: 404 });
 
-  const variant = parseVariant(new URL(req.url).searchParams.get("variant"));
+  // When the image's cut-out is toggled on for display (spec 18 phase 3), serve
+  // the transparent cut-out for asset surfaces; otherwise the requested variant.
+  const requested = parseVariant(new URL(req.url).searchParams.get("variant"));
+  const variant =
+    ref.media.preferCutout && ref.media.cutoutKey ? "cutout" : requested;
   return serveMediaVariant(ref.media, variant);
 }

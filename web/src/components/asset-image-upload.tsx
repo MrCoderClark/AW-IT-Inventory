@@ -32,6 +32,7 @@ const MAX_BYTES = 5 * 1024 * 1024;
 export function AssetImageUpload({
   tag,
   imageId,
+  imageVersion,
   type,
   name,
   model,
@@ -42,6 +43,9 @@ export function AssetImageUpload({
 }: {
   tag: string;
   imageId?: string | null;
+  /** Cache-buster so the shown image updates when the cut-out is toggled (spec 18
+     phase 3). Falls back to `imageId`. */
+  imageVersion?: string | null;
   type: AssetType;
   name: string;
   /** The device model, used as the default library name on upload — the image is
@@ -170,6 +174,7 @@ export function AssetImageUpload({
         <AssetImage
           tag={tag}
           imageId={imageId}
+          version={imageVersion}
           type={type}
           alt={imageId ? `Photo of ${name}` : ""}
           className="size-full"

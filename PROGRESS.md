@@ -7,6 +7,27 @@ via a feature branch + PR.
 
 ---
 
+## In progress 🚧 — assets display the cut-out (toggle) (branch `feat/asset-use-cutout`)
+
+Per-image toggle so assets using a library image show the **cut-out** (transparent)
+instead of the original, and back (spec 18 phase 3 follow-on).
+
+- **Code complete, web tsc + 428 tests green; needs `db:push` + verify.**
+  - Schema: `media.preferCutout` boolean (default false). **Needs `npm run db:push`.**
+  - `media.ts` `setPreferCutout`; `setMediaPreferCutout` server action (`asset:write`,
+    revalidates the media page + asset surfaces). The asset image route serves the
+    `cutout` variant when `preferCutout` + a cut-out exist, else the original.
+  - Cache-bust: the asset query joins `media` and emits an `imageVersion`
+    (`imageId:[c<attempts>|o]`) threaded through `AssetImage`/`AssetImageUpload` and
+    the table + three detail pages, so toggling actually updates the shown image
+    instead of serving a stale cached one.
+  - UI: a **Switch** ("Show cut-out on assets") on `/media/[id]` once a cut-out is done.
+  - Tests: asset-image `route.test.ts` (prefers cut-out when toggled). **Next:
+    `npm run db:push`; on a media image with a cut-out, toggle it and confirm the
+    asset's photo flips to transparent and back; commit.**
+
+---
+
 ## In progress 🚧 — spec 18 Phase 3: background removal (branch `feat/media-cutout`)
 
 rembg background removal for library images (spec 18, AC-9): request a cut-out, a

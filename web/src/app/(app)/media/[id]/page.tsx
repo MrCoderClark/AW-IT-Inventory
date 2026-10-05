@@ -89,6 +89,7 @@ export default async function Page({
             hasCutout={!!media.cutoutKey}
             canWrite={canWrite}
             version={media.cutoutAttempts ?? 0}
+            preferCutout={media.preferCutout}
           />
         </div>
 

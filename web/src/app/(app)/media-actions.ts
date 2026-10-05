@@ -3,9 +3,23 @@
 import { revalidatePath } from "next/cache";
 
 import { getAssetImageRef, setAssetImageId } from "@/db/asset-images";
-import { getMedia, requestCutout } from "@/db/media";
+import {
+  getMedia,
+  getMediaDetail,
+  requestCutout,
+  setPreferCutout,
+} from "@/db/media";
 import { getCurrentUser, hasPermission } from "@/lib/auth/session";
 import type { ActionResult } from "@/lib/data";
+
+const ASSET_SURFACES = [
+  "/dashboard",
+  "/computers",
+  "/monitors",
+  "/printers",
+  "/phones",
+  "/network",
+];
 
 const FORBIDDEN: ActionResult = {
   ok: false,
@@ -77,4 +91,40 @@ export async function requestCutoutAction(mediaId: unknown): Promise<ActionResul
 
   revalidatePath(`/media/${mediaId}`);
   return { ok: true, message: "Background removal queued." };
+}
+
+/**
+ * Toggle whether assets that use this image display the cut-out (transparent)
+ * instead of the original (spec 18 phase 3). Per-image — flips every asset using it.
+ * Gated on `asset:write`. Revalidates the media page and the asset surfaces so the
+ * shown image updates (the asset image URL is version-keyed on this flag).
+ */
+export async function setMediaPreferCutout(
+  mediaId: unknown,
+  prefer: unknown,
+): Promise<ActionResult> {
+  const user = await getCurrentUser();
+  if (!hasPermission(user, "asset:write")) return CUTOUT_FORBIDDEN;
+  if (typeof mediaId !== "string" || !mediaId)
+    return { ok: false, error: "Unknown image." };
+  if (typeof prefer !== "boolean")
+    return { ok: false, error: "Invalid toggle value." };
+
+  const res = await setPreferCutout(mediaId, prefer);
+  if (!res.ok)
+    return { ok: false, error: "That image is no longer in the library." };
+
+  // Update the media page and every asset surface that shows this image.
+  revalidatePath(`/media/${mediaId}`);
+  revalidatePath("/media");
+  const detail = await getMediaDetail(mediaId);
+  for (const a of detail?.assets ?? []) revalidatePath(`/assets/${a.tag}`);
+  for (const p of ASSET_SURFACES) revalidatePath(p);
+
+  return {
+    ok: true,
+    message: prefer
+      ? "Assets now show the cut-out."
+      : "Assets now show the original.",
+  };
 }

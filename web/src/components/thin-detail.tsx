@@ -191,6 +191,7 @@ export function ThinAssetDetail({
           <AssetImageUpload
             tag={asset.id}
             imageId={asset.imageId}
+            imageVersion={asset.imageVersion}
             type={asset.type}
             name={asset.name}
             model={asset.model}

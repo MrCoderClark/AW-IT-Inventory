@@ -82,4 +82,21 @@ describe("GET asset image — view gate + delegation (AC-7)", () => {
     await GET(req("http://localhost/api/assets/OPUS-PRNT-1/image?variant=thumb"), ctx());
     expect(serveMock).toHaveBeenCalledWith(media, "thumb");
   });
+
+  it("serves the cut-out when the image has preferCutout on (spec 18 ph3)", async () => {
+    getUserMock.mockResolvedValue(reader);
+    const media = { id: "m1", preferCutout: true, cutoutKey: "media/m1/cutout.png" };
+    getAssetMediaMock.mockResolvedValue({ assetId: "a1", media });
+    // Even a thumb request is overridden to the cut-out when toggled on.
+    await GET(req("http://localhost/api/assets/OPUS-PRNT-1/image?variant=thumb"), ctx());
+    expect(serveMock).toHaveBeenCalledWith(media, "cutout");
+  });
+
+  it("keeps the original when preferCutout is on but no cut-out exists yet", async () => {
+    getUserMock.mockResolvedValue(reader);
+    const media = { id: "m1", preferCutout: true, cutoutKey: null };
+    getAssetMediaMock.mockResolvedValue({ assetId: "a1", media });
+    await GET(req(), ctx());
+    expect(serveMock).toHaveBeenCalledWith(media, "original");
+  });
 });

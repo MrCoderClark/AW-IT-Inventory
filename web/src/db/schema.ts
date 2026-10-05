@@ -157,6 +157,10 @@ export const media = pgTable(
     cutoutClaimedAt: timestamp("cutout_claimed_at", { withTimezone: true }),
     cutoutWorkerId: text("cutout_worker_id"),
     cutoutAttempts: integer("cutout_attempts").notNull().default(0),
+    // When true, assets that use this image display the cut-out (transparent)
+    // instead of the original. Per-image (the image is shared), toggled from the
+    // media detail page; only meaningful once a cut-out exists.
+    preferCutout: boolean("prefer_cutout").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

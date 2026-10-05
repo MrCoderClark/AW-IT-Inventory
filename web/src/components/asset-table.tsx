@@ -230,6 +230,7 @@ const nameColumn: ColumnDef<Asset> = {
       <AssetImage
         tag={row.original.id}
         imageId={row.original.imageId}
+        version={row.original.imageVersion}
         type={row.original.type}
         variant="thumb"
         className="size-8 shrink-0 overflow-hidden rounded-lg border"
