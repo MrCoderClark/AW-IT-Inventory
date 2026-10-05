@@ -72,6 +72,10 @@ ingest_url: http://localhost:3000    # web app
 # Worker (spec 12): `uv run python main.py worker`. All optional — the defaults
 # below apply if omitted. The worker account needs the scan:dequeue scope.
 worker_poll_interval: 5.0            # seconds between manual-scan-queue polls
+# The `cutout` (background-removal) worker's own poll interval. It's on-demand, so
+# a calmer cadence than the scan loop; raise it to reduce chatter (a requested
+# cut-out starts within this window).
+cutout_poll_interval: 60.0
 # The printer reachability schedule (spec 12): TCP-probe every printer at these
 # times; the first also runs a full SNMP collect. Needs `apscheduler` installed.
 schedule_times: ["08:00", "13:00", "18:00"]

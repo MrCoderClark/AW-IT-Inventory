@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import importlib.util
 import json
 import os
 import platform
@@ -373,6 +374,20 @@ def _build_scheduler(config: Config, tokens: "TokenCache"):
     return scheduler
 
 
+def _drain_cutout(config: Config, tokens: "TokenCache", worker_id: str) -> None:
+    """Process any pending background-removal jobs (spec 18 phase 3). Folded into the
+    main worker so background removal needs no separate process when `rembg` is
+    installed. Imported lazily to avoid an import cycle (cutout_worker imports this
+    module) and so rembg is only loaded when a job is actually processed."""
+    from cutout_worker import _claim as claim_cutout, process_one
+
+    while True:
+        job = claim_cutout(config, tokens.get(), worker_id)
+        if job is None:
+            return
+        process_one(config, tokens, worker_id, job)
+
+
 def run_worker(args: argparse.Namespace) -> int:
     try:
         config = load_config(args.config)
@@ -393,9 +408,20 @@ def run_worker(args: argparse.Namespace) -> int:
     worker_id = _worker_id()
     tokens = TokenCache(config)
     poll = config.worker_poll_interval
+
+    # Background removal (spec 18 phase 3) is folded in when `rembg` is installed, so
+    # no separate process is needed. `find_spec` checks availability without loading
+    # the heavy module (that happens only when a job is processed). When it's absent,
+    # cut-out jobs are left alone (run the dedicated `cutout` command if wanted).
+    cutout_enabled = importlib.util.find_spec("rembg") is not None
+    cutout_poll = config.cutout_poll_interval
+    last_cutout = 0.0
+
     console.print(
         f"[bold]Worker[/bold] {worker_id} (v{WORKER_VERSION}) — polling "
-        f"{config.ingest_url} every {poll}s. Ctrl+C to stop."
+        f"{config.ingest_url} every {poll}s · background removal "
+        f"{'on (every ' + str(cutout_poll) + 's)' if cutout_enabled else 'off (rembg not installed)'}. "
+        "Ctrl+C to stop."
     )
 
     scheduler = _build_scheduler(config, tokens)
@@ -407,12 +433,16 @@ def run_worker(args: argparse.Namespace) -> int:
             try:
                 token = tokens.get()
                 job = _claim(config, token, worker_id)
-                if job is None:
-                    # Nothing queued; wait a beat before polling again.
-                    time.sleep(poll)
-                    continue
-                _run_job(config, tokens, worker_id, job)
-                # Loop straight back to drain any other queued jobs.
+                if job is not None:
+                    _run_job(config, tokens, worker_id, job)
+                    continue  # drain the scan queue first
+                # No scan job queued — poll cut-out jobs on their calmer cadence.
+                now = time.monotonic()
+                if cutout_enabled and now - last_cutout >= cutout_poll:
+                    last_cutout = now
+                    _drain_cutout(config, tokens, worker_id)
+                # Nothing to do; wait a beat before polling again.
+                time.sleep(poll)
             except KeyboardInterrupt:
                 raise
             except httpx.HTTPError as e:

@@ -270,7 +270,8 @@ to the type icon), rather than failing the whole migration.
 
 - [x] Enroll a scope row for the media library (`docs/scope/scope.md`); phases 1
   and 2 marked done there.
-- [ ] Pick the exact rembg model (U^2-Net vs BiRefNet) at phase 3 build time.
+- [x] rembg model: phase 3 uses rembg's default (`u2net`) via `rembg.remove(bytes)`;
+  revisit a sharper model (BiRefNet) only if cut-out quality needs it.
 - [x] Record `sharp` + `src/db/media.ts`/`src/lib/image.ts`/`media-serve.ts` in
   `web/AGENTS.md`. (rembg + the collector cut-out worker get recorded at phase 3.)
 - [x] Add a short note to spec 17.02 that its `imageKey` storage model is

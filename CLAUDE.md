@@ -44,16 +44,40 @@ with ordered fallback (`collector/config.yaml`).
 
 ## Run it
 
+### Start the app — 3 processes (one terminal each)
+
+Start them in this order (web and the worker both need aw-auth up first):
+
+```bash
+# 1. aw-auth — identity provider (in aw-auth/, uv-managed) → http://127.0.0.1:8000
+uv run python manage.py runserver
+
+# 2. web — OPUS UI + API (in web/) → http://localhost:3000
+npm run dev
+
+# 3. collector worker — scan-job queue, printer/computer schedules, AND background
+#    removal (in collector/, uv-managed). One process does it all.
+uv run python main.py worker
+```
+
+That's the whole app. The worker **also runs background removal** (spec 18 ph3)
+whenever `rembg` is installed (`uv sync --extra cutout`); it prints `background
+removal on` at startup, and skips cut-out jobs (no crash) when rembg is absent.
+There is also a standalone `uv run python main.py cutout` command to run *only* the
+cut-out worker in its own process — optional, for when you'd rather keep rembg off
+the main worker. In production these run as services (NSSM) or containers, not
+terminals (Docker Compose packaging is on the backlog).
+
+### Other commands
+
 ```bash
 # web (in web/)
-npm run dev                     # dev server (Turbopack)
 npm run db:push                 # apply Drizzle schema
 npm run db:seed                 # seed sample fleet
 npm run db:studio               # inspect DB
 npm test                        # run the Vitest suite (web)
 
-# aw-auth (in aw-auth/)  — uv-managed
-uv run python manage.py runserver          # dev
+# aw-auth (in aw-auth/) — uv-managed
 uv run python manage.py migrate
 uv run python manage.py seed_rbac
 uv run python manage.py create_service_account collector --scopes ingest:write asset:read
@@ -62,6 +86,7 @@ uv run python manage.py create_service_account collector --scopes ingest:write a
 # collector (in collector/) — uv-managed
 uv run python main.py scan --target 192.168.72.10/32          # dry-run
 uv run python main.py scan --target 192.168.72.0/24 --ingest  # scan + ingest
+uv run pytest -q                                              # collector tests
 ```
 
 ## Working conventions

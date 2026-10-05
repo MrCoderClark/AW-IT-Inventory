@@ -21,6 +21,7 @@ import { assets, media } from "@/db/schema";
 import type { AssetRow, MediaRow } from "@/db/schema";
 import {
   type AllowedImageType,
+  newMediaCutoutKey,
   newMediaObjectKey,
   newMediaThumbKey,
   putImage,
@@ -336,6 +337,153 @@ export async function deleteMedia(id: string): Promise<DeleteMediaResult> {
   // Row is gone → remove its bytes (best effort; a missing object is ignored).
   await removeImage(row.objectKey);
   if (row.thumbnailKey) await removeImage(row.thumbnailKey);
+  if (row.cutoutKey) await removeImage(row.cutoutKey);
 
+  return { ok: true };
+}
+
+/* ---------------- Background removal (spec 18, phase 3, AC-9) ---------------- */
+
+export type CutoutStatus = "pending" | "processing" | "done" | "failed";
+
+/** How long a job may sit in `processing` before the next claim reclaims it. */
+const STUCK_CUTOUT_TIMEOUT_MS = 5 * 60 * 1000;
+
+export type RequestCutoutResult =
+  | { ok: true; status: CutoutStatus }
+  | { ok: false; error: "not-found" | "busy" };
+
+/**
+ * Request (or retry) background removal for a media row. Enqueues it as `pending`
+ * from any state except while already queued/running (idempotent). The retry path
+ * for a `failed` job is just this again.
+ */
+export async function requestCutout(id: string): Promise<RequestCutoutResult> {
+  const row = await getMedia(id);
+  if (!row) return { ok: false, error: "not-found" };
+  if (row.cutoutStatus === "pending" || row.cutoutStatus === "processing")
+    return { ok: false, error: "busy" };
+  await db
+    .update(media)
+    .set({ cutoutStatus: "pending", updatedAt: new Date() })
+    .where(eq(media.id, id));
+  return { ok: true, status: "pending" };
+}
+
+export type ClaimedCutout = {
+  mediaId: string;
+  objectKey: string;
+  contentType: string;
+};
+
+/**
+ * Claim the oldest pending cut-out job for a worker (mirrors `claimNextJob`): first
+ * reclaim any job stuck in `processing` past the timeout, then atomically take one
+ * pending row (`FOR UPDATE SKIP LOCKED`), stamping it `processing` + the worker id
+ * and bumping attempts. Returns the object key to fetch the original, or null when
+ * the queue is empty.
+ */
+export async function claimCutoutJob(
+  workerId: string,
+): Promise<ClaimedCutout | null> {
+  const now = new Date();
+
+  // Reaper: a crashed/slow worker leaves a job in processing; return it to pending.
+  const cutoffIso = new Date(now.getTime() - STUCK_CUTOUT_TIMEOUT_MS).toISOString();
+  await db
+    .update(media)
+    .set({
+      cutoutStatus: "pending",
+      cutoutWorkerId: null,
+      cutoutClaimedAt: null,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(media.cutoutStatus, "processing"),
+        sql`${media.cutoutClaimedAt} < ${cutoffIso}`,
+      ),
+    );
+
+  const claimedIso = new Date().toISOString();
+  const rows = (await db.execute(sql`
+    UPDATE ${media}
+    SET cutout_status = 'processing',
+        cutout_worker_id = ${workerId},
+        cutout_claimed_at = ${claimedIso},
+        cutout_attempts = cutout_attempts + 1,
+        updated_at = ${claimedIso}
+    WHERE id = (
+      SELECT id FROM ${media}
+      WHERE cutout_status = 'pending'
+      ORDER BY updated_at
+      LIMIT 1
+      FOR UPDATE SKIP LOCKED
+    )
+    RETURNING id, object_key, content_type
+  `)) as unknown as Array<{
+    id: string;
+    object_key: string;
+    content_type: string;
+  }>;
+
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    mediaId: row.id,
+    objectKey: row.object_key,
+    contentType: row.content_type,
+  };
+}
+
+/**
+ * Record a cut-out job's outcome, fenced by the claim: only the worker that holds a
+ * `processing` job may complete it (a reclaimed job's late result is dropped). On
+ * success the PNG is stored as `cutoutKey` and the status is `done`; on failure it
+ * is `failed` (retryable via `requestCutout`).
+ */
+export async function completeCutout(
+  id: string,
+  workerId: string,
+  result: { ok: true; cutoutBytes: Buffer } | { ok: false },
+): Promise<{ ok: boolean }> {
+  const [row] = await db
+    .select({
+      status: media.cutoutStatus,
+      workerId: media.cutoutWorkerId,
+    })
+    .from(media)
+    .where(eq(media.id, id))
+    .limit(1);
+  // Fence: drop a result whose claim we no longer own (reaped / re-claimed).
+  if (!row || row.status !== "processing" || row.workerId !== workerId) {
+    return { ok: false };
+  }
+
+  const now = new Date();
+  if (result.ok) {
+    const key = newMediaCutoutKey(id);
+    await putImage(key, result.cutoutBytes, "image/png");
+    await db
+      .update(media)
+      .set({
+        cutoutKey: key,
+        cutoutStatus: "done",
+        cutoutClaimedAt: null,
+        cutoutWorkerId: null,
+        updatedAt: now,
+      })
+      .where(eq(media.id, id));
+  } else {
+    await db
+      .update(media)
+      .set({
+        cutoutStatus: "failed",
+        cutoutClaimedAt: null,
+        cutoutWorkerId: null,
+        updatedAt: now,
+      })
+      .where(eq(media.id, id));
+  }
   return { ok: true };
 }

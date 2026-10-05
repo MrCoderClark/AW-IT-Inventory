@@ -33,6 +33,7 @@ Mirror the root `CLAUDE.md` "Run it" block; the ones used most here:
 uv run python main.py scan --target 192.168.72.10/32          # dry-run (writes JSON to out/)
 uv run python main.py scan --target 192.168.72.0/24 --ingest  # scan + post to the ingest API
 uv run python main.py worker                                  # long-running worker (jobs + schedule)
+uv sync --extra cutout; uv run python main.py cutout          # rembg background-removal worker (spec 18 ph3, opt-in)
 uv run pytest -q                                              # tests
 ```
 

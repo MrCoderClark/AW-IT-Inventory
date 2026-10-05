@@ -144,6 +144,19 @@ export const media = pgTable(
     // without a hash) and Postgres treats NULLs as distinct.
     sha256: text("sha256"),
     createdBy: text("created_by"), // uploader email from the access token; no FK
+    // ── Background removal (spec 18, phase 3) ───────────────────────────────
+    // A cut-out job follows the scan_jobs claim pattern, not a bare flag: an
+    // `asset:write` user requests it (→ pending), a rembg worker claims it
+    // atomically (→ processing, stamping claimedAt/workerId and bumping attempts),
+    // stores the result (→ done) or fails (→ failed, retryable back to pending). A
+    // job stuck in processing past a timeout is reclaimed on the next claim.
+    cutoutKey: text("cutout_key"), // `media/{id}/cutout.png`; null until done
+    cutoutStatus: text("cutout_status").$type<
+      "pending" | "processing" | "done" | "failed"
+    >(), // null = never requested
+    cutoutClaimedAt: timestamp("cutout_claimed_at", { withTimezone: true }),
+    cutoutWorkerId: text("cutout_worker_id"),
+    cutoutAttempts: integer("cutout_attempts").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -159,6 +172,11 @@ export const media = pgTable(
       .where(sql`${t.sha256} is not null`),
     // The library list orders newest first.
     index("media_created_idx").on(t.createdAt.desc()),
+    // The cut-out worker claims the oldest pending job; a partial index keeps that
+    // lookup cheap.
+    index("media_cutout_pending_idx")
+      .on(t.cutoutStatus, t.updatedAt)
+      .where(sql`${t.cutoutStatus} = 'pending'`),
   ],
 );
 

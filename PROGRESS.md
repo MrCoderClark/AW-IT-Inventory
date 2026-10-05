@@ -7,6 +7,39 @@ via a feature branch + PR.
 
 ---
 
+## In progress 🚧 — spec 18 Phase 3: background removal (branch `feat/media-cutout`)
+
+rembg background removal for library images (spec 18, AC-9): request a cut-out, a
+self-hosted worker produces a transparent PNG, the page shows it; failed/stuck jobs
+retry. Async claim/result flow mirroring `scan_jobs`.
+
+- **Code complete, web tsc + 426 tests green, collector 25 pass; needs db:push +
+  rembg install + live verify.**
+  - Schema: `media` gains `cutoutKey`, `cutoutStatus` (null|pending|processing|done|
+    failed), `cutoutClaimedAt`, `cutoutWorkerId`, `cutoutAttempts` (+ partial pending
+    index). **Needs `npm run db:push`.**
+  - Web `media.ts`: `requestCutout` (enqueue/retry), `claimCutoutJob` (atomic claim +
+    stale-reap, mirrors `claimNextJob`), `completeCutout` (fenced store). API:
+    `POST /api/media/cutout/claim` (service `scan:dequeue`, returns original bytes
+    base64) + `POST /api/media/cutout/[id]/result`; `requestCutoutAction` server
+    action; `media-serve` now serves the `cutout` variant. UI: `media-cutout-control.tsx`
+    on `/media/[id]` (request/retry, status, cut-out preview on a checkerboard,
+    auto-poll while running).
+  - Collector: `cutout_worker.py` (outbound-only claim→rembg→post); `rembg` is the
+    opt-in `cutout` extra (lazy import). **Folded into the main `worker`**: when
+    `rembg` is installed the worker also drains cut-out jobs (on `cutout_poll_interval`,
+    default 60s), so the whole app is **3 processes** (aw-auth, web, worker). The
+    standalone `main.py cutout` command remains for running it separately.
+  - Tests: `media.test.ts` (requestCutout/completeCutout), the two cut-out route tests,
+    `test_cutout_worker.py`. `CLAUDE.md` "Run it" documents the 3-process startup.
+
+  **Activate:** `cd web && npm run db:push`; `cd collector && uv sync --extra cutout`,
+  then just run the normal `uv run python main.py worker` (it prints "background
+  removal on"). On a `/media/[id]` page click **Remove background** → the worker
+  produces the cut-out → the page shows it. Commit.
+
+---
+
 ## In progress 🚧 — scheduled computer sweep (branch `feat/scheduled-computer-sweep`)
 
 A recurring, targeted scan of the computers an admin **manually added** (a Computer
