@@ -7,6 +7,29 @@ via a feature branch + PR.
 
 ---
 
+## In progress 🚧 — Export (CSV) (branch `feat/csv-export`)
+
+The **Export** button on every asset table used to only toast "Export started".
+It now downloads a real CSV of the current view, built client-side from data
+already loaded (no server round-trip).
+
+- **Code complete, needs `npm test` + `tsc` + UI verify; not committed.**
+  - New pure helper `web/src/lib/csv.ts`: `assetCsvValue` (one `ColumnId` → plain
+    text, the export counterpart of each rendered cell) + `assetsToCsv`
+    (RFC 4180: label header, CRLF rows, quote/escape commas·quotes·newlines,
+    drops the `actions` column). Shared by the table and its tests.
+  - `asset-table.tsx`: `exportCsv()` writes the **resolved columns** (spec 11) for
+    `table.getSortedRowModel().rows` — i.e. the current search / status / vendor /
+    model filters and sort, all matching rows (not just the visible page) — as a
+    BOM-prefixed `text/csv` Blob downloaded as `opus-<view>-<YYYY-MM-DD>.csv`.
+    Empty result → an error toast; success toast reports the row count.
+  - Test: `web/src/lib/csv.test.ts` (value mapping, empty/unassigned, reachability
+    labels, header + rows, RFC 4180 escaping, header-only when no rows).
+  - **Next: `cd web && npm test` and `npx tsc --noEmit`; filter/sort a table, hit
+    Export, open the CSV; commit + PR.**
+
+---
+
 ## In progress 🚧 — Reports page (branch `feat/reports-page`)
 
 Replaces the `/reports` `PagePlaceholder` with real reports built from existing

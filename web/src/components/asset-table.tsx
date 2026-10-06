@@ -77,6 +77,7 @@ import {
   type ColumnId,
   type ColumnView,
 } from "@/lib/table-columns";
+import { assetsToCsv } from "@/lib/csv";
 import { ColumnPickerDialog } from "@/components/column-picker-dialog";
 import { cn } from "@/lib/utils";
 
@@ -624,6 +625,33 @@ export function AssetTable({
     });
   }
 
+  // Export the current view to CSV: the same resolved columns, for the rows as
+  // filtered + sorted on screen (all matching rows, not just the visible page).
+  // Built client-side from data already loaded — no server round-trip.
+  function exportCsv() {
+    const rows = table.getSortedRowModel().rows.map((r) => r.original);
+    if (rows.length === 0) {
+      toast.error("Nothing to export", {
+        description: "No assets match the current filters.",
+      });
+      return;
+    }
+    const csv = assetsToCsv(rows, resolvedIds);
+    // Prepend a UTF-8 BOM so Excel reads non-ASCII (names, locations) correctly.
+    const blob = new Blob(["﻿", csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `opus-${view}-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    toast.success("Export ready", {
+      description: `${rows.length} asset${rows.length === 1 ? "" : "s"} exported to CSV.`,
+    });
+  }
+
   // Only the all-types view has a `type` column; looking it up otherwise
   // makes TanStack log "Column with id 'type' does not exist". The value is
   // only used by the type filter, which shows only when that column exists.
@@ -773,10 +801,7 @@ export function AssetTable({
               <Plus className="size-4" /> {createLabel}
             </Button>
           )}
-          <Button
-            variant="outline"
-            onClick={() => toast.success("Export started", { description: "CSV of current view." })}
-          >
+          <Button variant="outline" onClick={exportCsv}>
             <Download className="size-4" /> Export
           </Button>
           <Button
