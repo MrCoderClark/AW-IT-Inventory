@@ -1,6 +1,6 @@
 import "server-only";
 
-import { eq, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 
 import { upsertPrinterCounter } from "./counters";
 import { db } from "./index";
@@ -251,6 +251,31 @@ export async function ingestScan(payload: IngestPayload): Promise<IngestResult> 
       })
       .returning({ id: machines.id });
     result.upserted += 1;
+
+    // Clean up a stale weak-identity shadow row. When an earlier scan of THIS
+    // device couldn't read a hardware id, its machine row was keyed by ip/hostname;
+    // now that this scan keyed it by a strong id (hardware_uuid/serial), that
+    // weak-keyed row is a redundant orphan (the latest-scan query already hides it;
+    // this removes it). Scoped tight: only on the weak→strong transition, only a
+    // row for the same ip/hostname, and never one linked to a DIFFERENT asset (so a
+    // recycled IP now belonging to another device is left alone).
+    const usedStrongKey = Boolean(hardwareUuid || serial);
+    const weakKeys = [ip, hostname].filter(
+      (k): k is string => Boolean(k) && k !== matchKey,
+    );
+    if (usedStrongKey && upserted?.id && weakKeys.length) {
+      await db
+        .delete(machines)
+        .where(
+          and(
+            inArray(machines.matchKey, weakKeys),
+            ne(machines.id, upserted.id),
+            assetId
+              ? or(isNull(machines.assetId), eq(machines.assetId, assetId))
+              : isNull(machines.assetId),
+          ),
+        );
+    }
 
     if (assetId) {
       result.matched += 1;
