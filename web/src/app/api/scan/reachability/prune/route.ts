@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { pruneCounters } from "@/db/counters";
+import { pruneNotifications } from "@/db/notifications";
 import { pruneChecks } from "@/db/reachability";
 import { bearerFrom, verifyServiceToken } from "@/lib/auth/service";
 
@@ -33,9 +34,17 @@ export async function POST(request: Request) {
   const retentionDays =
     typeof body?.retentionDays === "number" ? body.retentionDays : 365;
 
-  const [pruned, prunedCounters] = await Promise.all([
+  // Notifications keep their own shorter retention (spec 19, AC-10) rather than
+  // the long checks/counters window, so prune with the module default.
+  const [pruned, prunedCounters, prunedNotifications] = await Promise.all([
     pruneChecks(retentionDays),
     pruneCounters(retentionDays),
+    pruneNotifications(),
   ]);
-  return NextResponse.json({ ok: true, pruned, prunedCounters });
+  return NextResponse.json({
+    ok: true,
+    pruned,
+    prunedCounters,
+    prunedNotifications,
+  });
 }

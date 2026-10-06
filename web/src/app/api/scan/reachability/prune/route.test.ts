@@ -9,11 +9,18 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
  * defaults to 365.
  */
 
-const { bearerFromMock, verifyMock, pruneMock, pruneCountersMock } = vi.hoisted(() => ({
+const {
+  bearerFromMock,
+  verifyMock,
+  pruneMock,
+  pruneCountersMock,
+  pruneNotificationsMock,
+} = vi.hoisted(() => ({
   bearerFromMock: vi.fn(),
   verifyMock: vi.fn(),
   pruneMock: vi.fn(),
   pruneCountersMock: vi.fn(),
+  pruneNotificationsMock: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/service", () => ({
@@ -22,6 +29,9 @@ vi.mock("@/lib/auth/service", () => ({
 }));
 vi.mock("@/db/reachability", () => ({ pruneChecks: pruneMock }));
 vi.mock("@/db/counters", () => ({ pruneCounters: pruneCountersMock }));
+vi.mock("@/db/notifications", () => ({
+  pruneNotifications: pruneNotificationsMock,
+}));
 
 import { POST } from "./route";
 
@@ -38,6 +48,7 @@ beforeEach(() => {
   verifyMock.mockResolvedValue({ clientId: "collector", scopes: ["scan:dequeue"] });
   pruneMock.mockResolvedValue(4);
   pruneCountersMock.mockResolvedValue(2);
+  pruneNotificationsMock.mockResolvedValue(1);
 });
 
 describe("POST /api/scan/reachability/prune — auth (AC-9)", () => {
@@ -60,9 +71,15 @@ describe("POST /api/scan/reachability/prune — prune (AC-10, spec 14 AC-6)", ()
   it("prunes checks and counters with the given retention and returns both counts", async () => {
     const res = await POST(req({ retentionDays: 200 }));
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, pruned: 4, prunedCounters: 2 });
+    expect(await res.json()).toEqual({
+      ok: true,
+      pruned: 4,
+      prunedCounters: 2,
+      prunedNotifications: 1,
+    });
     expect(pruneMock).toHaveBeenCalledWith(200);
     expect(pruneCountersMock).toHaveBeenCalledWith(200);
+    expect(pruneNotificationsMock).toHaveBeenCalled();
   });
 
   it("defaults retention to 365 for both prunes when not a number", async () => {

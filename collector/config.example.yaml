@@ -105,3 +105,8 @@ counter_oids:
 # When the worker emails the daily counter report (local to schedule_timezone),
 # default just after the 08:00 SNMP collect so the day's reading is already in.
 counter_report_time: "08:05"
+
+# Notifications (spec 19): times of day (HH:MM, local to schedule_timezone) to run
+# the warranty-expiry notification sweep. Web computes and dedupes, so running
+# daily never spams. Empty list ([]) turns it off.
+notification_sweep_times: ["07:30"]

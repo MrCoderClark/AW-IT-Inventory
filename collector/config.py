@@ -112,6 +112,11 @@ class Config(BaseModel):
     # default just after the 08:00 SNMP collect so the day's reading is in first.
     counter_report_time: str = "08:05"
 
+    # Notifications (spec 19): times of day (HH:MM, local to schedule_timezone) to
+    # run the warranty-expiry notification sweep. Web computes and dedupes, so
+    # running daily never spams. Empty = off. Default once each morning.
+    notification_sweep_times: list[str] = Field(default_factory=lambda: ["07:30"])
+
     @property
     def profiles_by_id(self) -> dict[str, CredentialProfile]:
         return {p.id: p for p in self.profiles}

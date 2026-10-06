@@ -9,6 +9,7 @@ import {
   NAV_PRIMARY,
   NAV_ASSETS,
   NAV_MANAGE,
+  ADMIN_ONLY_NAV,
   type LocationNode,
   type NavItem,
 } from "@/lib/data";
@@ -271,7 +272,7 @@ export function AppSidebar({ locations = [] }: { locations?: LocationNode[] }) {
   const canAdmin = useHasPermission("user:admin");
   const manageItems = canAdmin
     ? NAV_MANAGE
-    : NAV_MANAGE.filter((item) => item.href !== "/admin");
+    : NAV_MANAGE.filter((item) => !ADMIN_ONLY_NAV.has(item.href));
   return (
     <aside className="hidden w-60 shrink-0 flex-col border-r bg-sidebar md:flex">
       {/* Wordmark */}

@@ -7,6 +7,45 @@ via a feature branch + PR.
 
 ---
 
+## In progress 🚧 — Notifications (spec 19) (branch `feat/notifications`)
+
+In-app, admin-facing notification center behind the top-bar bell, live over SSE.
+Full spec at `docs/specs/19-notifications/`. Stacked on `feat/reports-page` +
+`feat/csv-export` (reuses the Reports warranty logic).
+
+- **Code complete across web + collector; needs `npm run db:push` + `npm test` +
+  `tsc` + live verify; not committed.**
+  - Schema: `notifications` (one row per event: type/severity/title/body/assetId/
+    href/dedupeKey unique/meta) + `notification_reads` (per-user read state).
+    **Needs `npm run db:push`.**
+  - Data layer `web/src/db/notifications.ts`: `createNotification` (idempotent on
+    `dedupeKey`, publishes to the bus, best-effort), `listNotifications` (keyset,
+    read flag, unread filter), `getUnreadCount`, `markRead`/`markAllRead`,
+    `notifyPrinterTransitions`, `sweepWarrantyNotifications`, `pruneNotifications`.
+    In-process SSE bus `web/src/lib/notification-bus.ts`.
+  - Generation hooks (all best-effort): reachability route (down/recovery, beside
+    the existing email), `updateJobStatus`→failed (scan-failed), ingest reconcile
+    new-machine branch (device-discovered), daily warranty sweep.
+  - API: `GET /api/notifications` (admin), `GET /api/notifications/stream` (SSE,
+    admin), `POST /api/scan/notifications/warranty-sweep` (service `scan:dequeue`);
+    notification prune folded into the daily `reachability/prune`. Server actions
+    `notification-actions.ts` (mark read / all, `user:admin`).
+  - UI: `NotificationBell` (admin-only, badge + panel + live SSE) replaces the
+    static bell in `top-bar.tsx`; `/notifications` page (`notifications-view.tsx`:
+    All/Unread, load-more, mark-all); shared `lib/notification-ui.ts`; nav entry +
+    `ADMIN_ONLY_NAV` gate in the sidebar.
+  - Collector: `run_warranty_sweep` + `notification_sweep_times` config knob +
+    worker cron (schedule line shows "warranty sweep …").
+  - Tests: `notifications.test.ts`, `api/notifications/route.test.ts`,
+    `warranty-sweep/route.test.ts`; updated the reachability route, prune route,
+    and ingest tests for the new hooks/mocks.
+  - **Next: `cd web && npm run db:push`; `npm test` + `npx tsc --noEmit`;
+    `cd collector && uv run pytest -q`; restart web + worker; live-verify the five
+    events, the live badge in a second admin tab, mark-all, and that a non-admin
+    sees no bell. Commit + PR.**
+
+---
+
 ## In progress 🚧 — Export (CSV) (branch `feat/csv-export`)
 
 The **Export** button on every asset table used to only toast "Export started".

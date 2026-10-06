@@ -36,6 +36,7 @@ from reachability import (
     run_manual_reachability,
     run_reachability_check,
     run_retention_prune,
+    run_warranty_sweep,
 )
 from sweep import run_computer_sweep
 
@@ -298,6 +299,13 @@ def _build_scheduler(config: Config, tokens: "TokenCache"):
             console.print(f"  [red]computer sweep job error:[/red] {e}")
             tokens.invalidate()
 
+    def warranty_sweep_job() -> None:
+        try:
+            run_warranty_sweep(config, tokens.get())
+        except Exception as e:  # noqa: BLE001 — must never kill the scheduler
+            console.print(f"  [red]warranty sweep job error:[/red] {e}")
+            tokens.invalidate()
+
     scheduled: list[str] = []
     for t in config.schedule_times:
         try:
@@ -364,12 +372,33 @@ def _build_scheduler(config: Config, tokens: "TokenCache"):
         )
         sweep_scheduled.append(t)
 
+    # Daily warranty-expiry notification sweep (spec 19, AC-5). Web computes and
+    # dedupes; the worker just fires the trigger. Empty list = off.
+    warranty_scheduled: list[str] = []
+    for t in config.notification_sweep_times:
+        try:
+            hour, minute = (int(x) for x in t.split(":"))
+        except ValueError:
+            console.print(
+                f"[yellow]Skipping malformed notification_sweep_time '{t}'.[/yellow]"
+            )
+            continue
+        scheduler.add_job(
+            warranty_sweep_job,
+            CronTrigger(hour=hour, minute=minute, timezone=tz),
+            id=f"warranty-sweep-{t}",
+            replace_existing=True,
+            misfire_grace_time=1800,
+        )
+        warranty_scheduled.append(t)
+
     zone = config.schedule_timezone or "host local"
     console.print(
         f"[bold]Reachability schedule[/bold] ({zone}): "
         f"{', '.join(scheduled) if scheduled else 'none'} · prune 03:15 · "
         f"counter report {report_scheduled} · "
-        f"computer sweep {', '.join(sweep_scheduled) if sweep_scheduled else 'off'}."
+        f"computer sweep {', '.join(sweep_scheduled) if sweep_scheduled else 'off'} · "
+        f"warranty sweep {', '.join(warranty_scheduled) if warranty_scheduled else 'off'}."
     )
     return scheduler
 

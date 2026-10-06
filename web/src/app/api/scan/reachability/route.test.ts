@@ -8,15 +8,15 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
  * succeeds, otherwise it stays pending to retry.
  */
 
-const { bearerFromMock, verifyMock, recordMock, markMock, sendMock } = vi.hoisted(
-  () => ({
+const { bearerFromMock, verifyMock, recordMock, markMock, sendMock, notifyMock } =
+  vi.hoisted(() => ({
     bearerFromMock: vi.fn(),
     verifyMock: vi.fn(),
     recordMock: vi.fn(),
     markMock: vi.fn(),
     sendMock: vi.fn(),
-  }),
-);
+    notifyMock: vi.fn(),
+  }));
 
 vi.mock("@/lib/auth/service", () => ({
   bearerFrom: bearerFromMock,
@@ -27,6 +27,7 @@ vi.mock("@/db/reachability", () => ({
   markAlertSent: markMock,
 }));
 vi.mock("@/lib/notify", () => ({ sendPrinterAlert: sendMock }));
+vi.mock("@/db/notifications", () => ({ notifyPrinterTransitions: notifyMock }));
 
 import { POST } from "./route";
 

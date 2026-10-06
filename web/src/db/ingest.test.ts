@@ -34,11 +34,16 @@ const H = vi.hoisted(() => {
       const rec = { table, values, conflictSet: null as Record<string, unknown> | null };
       state.inserts.push(rec);
       const p = Promise.resolve() as Promise<unknown> & {
-        onConflictDoUpdate?: (cfg: { set: Record<string, unknown> }) => Promise<unknown>;
+        onConflictDoUpdate?: (cfg: { set: Record<string, unknown> }) => unknown;
       };
       p.onConflictDoUpdate = (cfg) => {
         rec.conflictSet = cfg.set;
-        return Promise.resolve();
+        // Awaitable AND chainable with .returning() (the machines upsert uses it).
+        const q = Promise.resolve() as Promise<unknown> & {
+          returning?: () => Promise<unknown>;
+        };
+        q.returning = () => Promise.resolve([{ id: "machine-test-id" }]);
+        return q;
       };
       return p;
     },
@@ -52,6 +57,7 @@ vi.mock("@/db/index", () => ({
 }));
 vi.mock("./counters", () => ({ upsertPrinterCounter: vi.fn() }));
 vi.mock("./software", () => ({ replaceInstalledSoftware: vi.fn() }));
+vi.mock("./notifications", () => ({ createNotification: vi.fn(async () => null) }));
 
 import { ingestScan } from "./ingest";
 import { assets, computerDetails } from "./schema";

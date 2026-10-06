@@ -15,6 +15,7 @@ import {
   HelpCircle,
   Users,
   Images,
+  Bell,
 } from "lucide-react";
 
 /* ---------------- Types ---------------- */
@@ -175,6 +176,33 @@ export interface InstalledSoftwareItem {
   name: string; // the actual DisplayName found
   version: string;
   publisher: string;
+}
+
+/* ---------------- Notifications (spec 19) ---------------- */
+
+export type NotificationType =
+  | "printer-down"
+  | "printer-recovery"
+  | "scan-failed"
+  | "device-discovered"
+  | "warranty-expiring";
+
+export type NotificationSeverity = "info" | "warning" | "critical";
+
+/** One notification as the bell and the /notifications page render it, carrying
+   the current user's read flag. Shared by the server data layer and the client
+   (this is the client-safe shape; the DB module imports it from here). */
+export interface NotificationItem {
+  id: string;
+  type: NotificationType;
+  severity: NotificationSeverity;
+  title: string;
+  body: string;
+  href: string;
+  assetId: string | null;
+  meta: Record<string, unknown> | null;
+  createdAt: string; // ISO
+  read: boolean;
 }
 
 /* ---------------- People directory & assignments (spec 16) ---------------- */
@@ -364,8 +392,13 @@ export const NAV_MANAGE: NavItem[] = [
   { label: "Reports", href: "/reports", icon: FileText },
   { label: "Scans", href: "/scans", icon: ScanLine },
   { label: "Scan Jobs", href: "/scans/jobs", icon: ListChecks },
+  { label: "Notifications", href: "/notifications", icon: Bell },
   { label: "Admin", href: "/admin", icon: Settings },
 ];
+
+/** Manage-section routes that are admin-only, hidden from the sidebar for users
+   without `user:admin` (spec 19 notifications; the Admin page). */
+export const ADMIN_ONLY_NAV = new Set<string>(["/admin", "/notifications"]);
 
 /* ---------------- KPIs ---------------- */
 
