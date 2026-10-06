@@ -7,6 +7,32 @@ via a feature branch + PR.
 
 ---
 
+## In progress 🚧 — Reports page (branch `feat/reports-page`)
+
+Replaces the `/reports` `PagePlaceholder` with real reports built from existing
+data — no new tables, no collector work. Backlog's "recommended next".
+
+- **Code complete, needs `npm test` + `tsc` + UI verify; not committed.**
+  - Data layer: new `web/src/db/reports.ts` (server-only) — `getWarrantyReport`
+    (expired / ≤30 / ≤90 / covered / unknown buckets + an action list of every
+    device expiring within 90 days, soonest first), `getAgingReport` (age bands
+    <1 / 1–3 / 3–5 / 5+ yr from `purchaseDate` + the oldest 15 as refresh
+    candidates), `getAssignmentSummary` (assigned vs. pool totals, per-type
+    breakdown, top 10 device holders). Day math is relative to today's UTC
+    calendar day; location paths resolve via `getLocationPathMap`. Software reuses
+    `getSoftwareInventory` (spec 15).
+  - UI: `/reports` rebuilt — `HeroHeader` + a four-tab layout (Warranty / Asset
+    aging / Assignments / Software), each tab a row of summary stat tiles over a
+    focused table, linking out to `/assets/[tag]`, `/people/[id]`, `/software/[id]`.
+    `asset:read`-gated (viewing open to any asset viewer, like `/software`). The
+    Reports nav entry already existed in `NAV_MANAGE`.
+  - Tests: `web/src/db/reports.test.ts` (bucketing + ordering + pool math, against
+    a frozen "today").
+  - **Next: `cd web && npm test` and `npx tsc --noEmit`; restart dev, walk the
+    four tabs; commit + PR.**
+
+---
+
 ## Shipped ✅ — assets display the cut-out (toggle) (merged, `feat/asset-use-cutout`)
 
 Per-image toggle so assets using a library image show the **cut-out** (transparent)
