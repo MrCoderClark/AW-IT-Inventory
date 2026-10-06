@@ -7,9 +7,11 @@ import {
   ArchiveRestore,
   ArchiveX,
   ArrowLeft,
+  KeyRound,
   Loader2,
   Pencil,
   Plus,
+  ShieldCheck,
   Trash2,
   Undo2,
 } from "lucide-react";
@@ -23,6 +25,7 @@ import {
   returnAssetAction,
 } from "@/app/(app)/people-actions";
 import { PersonFormDialog } from "@/components/person-form-dialog";
+import { UserFormDialog } from "@/components/user-form-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -49,8 +52,16 @@ import {
   type LocationOption,
 } from "@/lib/data";
 import type { AssignableAsset } from "@/db/queries";
+import type { Role } from "@/lib/auth/types";
 import type { PersonFormValues } from "@/lib/person-schema";
 import { cn } from "@/lib/utils";
+
+/** The login account linked to this person by email (summary only). */
+export interface LinkedAccount {
+  id: string;
+  roles: string[];
+  is_active: boolean;
+}
 
 function fmtDateTime(iso: string | null | undefined) {
   if (!iso) return "—";
@@ -85,6 +96,9 @@ export function PersonDetail({
   assignableAssets = [],
   canWrite = false,
   locations = [],
+  account = null,
+  canManageUsers = false,
+  roles = [],
 }: {
   person: DirectoryPerson;
   currentDevices: CurrentDevice[];
@@ -92,11 +106,18 @@ export function PersonDetail({
   assignableAssets?: AssignableAsset[];
   canWrite?: boolean;
   locations?: LocationOption[];
+  /** The login linked to this person by email, if any (admins only). */
+  account?: LinkedAccount | null;
+  /** Whether the viewer may manage logins (user:admin). */
+  canManageUsers?: boolean;
+  /** Roles for the "create login" dialog (admins only). */
+  roles?: Role[];
 }) {
   const router = useRouter();
   const [editOpen, setEditOpen] = React.useState(false);
   const [archiveOpen, setArchiveOpen] = React.useState(false);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
+  const [createLoginOpen, setCreateLoginOpen] = React.useState(false);
   const [assignTag, setAssignTag] = React.useState("");
   const [isPending, startTransition] = React.useTransition();
 
@@ -187,6 +208,62 @@ export function PersonDetail({
         <Field label="Employee id" value={person.employeeId} mono />
         <Field label="Office location" value={person.officeLocation} />
       </div>
+
+      {/* OPUS access (admins only). A person and a login are the same human when
+          their emails match; this shows whether this person can sign in. */}
+      {canManageUsers && (
+        <div className="rounded-xl border bg-card p-5">
+          <div className="mb-3 flex items-center gap-2">
+            <ShieldCheck className="size-4 text-muted-foreground" />
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              OPUS access
+            </p>
+          </div>
+          {account ? (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                {account.is_active ? (
+                  <Badge variant="outline">Can sign in</Badge>
+                ) : (
+                  <Badge variant="destructive">Login disabled</Badge>
+                )}
+                {account.roles.length ? (
+                  account.roles.map((r) => (
+                    <Badge key={r} variant="secondary">
+                      {r}
+                    </Badge>
+                  ))
+                ) : (
+                  <span className="text-xs text-muted-foreground">No roles</span>
+                )}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                nativeButton={false}
+                render={<Link href={`/admin/users/${account.id}`} />}
+              >
+                Manage login
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-muted-foreground">
+                {person.email
+                  ? "This person has no OPUS login."
+                  : "Add an email to this person before creating a login."}
+              </p>
+              <Button
+                size="sm"
+                disabled={!person.email}
+                onClick={() => setCreateLoginOpen(true)}
+              >
+                <KeyRound className="size-4" /> Create login
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Current devices */}
       <div>
@@ -371,6 +448,19 @@ export function PersonDetail({
             editId={person.id}
             initial={formInitial}
           />
+
+          {/* Create a login for this person: prefilled + email locked so the new
+              account links back to this person by email. */}
+          {canManageUsers && (
+            <UserFormDialog
+              open={createLoginOpen}
+              onOpenChange={setCreateLoginOpen}
+              roles={roles}
+              defaults={{ email: person.email, full_name: person.name }}
+              lockEmail
+              onSuccess={() => router.refresh()}
+            />
+          )}
 
           {/* Archive confirm — returns their devices to the pool. */}
           <Dialog open={archiveOpen} onOpenChange={setArchiveOpen}>

@@ -7,6 +7,60 @@ via a feature branch + PR.
 
 ---
 
+## In progress 🚧 — User management (branch `feat/user-management`)
+
+In-app user & role management, closing the `/admin` "powered by aw-auth in a
+later phase" gap. Builds the admin/self endpoints spec 02 §4 designs but left
+unbuilt. Email-free by design: admins set/reset passwords (shown once), users
+change their own; no forgot-password email flow. Touches only `aw-auth` and
+`web` — **no Drizzle change, no `db:push`, no RBAC reseed** (`user:admin` is
+already seeded and held by Owner/Admin).
+
+- **Code complete across aw-auth + web; needs `manage.py test accounts`,
+  `npm test` + `tsc`, and live verify; not committed.**
+  - **aw-auth:** new `HasAppPerm` permission class (`accounts/permissions.py`,
+    gates on a `user:admin` RBAC code via `User.get_permission_codes()`). New
+    serializers + views for admin user list/create/detail (name·active·roles)/
+    delete, admin set-password, read-only roles list; self password-change,
+    profile PATCH (on `MeView`), and session list/revoke/revoke-all over
+    SimpleJWT's `OutstandingToken`/`BlacklistedToken`. Safety guards: can't
+    deactivate/delete/de-admin yourself, and can't strip the last active admin.
+    URLs under `/v1/auth/*` (admin at `/v1/auth/admin/users`). Tests in
+    `accounts/tests.py` (gating, create+login, set/change password,
+    role assign, deactivate-blocks-login, guards, sessions).
+  - **web:** admin calls are forwarded with the caller's **own** access token
+    (`src/lib/auth/admin.ts`), so aw-auth re-enforces RBAC — no privileged
+    service account. Server actions `users-actions.ts` (user:admin) +
+    `account-actions.ts` (self). Zod `src/lib/user-schema.ts`. Pages:
+    `/admin/users` (table + create-with-generated-password dialog),
+    `/admin/users/[id]` (roles, activate/deactivate, reset password, delete),
+    `/admin/roles` (read-only), `/account` (change password, edit name,
+    sessions). Nav: Users + Roles added to `NAV_MANAGE` + `ADMIN_ONLY_NAV`;
+    top-bar menu "My account" → `/account`; login card notes "ask an admin to
+    reset". Admin page copy updated + a Users & roles card. Vitest:
+    `users-actions.test.ts`, `account-actions.test.ts`, `user-schema.test.ts`.
+  - **People ↔ Users link (by email, no schema change).** People (staff who
+    hold devices, inventory DB) and Users (logins, aw-auth) stay separate
+    systems but are linked when their emails match — so the overlap (staff who
+    are also operators) isn't maintained twice. `getPersonByEmail` (web db) and
+    `getUserByEmail` (admin client, lists+filters — user set is tiny). Surfaces
+    (all admin-only, since they read the admin API): a "Directory entry" card on
+    the user detail page + a Directory column on `/admin/users`; an "OPUS access"
+    panel on the person detail page (roles/active + "Manage login", or "Create
+    login" which opens the user dialog prefilled with the person's email·name,
+    email locked); a "Login" badge on `/people`. No `authUserId` column, no
+    `db:push`.
+  - Caveats surfaced in the UI: a role change takes effect on the user's next
+    sign-in (perms ride the token), and a revoked session / deactivation takes
+    full effect within one ≤15-min access-token TTL.
+  - **Next:** `cd aw-auth && uv run python manage.py test accounts`;
+    `cd web && npm test && npx tsc --noEmit`; start the 3 processes and walk the
+    verification steps (create user → sign in; assign role → re-login; admin
+    reset; deactivate/reactivate; self password change + sessions; guards).
+    Commit + PR.
+
+---
+
 ## In progress 🚧 — Dashboard redesign (branch `feat/update-dashboard-ui`)
 
 Rebuilds `/dashboard` to match `docs/Design/mock-refactor-dashboard.png`, mapping

@@ -1,5 +1,15 @@
-import { AppWindow, Gauge, LayoutDashboard, Lock, Radar } from "lucide-react";
+import Link from "next/link";
+import {
+  AppWindow,
+  Gauge,
+  LayoutDashboard,
+  Lock,
+  Radar,
+  Shield,
+  UserCog,
+} from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import { DiscoveryToggles } from "@/components/discovery-toggles";
 import { DashboardWidgetToggles } from "@/components/dashboard-widgets";
 import { PagePlaceholder } from "@/components/page-placeholder";
@@ -46,10 +56,36 @@ export default async function Page() {
       <div>
         <h1 className="text-2xl font-extrabold tracking-tight">Admin</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Users, roles and service accounts are powered by the aw-auth service in
-          a later phase.
+          Manage users, roles and what the collector discovers.
         </p>
       </div>
+
+      {/* Users & roles (aw-auth-backed). Visible to scan:read admins; the
+          linked pages re-gate on user:admin and show a lock otherwise. */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <UserCog className="size-5 text-muted-foreground" />
+            <CardTitle>Users &amp; roles</CardTitle>
+          </div>
+          <CardDescription>
+            Create accounts, assign roles, reset passwords and deactivate users.
+            Requires the user:admin role.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          <Button nativeButton={false} render={<Link href="/admin/users" />}>
+            <UserCog className="size-4" /> Manage users
+          </Button>
+          <Button
+            variant="outline"
+            nativeButton={false}
+            render={<Link href="/admin/roles" />}
+          >
+            <Shield className="size-4" /> View roles
+          </Button>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

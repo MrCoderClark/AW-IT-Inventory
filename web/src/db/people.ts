@@ -222,6 +222,49 @@ export async function getPersonById(
   return row ? toDirectoryPerson(row, pathById) : null;
 }
 
+/**
+ * One person by email (case-insensitive), or null when the email is blank or
+ * unmatched. This is how a People record is linked to an aw-auth login: the two
+ * are the same human when their emails match. Email is unique-when-present among
+ * people, so at most one row comes back.
+ */
+export async function getPersonByEmail(
+  email: string | null | undefined,
+): Promise<DirectoryPerson | null> {
+  const normalized = email?.trim().toLowerCase();
+  if (!normalized) return null;
+  const [rows, pathById] = await Promise.all([
+    db
+      .select({
+        id: people.id,
+        name: people.name,
+        initials: people.initials,
+        email: people.email,
+        department: people.department,
+        jobTitle: people.jobTitle,
+        phone: people.phone,
+        employeeId: people.employeeId,
+        officeLocationId: people.officeLocationId,
+        status: people.status,
+        deviceCount: sql<number>`count(${assetAssignments.id})::int`,
+      })
+      .from(people)
+      .leftJoin(
+        assetAssignments,
+        and(
+          eq(assetAssignments.personId, people.id),
+          isNull(assetAssignments.unassignedAt),
+        ),
+      )
+      .where(sql`lower(${people.email}) = ${normalized}`)
+      .groupBy(people.id)
+      .limit(1),
+    getLocationPathMap(),
+  ]);
+  const row = rows[0];
+  return row ? toDirectoryPerson(row, pathById) : null;
+}
+
 /* ---------------- Uniqueness helpers (AC-3) ---------------- */
 
 /** Is this email already used by another person? Case-insensitive; a blank email
