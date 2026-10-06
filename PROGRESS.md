@@ -7,6 +7,54 @@ via a feature branch + PR.
 
 ---
 
+## In progress 🚧 — Dashboard redesign (branch `feat/update-dashboard-ui`)
+
+Rebuilds `/dashboard` to match `docs/Design/mock-refactor-dashboard.png`, mapping
+the mock's slots to real OPUS data (no fabricated trends, no geo map we can't fill).
+
+- **Code complete, needs `npm test` + `tsc` + UI verify; not committed.**
+  - Header: title + subtitle + a live date/time (`dashboard/live-clock.tsx`,
+    client, hydration-safe).
+  - KPI row: `dashboard/stat-card.tsx` — Total Assets / In Use / Maintenance /
+    In Storage, each with a **real % of fleet** in place of the mock's fake
+    "vs last 30 days" (OPUS keeps no history).
+  - Charts: Asset Status donut (status breakdown, `DonutChart` gained `showValues`)
+    + Assets by Type bar chart (new `charts/bar-chart.tsx`, dataviz mark specs,
+    design-system tokens).
+  - Recent Alerts (`dashboard/recent-alerts.tsx`): recent notifications for admins
+    (spec 19), recent discovered devices otherwise.
+  - Recent Assets table (`getRecentAssets`).
+  - **Asset Locations map** (real, FOSS): Leaflet + Esri World Gray Canvas basemap
+    (light/dark; genuinely free, no API key, attribution only — CARTO/Stadia now
+    require a key) for the clean mock look.
+    `locations` gains nullable `latitude`/`longitude`; a coordinates editor on the
+    location detail page (`location-coordinates-form.tsx` + `setLocationCoordinates`
+    action, `location:write`); `getLocationMapPoints` aggregates each geocoded
+    location's whole-subtree device count; `dashboard/location-map.tsx` (client,
+    lazy Leaflet, theme-aware tiles, teardrop count pins, styled controls/popups)
+    plots them, with a fleet-status legend below. Pin popups reverse-geocode the
+    coordinates to a street address on click via Nominatim (free, no key, cached).
+    The map is an **admin-toggleable widget**: `dashboard_widgets` table (absent =
+    on, like discovery toggles), `db/dashboard.ts` + `setDashboardWidgetAction`
+    (`scan:write`), a "Dashboard widgets" card on `/admin`
+    (`dashboard-widgets.tsx`). Off → the dashboard shows the location list instead
+    of the map (no external tiles/geocoding). Falls back to the "Assets by
+    Location" list (`getAssetsByLocation`) until a site is geocoded.
+  - Removed the old all-types `AssetTable` + "Quick Actions" from the dashboard
+    (per-type pages still have the full filterable tables); removed the fake
+    "Collector online / Last scan…" footer from the sidebar as requested.
+  - New queries: `getRecentAssets`, `getAssetsByLocation`, `getLocationMapPoints`
+    (+ `RecentAsset`, `LocationCount`, `LocationMapPoint` types); `getLocationById`
+    now returns coordinates. New dep: **leaflet** (+ `@types/leaflet`).
+  - Tests: `location-schema.test.ts` (coordinates schema), `db/dashboard.test.ts`
+    (widget toggles).
+  - **Next: `cd web && npm install leaflet @types/leaflet`; `npm run db:push`
+    (adds the lat/long columns + `dashboard_widgets` table); `npm test` +
+    `npx tsc --noEmit`; set coordinates on a location, toggle the map widget on
+    `/admin`, then eyeball `/dashboard` (map/list) in light + dark. Commit + PR.**
+
+---
+
 ## In progress 🚧 — Printer page count in the list + export, printer-detail refactor (branch `feat/printer-page-count-ui`)
 
 Surfaces the printer page (life) counter on `/printers` and in its CSV export, and

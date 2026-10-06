@@ -16,6 +16,7 @@ import { getCurrentUser, hasPermission } from "@/lib/auth/session";
 import {
   createLocationSchema,
   firstLocationError,
+  locationCoordinatesSchema,
   moveLocationSchema,
   renameLocationSchema,
 } from "@/lib/location-schema";
@@ -138,6 +139,39 @@ export async function renameLocation(
 
   revalidateLocations();
   return { ok: true, message: `Renamed to "${name}".` };
+}
+
+/**
+ * Set (or clear) a location's map coordinates, for the dashboard map. Both lat and
+ * long are set together or both cleared. `location:write`, same gate as the other
+ * location mutations.
+ */
+export async function setLocationCoordinates(
+  id: string,
+  raw: unknown,
+): Promise<ActionResult> {
+  if (!(await requireLocationWrite())) return FORBIDDEN;
+
+  const parsed = locationCoordinatesSchema.safeParse(raw);
+  if (!parsed.success)
+    return { ok: false, error: firstLocationError(parsed.error) };
+  const { latitude, longitude } = parsed.data;
+
+  const updated = await db
+    .update(locations)
+    .set({ latitude, longitude, updatedAt: new Date() })
+    .where(eq(locations.id, id))
+    .returning({ id: locations.id });
+  if (!updated.length) return GONE;
+
+  revalidatePath("/locations");
+  revalidatePath(`/locations/${id}`);
+  revalidatePath("/dashboard");
+  return {
+    ok: true,
+    message:
+      latitude === null ? "Coordinates cleared." : "Coordinates saved.",
+  };
 }
 
 /**

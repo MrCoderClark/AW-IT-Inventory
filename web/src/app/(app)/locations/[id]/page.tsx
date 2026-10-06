@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ChevronRight, Lock, MapPin, Settings2 } from "lucide-react";
 
 import { AssetTable } from "@/components/asset-table";
+import { LocationCoordinatesForm } from "@/components/location-coordinates-form";
 import { PagePlaceholder } from "@/components/page-placeholder";
 import {
   getAssets,
@@ -32,6 +33,7 @@ export default async function Page({ params }: PageProps<"/locations/[id]">) {
   if (!location) notFound();
 
   const canWrite = hasPermission(user, "asset:write");
+  const canEditLocation = hasPermission(user, "location:write");
   const canConfigureColumns = hasPermission(user, "columns:write");
   const [assets, options, people, columnOrder] = await Promise.all([
     // Everything assigned anywhere in this location's subtree (AC-8).
@@ -104,6 +106,14 @@ export default async function Page({ params }: PageProps<"/locations/[id]">) {
           </div>
         )}
       </div>
+
+      {canEditLocation && (
+        <LocationCoordinatesForm
+          locationId={id}
+          latitude={location.latitude}
+          longitude={location.longitude}
+        />
+      )}
 
       <AssetTable
         assets={assets}

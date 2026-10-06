@@ -3,6 +3,7 @@ import {
   type AnyPgColumn,
   boolean,
   date,
+  doublePrecision,
   index,
   integer,
   jsonb,
@@ -92,6 +93,12 @@ export const locations = pgTable(
     parentId: uuid("parent_id").references((): AnyPgColumn => locations.id, {
       onDelete: "restrict",
     }),
+    // Optional geographic coordinates for the dashboard map (spec: dashboard map).
+    // Null until an admin geocodes the site; only meaningful on the sites/buildings
+    // an org wants to plot (a leaf room inherits its building's pin visually). Both
+    // are set together or both null.
+    latitude: doublePrecision("latitude"),
+    longitude: doublePrecision("longitude"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -738,5 +745,20 @@ export type DiscoverySettingRow = typeof discoverySettings.$inferSelect;
 export type PrinterCounterRow = typeof printerCounters.$inferSelect;
 export type TrackedSoftwareRow = typeof trackedSoftware.$inferSelect;
 export type InstalledSoftwareRow = typeof installedSoftware.$inferSelect;
+// ── Dashboard widget toggles ─────────────────────────────────────────────────
+// Per-widget on/off switches for the dashboard, admin-managed. Same shape and
+// "absent row = on" convention as discovery_settings (spec 13): a missing widget
+// row coalesces to enabled, so an empty table means "all widgets on" and nothing
+// needs seeding. `widgetId` is plain text with a union `$type` so adding a future
+// toggleable widget never needs an enum migration.
+export const dashboardWidgets = pgTable("dashboard_widgets", {
+  widgetId: text("widget_id").$type<"locations-map">().primaryKey(),
+  enabled: boolean("enabled").notNull().default(true),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
 export type NotificationRow = typeof notifications.$inferSelect;
 export type NotificationReadRow = typeof notificationReads.$inferSelect;
+export type DashboardWidgetRow = typeof dashboardWidgets.$inferSelect;

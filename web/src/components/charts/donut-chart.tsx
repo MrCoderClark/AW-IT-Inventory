@@ -1,13 +1,17 @@
 import type { Slice } from "@/lib/data";
+import { cn } from "@/lib/utils";
 
 export function DonutChart({
   data,
   total,
   totalLabel = "assets",
+  showValues = false,
 }: {
   data: Slice[];
   total: number;
   totalLabel?: string;
+  /** Show each slice's raw count beside its percentage (dashboard legend). */
+  showValues?: boolean;
 }) {
   const sum = data.reduce((a, s) => a + s.value, 0);
 
@@ -46,8 +50,18 @@ export function DonutChart({
               style={{ backgroundColor: s.colorVar }}
             />
             {s.label}
-            <span className="ml-auto font-semibold text-muted-foreground tabular-nums">
-              {Math.round((s.value / sum) * 100)}%
+            {showValues && (
+              <span className="ml-auto font-semibold tabular-nums">
+                {s.value.toLocaleString()}
+              </span>
+            )}
+            <span
+              className={cn(
+                "font-semibold text-muted-foreground tabular-nums",
+                showValues ? "w-10 text-right" : "ml-auto",
+              )}
+            >
+              {sum ? Math.round((s.value / sum) * 100) : 0}%
             </span>
           </li>
         ))}

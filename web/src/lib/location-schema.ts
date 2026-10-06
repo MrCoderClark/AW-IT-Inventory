@@ -36,6 +36,36 @@ export const moveLocationSchema = z.object({
   newParentId: nullableLocationId,
 });
 
+/** A coordinate that may be blank (→ null) or a number in range. Accepts a string
+   (from the form) or a number. */
+const coordinate = (min: number, max: number, label: string) =>
+  z
+    .union([z.string(), z.number(), z.null(), z.undefined()])
+    .transform((v) =>
+      v === null || v === undefined || (typeof v === "string" && v.trim() === "")
+        ? null
+        : typeof v === "string"
+          ? Number(v)
+          : v,
+    )
+    .refine(
+      (v) => v === null || (Number.isFinite(v) && v >= min && v <= max),
+      `${label} must be between ${min} and ${max}`,
+    );
+
+/** Set-or-clear a location's map coordinates. Both must be set, or both cleared. */
+export const locationCoordinatesSchema = z
+  .object({
+    latitude: coordinate(-90, 90, "Latitude"),
+    longitude: coordinate(-180, 180, "Longitude"),
+  })
+  .refine((v) => (v.latitude === null) === (v.longitude === null), {
+    message: "Set both latitude and longitude, or clear both.",
+    path: ["longitude"],
+  });
+
+export type LocationCoordinatesInput = z.output<typeof locationCoordinatesSchema>;
+
 export type CreateLocationInput = z.output<typeof createLocationSchema>;
 export type RenameLocationInput = z.output<typeof renameLocationSchema>;
 export type MoveLocationInput = z.output<typeof moveLocationSchema>;
