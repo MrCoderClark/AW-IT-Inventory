@@ -13,7 +13,8 @@ const H = vi.hoisted(() => {
     selectResults: unknown[][];
     updates: { table: unknown; set: Record<string, unknown> }[];
     inserts: { table: unknown; values: Record<string, unknown>; conflictSet: Record<string, unknown> | null }[];
-  } = { selectResults: [], updates: [], inserts: [] };
+    deletes: { table: unknown }[];
+  } = { selectResults: [], updates: [], inserts: [], deletes: [] };
 
   const makeSelect = () => {
     const b: Record<string, unknown> = {};
@@ -49,23 +50,36 @@ const H = vi.hoisted(() => {
     },
   }));
 
-  return { state, selectMock, updateMock, insertMock };
+  const deleteMock = vi.fn((table: unknown) => ({
+    where: () => {
+      state.deletes.push({ table });
+      return Promise.resolve();
+    },
+  }));
+
+  return { state, selectMock, updateMock, insertMock, deleteMock };
 });
 
 vi.mock("@/db/index", () => ({
-  db: { select: H.selectMock, update: H.updateMock, insert: H.insertMock },
+  db: {
+    select: H.selectMock,
+    update: H.updateMock,
+    insert: H.insertMock,
+    delete: H.deleteMock,
+  },
 }));
 vi.mock("./counters", () => ({ upsertPrinterCounter: vi.fn() }));
 vi.mock("./software", () => ({ replaceInstalledSoftware: vi.fn() }));
 vi.mock("./notifications", () => ({ createNotification: vi.fn(async () => null) }));
 
 import { ingestScan } from "./ingest";
-import { assets, computerDetails } from "./schema";
+import { assets, computerDetails, machines } from "./schema";
 
 beforeEach(() => {
   H.state.selectResults = [];
   H.state.updates = [];
   H.state.inserts = [];
+  H.state.deletes = [];
   vi.clearAllMocks();
 });
 
@@ -140,5 +154,30 @@ describe("ingestScan — scan overwrites asset fields", () => {
     expect(assetUpdate?.set).not.toHaveProperty("vendor");
     // No computer_details write when no detail fields were read.
     expect(H.state.inserts.some((i) => i.table === computerDetails)).toBe(false);
+  });
+});
+
+describe("ingestScan — orphan shadow-row cleanup", () => {
+  it("deletes the weak-keyed shadow when a scan keys the device by a strong id", async () => {
+    // Serial match → strong matchKey "SN123"; ip/hostname are the weak keys to reap.
+    H.state.selectResults = [[{ id: "a1", type: "Computer" }]];
+    await ingestScan({ hosts: [computerHost] });
+    expect(H.state.deletes.some((d) => d.table === machines)).toBe(true);
+  });
+
+  it("does not clean up when the scan only has a weak id (no hardware id read)", async () => {
+    // No hardware/serial → matchKey falls back to hostname; nothing to reap.
+    H.state.selectResults = [[]]; // ip lookup miss → discovered
+    await ingestScan({
+      hosts: [
+        {
+          ip: "192.168.70.9",
+          hostname: "PCX",
+          device_type: "windows",
+          errors: ["winrm auth failed"],
+        },
+      ],
+    });
+    expect(H.state.deletes.length).toBe(0);
   });
 });

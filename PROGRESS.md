@@ -7,6 +7,23 @@ via a feature branch + PR.
 
 ---
 
+## In progress 🚧 — Ingest orphan cleanup (branch `fix/ingest-orphan-cleanup`)
+
+Removes the stale weak-keyed (`ip`/`hostname`) `machines` shadow row left when an
+earlier scan couldn't read a hardware id and a later scan keys the same device by
+`hardware_uuid`/`serial`. The latest-scan query already hides it; this deletes it.
+
+- **Code complete, needs `npm test`; not committed.**
+  - `web/src/db/ingest.ts`: after the machine upsert, on the weak→strong matchKey
+    transition, delete the shadow row — scoped to this host's current `ip`/`hostname`,
+    excluding the just-upserted row, and never a row linked to a *different* asset
+    (so a recycled DHCP IP now on another device is left alone).
+  - Test: `web/src/db/ingest.test.ts` (reaps on a strong-key scan; no-op on a
+    weak-id-only scan) + a `delete` mock in the harness.
+  - **Next: `cd web && npm test`; commit + PR.**
+
+---
+
 ## In progress 🚧 — Notifications (spec 19) (branch `feat/notifications`)
 
 In-app, admin-facing notification center behind the top-bar bell, live over SSE.
