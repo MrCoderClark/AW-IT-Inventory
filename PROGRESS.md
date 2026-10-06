@@ -7,6 +7,30 @@ via a feature branch + PR.
 
 ---
 
+## In progress 🚧 — Printer page count in the list + export, printer-detail refactor (branch `feat/printer-page-count-ui`)
+
+Surfaces the printer page (life) counter on `/printers` and in its CSV export, and
+migrates `printer-detail.tsx` onto the shared `detail-ui` primitives.
+
+- **Code complete, needs `npm test` + `tsc` + UI verify; not committed.**
+  - Page count on the list: `Asset.pageCount` (spec 14 latest total); new
+    `getPrinterCounterMap` (`queries.ts`, DISTINCT ON latest reading per printer,
+    keyed by tag) attached to printer assets in `getAssetsByType` alongside
+    reachability. New spec-11 **Pages** column (`table-columns.ts` catalog +
+    defaults for `printer`; `COLUMN_REGISTRY` cell, sortable, "—" when no reading).
+  - Export: `assetCsvValue` handles `pages`, so the CSV mirrors the visible column
+    (Pages exports by default on the printers table).
+  - Refactor: `printer-detail.tsx` now imports `fmtDate/fmtDateTime/fmtDay/
+    fmtNumber/Panel/InfoField/StatusRow/Dot` from `detail-ui` (removed the
+    byte-identical local copies); printer-specific `fmtDelta/StatePill/ProtocolRow`
+    and the `PrinterActivityEvent` table stay local. (The detail page already
+    showed the counter — unchanged.)
+  - Tests: updated `table-columns.test.ts` (printer defaults) + `csv.test.ts`
+    (pages value). **Next: `cd web && npm test` + `npx tsc --noEmit`; verify the
+    Pages column on `/printers`, export a CSV, and walk the printer detail page.**
+
+---
+
 ## In progress 🚧 — Ingest orphan cleanup (branch `fix/ingest-orphan-cleanup`)
 
 Removes the stale weak-keyed (`ip`/`hostname`) `machines` shadow row left when an

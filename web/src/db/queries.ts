@@ -30,6 +30,7 @@ import {
   people,
   phoneDetails,
   printerChecks,
+  printerCounters,
   printerDetails,
   printerStatus,
   tableColumnConfig,
@@ -211,15 +212,38 @@ export async function getAssetsByType(
   ]);
   const list = rows.map((r) => toAsset(r, pathById));
 
-  // Printers carry a reachability rollup for the badge column (spec 12, AC-8).
+  // Printers carry a reachability rollup for the badge column (spec 12, AC-8) and
+  // their latest page counter for the Pages column (spec 14).
   if (type === "Printer" && list.length > 0) {
-    const reach = await getPrinterReachabilityMap();
+    const [reach, pages] = await Promise.all([
+      getPrinterReachabilityMap(),
+      getPrinterCounterMap(),
+    ]);
     for (const a of list) {
       const r = reach[a.id];
       if (r) a.reachability = r;
+      const p = pages[a.id];
+      if (p !== undefined) a.pageCount = p;
     }
   }
   return list;
+}
+
+/** Latest total page counter per printer, keyed by asset tag (spec 14). One row
+   per printer: the most recent daily reading (DISTINCT ON the asset, newest day
+   first). Printers with no reading are simply absent from the map. */
+export async function getPrinterCounterMap(): Promise<Record<string, number>> {
+  const rows = await db
+    .selectDistinctOn([printerCounters.assetId], {
+      tag: assets.tag,
+      total: printerCounters.totalPages,
+    })
+    .from(printerCounters)
+    .innerJoin(assets, eq(assets.id, printerCounters.assetId))
+    .orderBy(printerCounters.assetId, desc(printerCounters.readingDate));
+  const out: Record<string, number> = {};
+  for (const r of rows) out[r.tag] = r.total;
+  return out;
 }
 
 /** Map a printer_status row to the display reachability rollup (spec 12). A null

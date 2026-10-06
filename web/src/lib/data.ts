@@ -70,6 +70,9 @@ export interface Asset {
   // Printer reachability rollup (spec 12), set only on printer rows that have a
   // reachability status yet; absent means never checked.
   reachability?: AssetReachability;
+  // Printer latest total page (life) counter (spec 14), set only on printer rows
+  // that have a counter reading; absent/null means no reading yet.
+  pageCount?: number | null;
 }
 
 /* ---------------- Printer reachability (spec 12) ---------------- */

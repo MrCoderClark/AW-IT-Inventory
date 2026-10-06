@@ -54,6 +54,8 @@ export function assetCsvValue(asset: Asset, id: ColumnId): string {
         ? (REACHABILITY_LABEL[asset.reachability.state] ??
             asset.reachability.state)
         : "";
+    case "pages":
+      return asset.pageCount == null ? "" : String(asset.pageCount);
     case "actions":
       return ""; // never exported (filtered out before this is called)
   }
