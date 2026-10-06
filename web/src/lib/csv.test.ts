@@ -56,6 +56,12 @@ describe("assetCsvValue", () => {
     expect(assetCsvValue(a, "ip")).toBe("");
   });
 
+  it("renders the printer page count, empty when absent", () => {
+    expect(assetCsvValue(makeAsset({ pageCount: 48213 }), "pages")).toBe("48213");
+    expect(assetCsvValue(makeAsset({ pageCount: null }), "pages")).toBe("");
+    expect(assetCsvValue(makeAsset(), "pages")).toBe(""); // undefined
+  });
+
   it("labels printer reachability by state", () => {
     const up = makeAsset({
       reachability: { state: "up", lastCheckedAt: null, downSince: null },

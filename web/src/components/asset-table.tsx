@@ -355,6 +355,25 @@ const reachabilityColumn: ColumnDef<Asset> = {
   filterFn: "equals",
 };
 
+/** Printer total page (life) counter (spec 14), shown on the printers table. */
+const pagesColumn: ColumnDef<Asset> = {
+  id: "pages",
+  accessorFn: (a) => a.pageCount ?? -1, // sorts null last on ascending
+  header: ({ column }) => (
+    <SortHeader
+      label="Pages"
+      onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+    />
+  ),
+  cell: ({ row }) => (
+    <span className="font-mono text-xs tabular-nums text-muted-foreground">
+      {row.original.pageCount == null
+        ? "—"
+        : row.original.pageCount.toLocaleString("en-US")}
+    </span>
+  ),
+};
+
 const statusColumn: ColumnDef<Asset> = {
   accessorKey: "status",
   header: "Status",
@@ -432,6 +451,7 @@ const COLUMN_REGISTRY: Record<ColumnId, ColumnDef<Asset>> = {
   mac: macColumn,
   phoneNumber: phoneColumn,
   reachability: reachabilityColumn,
+  pages: pagesColumn,
   actions: actionsColumn,
 };
 

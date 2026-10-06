@@ -83,7 +83,7 @@ describe("defaultsFor (AC-2, matches today's hardcoded columns)", () => {
   const expected: Record<ColumnView, string[]> = {
     computer: ["id", "name", "model", "serial", "ip", "assignee", "location", "status", "lastSync", "actions"],
     monitor: ["id", "name", "model", "serial", "assignee", "location", "status", "actions"],
-    printer: ["id", "name", "model", "serial", "ip", "reachability", "location", "status", "lastSync", "actions"],
+    printer: ["id", "name", "model", "serial", "ip", "reachability", "pages", "location", "status", "lastSync", "actions"],
     network: ["id", "name", "model", "serial", "ip", "mac", "location", "status", "actions"],
     phone: ["id", "name", "model", "serial", "phoneNumber", "assignee", "location", "status", "actions"],
     dashboard: ["id", "name", "type", "serial", "model", "assignee", "location", "status", "lastSync", "actions"],
