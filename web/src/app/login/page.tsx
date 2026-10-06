@@ -36,6 +36,9 @@ export default async function LoginPage(props: PageProps<"/login">) {
             Access the OPUS asset console.
           </p>
           <LoginForm next={next} />
+          <p className="mt-4 text-center text-xs text-muted-foreground">
+            Forgot your password? Ask an administrator to reset it.
+          </p>
         </div>
 
         <p className="mt-6 text-center text-xs text-muted-foreground">

@@ -14,6 +14,8 @@ import {
   ListChecks,
   HelpCircle,
   Users,
+  UserCog,
+  Shield,
   Images,
   Bell,
 } from "lucide-react";
@@ -396,12 +398,20 @@ export const NAV_MANAGE: NavItem[] = [
   { label: "Scans", href: "/scans", icon: ScanLine },
   { label: "Scan Jobs", href: "/scans/jobs", icon: ListChecks },
   { label: "Notifications", href: "/notifications", icon: Bell },
+  { label: "Users", href: "/admin/users", icon: UserCog },
+  { label: "Roles", href: "/admin/roles", icon: Shield },
   { label: "Admin", href: "/admin", icon: Settings },
 ];
 
 /** Manage-section routes that are admin-only, hidden from the sidebar for users
-   without `user:admin` (spec 19 notifications; the Admin page). */
-export const ADMIN_ONLY_NAV = new Set<string>(["/admin", "/notifications"]);
+   without `user:admin` (spec 19 notifications; the Admin, Users and Roles
+   pages). */
+export const ADMIN_ONLY_NAV = new Set<string>([
+  "/admin",
+  "/admin/users",
+  "/admin/roles",
+  "/notifications",
+]);
 
 /* ---------------- KPIs ---------------- */
 

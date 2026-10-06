@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ChevronRight, Pencil, Plus, Search, Users } from "lucide-react";
+import { ChevronRight, KeyRound, Pencil, Plus, Search, Users } from "lucide-react";
 
 import { PersonFormDialog } from "@/components/person-form-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -47,11 +47,18 @@ export function PeopleDirectory({
   people,
   canWrite = false,
   locations = [],
+  loginEmails,
 }: {
   people: DirectoryPerson[];
   canWrite?: boolean;
   locations?: LocationOption[];
+  /** Lowercased emails that have an OPUS login (admins only), for the badge. */
+  loginEmails?: string[];
 }) {
+  const loginSet = React.useMemo(
+    () => new Set(loginEmails ?? []),
+    [loginEmails],
+  );
   const [search, setSearch] = React.useState("");
   const [status, setStatus] = React.useState<StatusFilter>("active");
   const [page, setPage] = React.useState(0);
@@ -153,6 +160,16 @@ export function PeopleDirectory({
                         {p.initials}
                       </span>
                       {p.name}
+                      {p.email && loginSet.has(p.email.toLowerCase()) && (
+                        <Badge
+                          variant="secondary"
+                          className="gap-1"
+                          title="Has an OPUS login"
+                        >
+                          <KeyRound className="size-3" />
+                          Login
+                        </Badge>
+                      )}
                     </Link>
                   </TableCell>
                   <TableCell className="text-muted-foreground">

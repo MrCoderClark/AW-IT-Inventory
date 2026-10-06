@@ -4,6 +4,8 @@ import { PeopleDirectory } from "@/components/people-directory";
 import { PagePlaceholder } from "@/components/page-placeholder";
 import { getDirectoryPeople } from "@/db/people";
 import { getLocationOptions } from "@/db/queries";
+import { listUsers } from "@/lib/auth/admin";
+import { readTokens } from "@/lib/auth/cookies";
 import { hasPermission, requireUser } from "@/lib/auth/session";
 
 // The directory and its device counts change on each assignment or edit; read fresh.
@@ -24,12 +26,23 @@ export default async function Page() {
   }
 
   const canWrite = hasPermission(user, "asset:write");
+  const canManageUsers = hasPermission(user, "user:admin");
   // Load everyone (both statuses); the client filters active/archived and search.
   const [people, locations] = await Promise.all([
     getDirectoryPeople({ includeArchived: true }),
     // A person may sit at any location node, so all options (not leaf-only).
     canWrite ? getLocationOptions() : Promise.resolve([]),
   ]);
+
+  // Admins get a "Login" badge on people who have an OPUS account (by email).
+  let loginEmails: string[] = [];
+  if (canManageUsers) {
+    const { access } = await readTokens();
+    const usersRes = await listUsers(access ?? "");
+    if (usersRes.ok) {
+      loginEmails = usersRes.data.map((u) => u.email.toLowerCase());
+    }
+  }
 
   return (
     <div className="mx-auto flex max-w-[1100px] flex-col gap-6">
@@ -45,6 +58,7 @@ export default async function Page() {
         people={people}
         canWrite={canWrite}
         locations={locations}
+        loginEmails={loginEmails}
       />
     </div>
   );
