@@ -14,6 +14,7 @@ import {
   type ScanJobResult,
   type ScanJobRow,
 } from "./schema";
+import { createNotification } from "./notifications";
 
 /**
  * The manual scan queue (spec 12). The web app owns the queue; the collector
@@ -166,7 +167,24 @@ export async function updateJobStatus(
     )
     .returning({ id: scanJobs.id });
 
-  if (updated.length) return "ok";
+  if (updated.length) {
+    // A job that landed in `failed` raises an in-app notification (spec 19, AC-3).
+    // Best-effort (createNotification never throws) and idempotent per job.
+    if (u.status === "failed") {
+      await createNotification({
+        type: "scan-failed",
+        severity: "warning",
+        title: "Scan job failed",
+        body: u.error?.trim()
+          ? `The scan worker reported: ${u.error.trim()}`
+          : "The scan worker reported a failure.",
+        href: "/scans/jobs",
+        dedupeKey: `scan-failed:${jobId}`,
+        meta: { jobId, workerId: u.workerId },
+      });
+    }
+    return "ok";
+  }
 
   // Distinguish a missing job from a stale/lost claim for the right HTTP code.
   const exists = await db

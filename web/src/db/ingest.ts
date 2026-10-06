@@ -4,6 +4,7 @@ import { eq, or, sql } from "drizzle-orm";
 
 import { upsertPrinterCounter } from "./counters";
 import { db } from "./index";
+import { createNotification } from "./notifications";
 import { replaceInstalledSoftware, type PostedSoftware } from "./software";
 import {
   assets,
@@ -237,7 +238,7 @@ export async function ingestScan(payload: IngestPayload): Promise<IngestResult> 
     // On re-scan, refresh the scan fields but never move a row backward: keep an
     // existing (manually linked or previously matched) assetId, and never touch
     // ignoredAt. A serial match still fills in assetId for a row that was unlinked.
-    await db
+    const [upserted] = await db
       .insert(machines)
       .values(row)
       .onConflictDoUpdate({
@@ -247,7 +248,8 @@ export async function ingestScan(payload: IngestPayload): Promise<IngestResult> 
           assetId: sql`coalesce(${machines.assetId}, ${assetId})`,
           updatedAt: now,
         },
-      });
+      })
+      .returning({ id: machines.id });
     result.upserted += 1;
 
     if (assetId) {
@@ -297,6 +299,23 @@ export async function ingestScan(payload: IngestPayload): Promise<IngestResult> 
       }
     } else {
       result.discovered += 1;
+
+      // Newly discovered device → an in-app notification (spec 19, AC-4). Keyed on
+      // the machine id, which is stable across re-scans, so `createNotification`
+      // fires only on the first discovery and is a no-op every re-scan after.
+      // Best-effort — it never throws into the ingest.
+      if (upserted?.id) {
+        const label = row.hostname || row.ip || serial || "A new device";
+        await createNotification({
+          type: "device-discovered",
+          severity: "info",
+          title: "New device discovered",
+          body: `${label}${row.ip && row.ip !== label ? ` (${row.ip})` : ""} was found by a scan and is waiting in the inbox.`,
+          href: "/scans",
+          dedupeKey: `device-discovered:${upserted.id}`,
+          meta: { machineId: upserted.id, ip: row.ip, kind: row.kind },
+        });
+      }
     }
   }
 

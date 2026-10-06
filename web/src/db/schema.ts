@@ -649,6 +649,75 @@ export const assetAssignments = pgTable(
   ],
 );
 
+// ── Notifications (spec 19) ──────────────────────────────────────────────────
+// An admin-facing notification center. One row per distinct operational event
+// (printer down/recovery, scan failure, newly discovered device, warranty
+// expiring); every `user:admin` sees it (admin-only broadcast, no per-user
+// fan-out), and `notification_reads` records who has read what so read state is
+// per user. Both tables are additive and brand new (no rows to backfill), so the
+// NOT NULL columns are safe. `type`/`severity` are plain text with a union `$type`
+// (not pg enums) so a future event type never needs an enum migration — the same
+// pattern as `scan_jobs`. Creation is idempotent on `dedupeKey` (a unique index),
+// so a re-scan or a repeated daily sweep never duplicates an event.
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    type: text("type")
+      .$type<
+        | "printer-down"
+        | "printer-recovery"
+        | "scan-failed"
+        | "device-discovered"
+        | "warranty-expiring"
+      >()
+      .notNull(),
+    severity: text("severity")
+      .$type<"info" | "warning" | "critical">()
+      .notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    // The subject asset when there is one; `set null` so deleting an asset leaves
+    // the (now historical) notification rather than blocking the delete.
+    assetId: uuid("asset_id").references(() => assets.id, {
+      onDelete: "set null",
+    }),
+    // The in-app link to open. Stored as text (not a live FK) so a later-deleted
+    // target degrades to a dead link, never a broken row.
+    href: text("href").notNull(),
+    // Idempotency key (unique below): re-detecting the same event is a no-op. The
+    // key encodes the episode/date so a new episode or a changed date is new.
+    dedupeKey: text("dedupe_key").notNull(),
+    meta: jsonb("meta").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    uniqueIndex("notifications_dedupe_uq").on(t.dedupeKey),
+    index("notifications_created_idx").on(t.createdAt.desc()),
+  ],
+);
+
+// Per-user read state: a row exists once `userKey` has read that notification.
+// Unread for a user = notifications with no matching row. `userKey` is the token
+// `sub` (falling back to email); no FK, users live in aw-auth (same pattern as
+// `scan_jobs.requestedBy`). Cascade so retention/prune of a notification clears
+// its reads.
+export const notificationReads = pgTable(
+  "notification_reads",
+  {
+    notificationId: uuid("notification_id")
+      .notNull()
+      .references(() => notifications.id, { onDelete: "cascade" }),
+    userKey: text("user_key").notNull(),
+    readAt: timestamp("read_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.notificationId, t.userKey] })],
+);
+
 export type MediaRow = typeof media.$inferSelect;
 export type AssetRow = typeof assets.$inferSelect;
 export type PersonRow = typeof people.$inferSelect;
@@ -669,3 +738,5 @@ export type DiscoverySettingRow = typeof discoverySettings.$inferSelect;
 export type PrinterCounterRow = typeof printerCounters.$inferSelect;
 export type TrackedSoftwareRow = typeof trackedSoftware.$inferSelect;
 export type InstalledSoftwareRow = typeof installedSoftware.$inferSelect;
+export type NotificationRow = typeof notifications.$inferSelect;
+export type NotificationReadRow = typeof notificationReads.$inferSelect;

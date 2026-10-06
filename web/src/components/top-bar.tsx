@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Bell, Mail, Menu, Search } from "lucide-react";
+import { Mail, Menu, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -22,6 +22,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { NotificationBell } from "@/components/notification-bell";
 import { OPEN_COMMAND_EVENT } from "@/components/command-palette";
 import { useUser } from "@/components/user-provider";
 import { NAV_PRIMARY, NAV_ASSETS, NAV_MANAGE } from "@/lib/data";
@@ -106,12 +107,7 @@ export function TopBar() {
         <Button variant="outline" size="icon" aria-label="Mail">
           <Mail className="size-[18px]" />
         </Button>
-        <Button variant="outline" size="icon" aria-label="Notifications" className="relative">
-          <Bell className="size-[18px]" />
-          <span className="absolute -right-1 -top-1 grid size-4 place-items-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
-            1
-          </span>
-        </Button>
+        <NotificationBell />
 
         <DropdownMenu>
           <DropdownMenuTrigger

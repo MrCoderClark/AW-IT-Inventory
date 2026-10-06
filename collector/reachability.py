@@ -241,6 +241,26 @@ def run_counter_report(config: Config, token: str) -> None:
         console.print(f"  [yellow]counter report failed:[/yellow] {e}")
 
 
+def run_warranty_sweep(config: Config, token: str) -> None:
+    """Trigger the daily warranty-expiry notification sweep (spec 19, AC-5).
+
+    Web computes which assets are expired/expiring and creates the in-app
+    notifications (idempotent per asset+date); the worker just fires the daily
+    trigger. Outbound-only like the rest of the worker."""
+    try:
+        resp = httpx.post(
+            f"{config.ingest_url}/api/scan/notifications/warranty-sweep",
+            json={},
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=60,
+        )
+        resp.raise_for_status()
+        created = resp.json().get("created", 0)
+        console.print(f"[dim]warranty sweep: {created} notification(s).[/dim]")
+    except Exception as e:  # noqa: BLE001 — a sweep failure must never kill the scheduler
+        console.print(f"  [yellow]warranty sweep failed:[/yellow] {e}")
+
+
 def run_retention_prune(config: Config, token: str) -> None:
     """Prune reachability history older than the retention window (AC-10)."""
     try:

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { recordChecks, markAlertSent, type IncomingCheck } from "@/db/reachability";
+import { notifyPrinterTransitions } from "@/db/notifications";
 import { bearerFrom, verifyServiceToken } from "@/lib/auth/service";
 import { sendPrinterAlert } from "@/lib/notify";
 
@@ -57,6 +58,11 @@ export async function POST(request: Request) {
   }
 
   const events = await recordChecks(checks);
+
+  // Record an in-app notification for each transition (spec 19, AC-2). Independent
+  // of the email below: best-effort, so a notification failure never affects the
+  // alert path, and vice-versa.
+  await notifyPrinterTransitions(events);
 
   // Fire the transition emails after the writes committed. Best-effort: a failed
   // send is logged inside sendPrinterAlert and left pending for the next check.
