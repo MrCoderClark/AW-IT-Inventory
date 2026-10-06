@@ -11,10 +11,13 @@ import type {
   DeviceSuggestion,
   DiscoveredDevice,
   LinkAsset,
+  LocationCount,
+  LocationMapPoint,
   LocationNode,
   LocationOption,
   MachineSummary,
   ReachabilityCheck,
+  RecentAsset,
 } from "@/lib/data";
 import { LOCATION_PATH_SEP } from "@/lib/data";
 import type { ColumnView } from "@/lib/table-columns";
@@ -753,6 +756,100 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   return { total, byType, byStatus };
 }
 
+/** The most-recently-updated assets, for the dashboard "Recent Assets" table. */
+export async function getRecentAssets(limit = 8): Promise<RecentAsset[]> {
+  const [rows, pathById] = await Promise.all([
+    db
+      .select({
+        tag: assets.tag,
+        name: assets.name,
+        type: assets.type,
+        status: assets.status,
+        locationId: assets.locationId,
+        updatedAt: assets.updatedAt,
+      })
+      .from(assets)
+      .orderBy(desc(assets.updatedAt))
+      .limit(limit),
+    getLocationPathMap(),
+  ]);
+  return rows.map((r) => ({
+    tag: r.tag,
+    name: r.name,
+    type: r.type as AssetType,
+    location: r.locationId ? pathById.get(r.locationId) ?? "" : "",
+    status: r.status as AssetStatus,
+    updatedAt:
+      r.updatedAt instanceof Date
+        ? r.updatedAt.toISOString()
+        : new Date(r.updatedAt).toISOString(),
+  }));
+}
+
+/** The locations holding the most devices, for the dashboard "Assets by Location"
+   card (replaces the mock's geo map — OPUS has no device coordinates). */
+export async function getAssetsByLocation(limit = 6): Promise<LocationCount[]> {
+  const [counts, pathById] = await Promise.all([
+    locationDeviceCounts(),
+    getLocationPathMap(),
+  ]);
+  return [...counts.entries()]
+    .map(([id, count]) => ({ id, name: pathById.get(id) ?? "—", count }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+    .slice(0, limit);
+}
+
+/** Geocoded locations for the dashboard map (spec: dashboard map). Each located
+   location carries the device count of its whole subtree (self + descendants), so
+   a building's pin reflects every device under it, not just those on its own node. */
+export async function getLocationMapPoints(): Promise<LocationMapPoint[]> {
+  const [located, allRows, counts, pathById] = await Promise.all([
+    db
+      .select({
+        id: locations.id,
+        lat: locations.latitude,
+        lng: locations.longitude,
+      })
+      .from(locations)
+      .where(
+        and(isNotNull(locations.latitude), isNotNull(locations.longitude)),
+      ),
+    getLocationRows(),
+    locationDeviceCounts(),
+    getLocationPathMap(),
+  ]);
+  if (located.length === 0) return [];
+
+  // Adjacency so a located node can sum its whole subtree's device counts.
+  const children = new Map<string, string[]>();
+  for (const r of allRows) {
+    if (r.parentId) {
+      const arr = children.get(r.parentId) ?? [];
+      arr.push(r.id);
+      children.set(r.parentId, arr);
+    }
+  }
+  const subtreeCount = (rootId: string): number => {
+    let sum = counts.get(rootId) ?? 0;
+    const stack = [...(children.get(rootId) ?? [])];
+    while (stack.length) {
+      const id = stack.pop() as string;
+      sum += counts.get(id) ?? 0;
+      const kids = children.get(id);
+      if (kids) stack.push(...kids);
+    }
+    return sum;
+  };
+
+  return located.map((l) => ({
+    id: l.id,
+    name: pathById.get(l.id) ?? "—",
+    lat: l.lat as number,
+    lng: l.lng as number,
+    count: subtreeCount(l.id),
+  }));
+}
+
 /* ---------------- Locations (the location tree) ----------------
    Adjacency list: each row carries its own `parentId`. Paths, depth and
    leaf-ness are derived in Node from the (small) flat row set; subtree
@@ -923,13 +1020,22 @@ export async function getSubtreeIds(rootId: string): Promise<string[]> {
   return rows.map((r) => r.id);
 }
 
-/** One location row by id, or null. */
-export async function getLocationById(id: string): Promise<LocationRaw | null> {
+export interface LocationDetail extends LocationRaw {
+  latitude: number | null;
+  longitude: number | null;
+}
+
+/** One location row by id (with its map coordinates), or null. */
+export async function getLocationById(
+  id: string,
+): Promise<LocationDetail | null> {
   const rows = await db
     .select({
       id: locations.id,
       name: locations.name,
       parentId: locations.parentId,
+      latitude: locations.latitude,
+      longitude: locations.longitude,
     })
     .from(locations)
     .where(eq(locations.id, id))

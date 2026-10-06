@@ -1,6 +1,7 @@
-import { AppWindow, Gauge, Lock, Radar } from "lucide-react";
+import { AppWindow, Gauge, LayoutDashboard, Lock, Radar } from "lucide-react";
 
 import { DiscoveryToggles } from "@/components/discovery-toggles";
+import { DashboardWidgetToggles } from "@/components/dashboard-widgets";
 import { PagePlaceholder } from "@/components/page-placeholder";
 import { SendCounterReport } from "@/components/send-counter-report";
 import { TrackedSoftwareCard } from "@/components/tracked-software-card";
@@ -11,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { getDashboardWidgetSettings } from "@/db/dashboard";
 import { getDiscoverySettings } from "@/db/discovery";
 import { getTrackedSoftware } from "@/db/software";
 import { hasPermission, requireUser } from "@/lib/auth/session";
@@ -33,8 +35,9 @@ export default async function Page() {
   }
 
   const canWrite = hasPermission(user, "scan:write");
-  const [settings, trackedSoftware] = await Promise.all([
+  const [settings, widgetSettings, trackedSoftware] = await Promise.all([
     getDiscoverySettings(),
+    getDashboardWidgetSettings(),
     canWrite ? getTrackedSoftware() : Promise.resolve([]),
   ]);
 
@@ -62,6 +65,22 @@ export default async function Page() {
         </CardHeader>
         <CardContent>
           <DiscoveryToggles settings={settings} canWrite={canWrite} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <LayoutDashboard className="size-5 text-muted-foreground" />
+            <CardTitle>Dashboard widgets</CardTitle>
+          </div>
+          <CardDescription>
+            Turn optional dashboard widgets on or off for everyone.
+            {!canWrite && " You need the scan:write role to change these."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <DashboardWidgetToggles settings={widgetSettings} canWrite={canWrite} />
         </CardContent>
       </Card>
 

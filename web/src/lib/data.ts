@@ -422,6 +422,33 @@ export interface Slice {
   colorVar: string;
 }
 
+/** A recently-updated asset for the dashboard "Recent Assets" table. */
+export interface RecentAsset {
+  tag: string;
+  name: string;
+  type: AssetType;
+  location: string; // full path, "" when none
+  status: AssetStatus;
+  updatedAt: string; // ISO
+}
+
+/** A location with its device count, for the dashboard "Assets by Location" card. */
+export interface LocationCount {
+  id: string;
+  name: string; // full path
+  count: number;
+}
+
+/** A geocoded location for the dashboard map: its coordinates and the device
+   count of its whole subtree (self + descendants). */
+export interface LocationMapPoint {
+  id: string;
+  name: string; // full path
+  lat: number;
+  lng: number;
+  count: number;
+}
+
 /* Live-scan summary for an asset, sourced from the machines table (collector). */
 export interface MachineSummary {
   lastSeen: string;

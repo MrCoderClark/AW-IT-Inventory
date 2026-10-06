@@ -303,20 +303,6 @@ export function AppSidebar({ locations = [] }: { locations?: LocationNode[] }) {
           <Section label="Manage" items={manageItems} pathname={pathname} />
         </nav>
       </ScrollArea>
-
-      {/* Collector status */}
-      <div className="flex items-center gap-3 border-t px-5 py-4">
-        <span className="relative flex size-2">
-          <span className="absolute inline-flex size-full animate-ping rounded-full bg-status-deployed opacity-60" />
-          <span className="relative inline-flex size-2 rounded-full bg-status-deployed" />
-        </span>
-        <div className="leading-tight">
-          <p className="text-xs font-semibold">Collector online</p>
-          <p className="text-[11px] text-muted-foreground">
-            Last scan 02:00 · 96% reached
-          </p>
-        </div>
-      </div>
     </aside>
   );
 }

@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import {
   createLocationSchema,
   firstLocationError,
+  locationCoordinatesSchema,
   moveLocationSchema,
   renameLocationSchema,
 } from "./location-schema";
@@ -93,6 +94,36 @@ describe("moveLocationSchema (AC-4)", () => {
 
   it("rejects a non-uuid target", () => {
     expect(moveLocationSchema.safeParse({ newParentId: "bad" }).success).toBe(false);
+  });
+});
+
+describe("locationCoordinatesSchema (dashboard map)", () => {
+  it("parses string coords into numbers", () => {
+    const r = locationCoordinatesSchema.safeParse({
+      latitude: "40.7128",
+      longitude: "-74.0060",
+    });
+    expect(r.success && r.data).toEqual({ latitude: 40.7128, longitude: -74.006 });
+  });
+
+  it("treats blank/absent as cleared (both null)", () => {
+    const r = locationCoordinatesSchema.safeParse({ latitude: "", longitude: "" });
+    expect(r.success && r.data).toEqual({ latitude: null, longitude: null });
+  });
+
+  it("rejects out-of-range coordinates", () => {
+    expect(
+      locationCoordinatesSchema.safeParse({ latitude: 95, longitude: 0 }).success,
+    ).toBe(false);
+    expect(
+      locationCoordinatesSchema.safeParse({ latitude: 0, longitude: 200 }).success,
+    ).toBe(false);
+  });
+
+  it("requires both set or both cleared", () => {
+    expect(
+      locationCoordinatesSchema.safeParse({ latitude: 40, longitude: "" }).success,
+    ).toBe(false);
   });
 });
 
