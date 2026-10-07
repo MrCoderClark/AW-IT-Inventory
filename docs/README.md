@@ -17,6 +17,11 @@ monitors, printers, phones and related IT items — built to maintain 100+ machi
 | [specs/04-collector-agent-spec.md](specs/04-collector-agent-spec.md) | Python agentless collector — discovery, credential vault, WinRM/WMI/SNMP, ingest |
 | [specs/05-frontend-spec.md](specs/05-frontend-spec.md) | Next.js app — routes, registry screen, components, data + auth wiring |
 
+## Runbooks
+| Doc | Topic |
+|---|---|
+| [runbooks/onboard-computer.md](runbooks/onboard-computer.md) | Onboarding a new Windows computer over WinRM — diagnosing blank hardware / `auth_failed_all_profiles` (token filtering, username qualification, net use error codes) |
+
 ## Design
 | Doc | Topic |
 |---|---|

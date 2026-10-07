@@ -1,0 +1,5 @@
+# Driver packages are environment-specific and often large — the admin drops them
+# here (PRINTER_DRIVERS_DIR, spec 20). Keep the folder, ignore its contents.
+# See ../drivers.example/ for the package format.
+*
+!.gitignore

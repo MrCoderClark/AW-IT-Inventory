@@ -17,6 +17,7 @@ PERMISSIONS = [
     ("assignment:write", "Assign and reassign assets"),
     ("scan:read", "View scan data and discovered devices"),
     ("scan:write", "Trigger and configure scans"),
+    ("printer:install", "Remotely install printers onto computers"),
     ("ingest:write", "Ingest scan data (service accounts)"),
     ("report:read", "View reports"),
     ("audit:read", "View the audit log"),
@@ -30,7 +31,7 @@ ROLES = {
     "Admin": [
         "user:admin", "asset:read", "asset:write", "asset:delete",
         "location:write", "columns:write", "assignment:write", "scan:read",
-        "scan:write", "report:read", "audit:read",
+        "scan:write", "printer:install", "report:read", "audit:read",
     ],
     "Technician": [
         "asset:read", "asset:write", "location:write", "assignment:write",

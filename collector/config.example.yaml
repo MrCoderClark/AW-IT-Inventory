@@ -33,10 +33,16 @@ snmp_version: auto
 # machine's local Administrators. You can list several profiles for the SAME
 # account with different passwords — they're tried in order (first that authenticates
 # wins), handy when a fallback password is in play.
+# `qualify: true` on a LOCAL-account profile makes the collector reverse-resolve
+# the target IP to its hostname and authenticate as `HOSTNAME\user`. Set it for
+# local accounts on domain-joined machines, where a bare username is otherwise
+# routed to the domain and rejected (InvalidCredentials). Falls back to the bare
+# name if the hostname can't be resolved.
 profiles:
   - id: win10-infotech
     username: "infotech"
     password_env: PW_WIN10_INFOTECH
+    qualify: true
   # Same local account, a fallback password tried next.
   - id: win10-infotech-fallback
     username: "infotech"
@@ -80,6 +86,16 @@ cutout_poll_interval: 60.0
 # (~5 MB) is lighter/faster for low-memory hosts. Avoid rembg's new default
 # `bria-rmbg-2.0` (~1 GB) — it runs out of memory on modest machines.
 cutout_model: u2net
+# Remote printer install (spec 20). Poll the install queue on this cadence when
+# no scan job is waiting; a queued install starts within this window.
+printer_install_poll_interval: 60.0
+# Temp dir on the TARGET computer where the driver bundle is staged + unpacked
+# (cleaned up after each job).
+install_temp_dir: 'C:\Windows\Temp\opus-print'
+# Transfer the bundle over the SMB admin share when available; currently the
+# collector always uses the base64-over-WinRM path (works everywhere). Reserved
+# for a future SMB fast path.
+install_smb_transfer: true
 # The printer reachability schedule (spec 12): TCP-probe every printer at these
 # times; the first also runs a full SNMP collect. Needs `apscheduler` installed.
 schedule_times: ["08:00", "13:00", "18:00"]

@@ -237,6 +237,132 @@ def _run_job(config: Config, tokens: TokenCache, worker_id: str, job: dict) -> N
         )
 
 
+def _claim_install(config: Config, token: str, worker_id: str) -> dict | None:
+    """Claim one pending printer-install job (spec 20), or None."""
+    resp = httpx.post(
+        f"{config.ingest_url}/api/scan/printer-install/claim",
+        json={"workerId": worker_id},
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=30,
+    )
+    if resp.status_code == 204:
+        return None
+    if resp.status_code != 200:
+        raise RuntimeError(
+            f"install claim failed ({resp.status_code}): {resp.text[:200]}"
+        )
+    return resp.json()
+
+
+def _post_install_status(
+    config: Config,
+    token: str,
+    job_id: str,
+    worker_id: str,
+    claimed_at: str,
+    status: str,
+    *,
+    result: dict | None = None,
+    error: str | None = None,
+) -> bool:
+    """Report an install job's status, fenced by the claim (False on 409)."""
+    body: dict = {"workerId": worker_id, "claimedAt": claimed_at, "status": status}
+    if result is not None:
+        body["result"] = result
+    if error is not None:
+        body["error"] = error
+    resp = httpx.post(
+        f"{config.ingest_url}/api/scan/printer-install/{job_id}/status",
+        json=body,
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=30,
+    )
+    if resp.status_code == 409:
+        console.print(
+            f"  [yellow]claim lost[/yellow] on install {job_id}; dropping result."
+        )
+        return False
+    if resp.status_code != 200:
+        raise RuntimeError(
+            f"install status update failed ({resp.status_code}): {resp.text[:200]}"
+        )
+    return True
+
+
+def _run_install_job(
+    config: Config, tokens: "TokenCache", worker_id: str, job: dict
+) -> None:
+    from install_printer import run_install
+
+    job_id = job["id"]
+    claimed_at = job["claimedAt"]
+    action = job.get("action") or "install"
+    target = job.get("assetTag") or job.get("targetIp")
+    label = {
+        "install": f"install '{job.get('printerName')}'",
+        "list": "list printers",
+        "remove": f"remove '{job.get('printerName')}'",
+    }.get(action, action)
+    console.print(f"[bold]Printer[/bold] {job_id}: {label} on {target} …")
+
+    if not _post_install_status(
+        config, tokens.get(), job_id, worker_id, claimed_at, "running"
+    ):
+        return
+
+    try:
+        result = run_install(config, tokens.get(), job)
+    except Exception as e:  # noqa: BLE001 — worker-level error fails the job
+        console.print(f"  [red]install failed:[/red] {e}")
+        _post_install_status(
+            config, tokens.get(), job_id, worker_id, claimed_at, "failed",
+            error=str(e)[:800],
+        )
+        return
+
+    # A verify-failed outcome is a job failure (AC-6), with the steps attached.
+    if result.get("outcome") == "verify-failed":
+        # Dump every step to the console so the real cause is visible right here.
+        for s in result.get("steps", []):
+            console.print(
+                f"    step [cyan]{s.get('name')}[/cyan] exit={s.get('exitCode')}"
+            )
+            if (s.get("stdout") or "").strip():
+                console.print(f"      out: {s['stdout'].strip()[:600]}")
+            if (s.get("stderr") or "").strip():
+                console.print(f"      [red]err:[/red] {s['stderr'].strip()[:600]}")
+        first_bad = next(
+            (
+                f"{s['name']}: {(s.get('stderr') or '').strip()[:200]}"
+                for s in result.get("steps", [])
+                if s.get("exitCode") not in (0, None)
+            ),
+            "the operation completed but verification failed",
+        )
+        _post_install_status(
+            config, tokens.get(), job_id, worker_id, claimed_at, "failed",
+            result=result,
+            error=first_bad,
+        )
+        console.print("  [red]verify failed[/red] — see captured output.")
+        return
+
+    if _post_install_status(
+        config, tokens.get(), job_id, worker_id, claimed_at, "succeeded",
+        result=result,
+    ):
+        console.print(f"  [green]done[/green] — {result.get('outcome')}.")
+
+
+def _drain_installs(config: Config, tokens: "TokenCache", worker_id: str) -> None:
+    """Process any pending printer-install jobs (spec 20)."""
+    while True:
+        job = _claim_install(config, tokens.get(), worker_id)
+        if job is None:
+            return
+        _run_install_job(config, tokens, worker_id, job)
+
+
 def _resolve_tz(config: Config) -> ZoneInfo | None:
     """The explicit schedule zone, so fire times don't drift with the host OS or
     DST (spec 12). None means APScheduler uses the host's local zone."""
@@ -446,6 +572,9 @@ def run_worker(args: argparse.Namespace) -> int:
     cutout_poll = config.cutout_poll_interval
     last_cutout = 0.0
 
+    install_poll = config.printer_install_poll_interval
+    last_install = 0.0
+
     console.print(
         f"[bold]Worker[/bold] {worker_id} (v{WORKER_VERSION}) — polling "
         f"{config.ingest_url} every {poll}s · background removal "
@@ -465,8 +594,11 @@ def run_worker(args: argparse.Namespace) -> int:
                 if job is not None:
                     _run_job(config, tokens, worker_id, job)
                     continue  # drain the scan queue first
-                # No scan job queued — poll cut-out jobs on their calmer cadence.
+                # No scan job queued — poll install + cut-out jobs on their cadence.
                 now = time.monotonic()
+                if now - last_install >= install_poll:
+                    last_install = now
+                    _drain_installs(config, tokens, worker_id)
                 if cutout_enabled and now - last_cutout >= cutout_poll:
                     last_cutout = now
                     _drain_cutout(config, tokens, worker_id)

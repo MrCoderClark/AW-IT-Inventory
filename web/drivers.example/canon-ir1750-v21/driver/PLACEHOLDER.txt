@@ -1,0 +1,3 @@
+Place the real driver files here, including the INF named in package.json
+(infPath). This example ships no actual driver — copy a real package into
+web/drivers/<id>/ to make it installable.
