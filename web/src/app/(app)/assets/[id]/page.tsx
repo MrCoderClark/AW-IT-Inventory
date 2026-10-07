@@ -8,6 +8,12 @@ import { PagePlaceholder } from "@/components/page-placeholder";
 import { getAssetAssignmentHistory } from "@/db/assignments";
 import { getPrinterCounters } from "@/db/counters";
 import { getInstalledSoftware } from "@/db/software";
+import {
+  getLatestPrinterList,
+  getPrinterPrefillOptions,
+  listInstallJobsForAssetTag,
+} from "@/db/printer-install";
+import { listPrinterPackages } from "@/lib/printer-packages";
 import { getPrinterActivity, getPrinterNetworkHealth } from "@/db/printers";
 import {
   getAssetAssigneeId,
@@ -36,6 +42,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
   const { id } = await params;
   const canWrite = hasPermission(user, "asset:write");
   const canScan = hasPermission(user, "scan:write");
+  const canInstall = hasPermission(user, "printer:install");
 
   const asset = await getAssetById(id);
   if (!asset) notFound();
@@ -78,6 +85,10 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
       assetDetails,
       software,
       assignmentHistory,
+      installJobs,
+      packages,
+      printerOptions,
+      livePrinters,
     ] = await Promise.all([
       getMachineSummary(id),
       canWrite ? getAssetAssigneeId(id) : Promise.resolve(null),
@@ -86,7 +97,26 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
       getAssetDetails(id),
       getInstalledSoftware(id),
       getAssetAssignmentHistory(id),
+      listInstallJobsForAssetTag(id),
+      canInstall ? listPrinterPackages() : Promise.resolve([]),
+      canInstall ? getPrinterPrefillOptions() : Promise.resolve([]),
+      canInstall ? getLatestPrinterList(id) : Promise.resolve(null),
     ]);
+    // Client-safe package options (no file paths / hashes).
+    const installPackages = packages.map((p) => ({
+      id: p.id,
+      name: p.name,
+      vendor: p.vendor,
+      model: p.model,
+      driverName: p.driverName,
+      arch: p.arch,
+      defaultConnectionType: p.defaultConnection.type,
+      defaultPort:
+        p.defaultConnection.type === "tcpip"
+          ? p.defaultConnection.port ?? null
+          : null,
+      defaultPrinterName: p.defaultPrinterName,
+    }));
     return (
       <ComputerDetail
         asset={asset}
@@ -99,6 +129,11 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
         locations={locations}
         canWrite={canWrite}
         canScan={canScan}
+        canInstall={canInstall}
+        installJobs={installJobs}
+        installPackages={installPackages}
+        printerOptions={printerOptions}
+        livePrinters={livePrinters}
       />
     );
   }

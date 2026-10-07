@@ -19,6 +19,12 @@ class CredentialProfile(BaseModel):
     id: str
     username: str
     password_env: str
+    # A LOCAL account on a domain-joined machine must be machine-qualified
+    # (`HOSTNAME\user`) or NTLM routes a bare name to the domain and rejects it.
+    # When true, the collector reverse-resolves the target IP to its hostname and
+    # qualifies the username at auth time (falls back to the bare name if the
+    # hostname can't be resolved). See creds.resolve_profiles.
+    qualify: bool = False
 
     @property
     def password(self) -> str:
@@ -79,6 +85,16 @@ class Config(BaseModel):
     # `u2netp` (~5 MB) is lighter/faster for low-memory hosts. DON'T use rembg's
     # new default `bria-rmbg-2.0` (~1 GB) — it OOMs modest machines.
     cutout_model: str = "u2net"
+    # Remote printer install / list / remove (spec 20). The worker polls the op
+    # queue on this cadence when no scan job is waiting. Kept short so interactive
+    # "scan printers" / "remove" feel responsive.
+    printer_install_poll_interval: float = 5.0
+    # Temp dir on the TARGET computer where the driver bundle is staged + unpacked
+    # (cleaned up after each job).
+    install_temp_dir: str = r"C:\Windows\Temp\opus-print"
+    # Transfer the driver bundle to the target over the SMB admin share (C$); when
+    # False (or 445 is closed), fall back to base64 chunks over WinRM.
+    install_smb_transfer: bool = True
     # Times of day the printer reachability checks fire (local to schedule_tz).
     schedule_times: list[str] = Field(default_factory=lambda: ["08:00", "13:00", "18:00"])
     # Explicit zone for the schedule so fire times don't drift with the host OS
@@ -136,17 +152,26 @@ class Config(BaseModel):
 
 
 def load_env(path: Path | None = None) -> None:
-    """Minimal .env loader (KEY=VALUE lines) into os.environ; no overwrite."""
+    """Minimal .env loader (KEY=VALUE lines) into os.environ.
+
+    A real OS environment variable always wins (so you can override .env from the
+    shell). Among the .env lines themselves, the LAST occurrence of a key wins —
+    so editing a value by adding a new line (leaving a stale earlier one) still
+    uses the new value, instead of silently keeping the old one.
+    """
     env_path = path or (BASE_DIR / ".env")
     if not env_path.exists():
         return
+    preexisting = set(os.environ)  # OS-level vars take precedence over .env
     for line in env_path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, _, value = line.partition("=")
         key, value = key.strip(), value.strip().strip('"').strip("'")
-        os.environ.setdefault(key, value)
+        if key in preexisting:
+            continue
+        os.environ[key] = value
 
 
 def load_config(path: str | Path = "config.yaml") -> Config:

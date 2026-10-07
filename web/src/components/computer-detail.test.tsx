@@ -29,6 +29,10 @@ vi.mock("@/app/(app)/assets/actions", () => ({
   deleteAsset: vi.fn(),
 }));
 vi.mock("@/app/(app)/scan-actions", () => ({ requestScan: vi.fn() }));
+vi.mock("@/app/(app)/printer-install-actions", () => ({
+  installPrinterAction: vi.fn(),
+  cancelInstallJobAction: vi.fn(),
+}));
 vi.mock("@/app/(app)/people-actions", () => ({
   assignAssetAction: vi.fn(),
   returnAssetAction: vi.fn(),

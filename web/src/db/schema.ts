@@ -437,6 +437,115 @@ export const scanJobs = pgTable(
   ],
 );
 
+// ── Remote printer install (spec 20) ─────────────────────────────────────────
+// One job per "install this printer on that computer" request. Same claim /
+// fenced-status / reaper machinery as `scan_jobs`; the worker pulls the job and
+// the driver bundle, installs over WinRM/SMB, and posts the result back.
+export type PrinterInstallConnection =
+  | { type: "tcpip"; host: string; port?: number; replace?: boolean }
+  | { type: "wsd"; host?: string }
+  | { type: "share"; sharePath: string };
+
+// Frozen at enqueue so a later manifest edit never changes a queued job.
+export type PrinterPackageSnapshot = {
+  driverName: string;
+  infPath: string;
+  arch: string;
+  sha256: string; // content hash of the package file tree (see printer-packages.ts)
+};
+
+export type PrinterInstallStep = {
+  name: string;
+  exitCode: number | null;
+  stdout: string;
+  stderr: string;
+};
+
+/** One printer as it exists on a target computer (live Get-Printer snapshot). */
+export type InstalledPrinter = {
+  name: string;
+  driverName: string;
+  portName: string;
+  hostAddress: string | null; // the port's TCP/IP address, when it's a TCP port
+  shared: boolean;
+  isDefault: boolean;
+};
+
+export type PrinterInstallResult = {
+  outcome:
+    | "installed"
+    | "already-present"
+    | "verify-failed"
+    | "listed"
+    | "removed";
+  steps: PrinterInstallStep[];
+  verifiedPrinter?: {
+    name: string;
+    driverName: string;
+    portName: string;
+  } | null;
+  // Populated for a `list` op: the printers found on the computer.
+  printers?: InstalledPrinter[];
+};
+
+export const printerInstallJobs = pgTable(
+  "printer_install_jobs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // The target computer asset. Cascade so deleting the computer clears its jobs.
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    targetIp: text("target_ip").notNull(), // snapshot of computer_details.ip_address
+    // What the worker should do. `install` carries package + connection; `list`
+    // enumerates the computer's printers; `remove` deletes one by name.
+    action: text("action")
+      .$type<"install" | "list" | "remove">()
+      .notNull()
+      .default("install"),
+    packageId: text("package_id"), // catalog slug (install only)
+    packageSnapshot: jsonb("package_snapshot").$type<PrinterPackageSnapshot>(),
+    printerName: text("printer_name"), // install: new name; remove: name to delete
+    connection: jsonb("connection").$type<PrinterInstallConnection>(),
+    // Set when prefilled from a printer asset (informational); null otherwise.
+    sourcePrinterAssetId: uuid("source_printer_asset_id").references(
+      () => assets.id,
+      { onDelete: "set null" },
+    ),
+    status: text("status")
+      .$type<
+        "pending" | "claimed" | "running" | "succeeded" | "failed" | "canceled"
+      >()
+      .notNull()
+      .default("pending"),
+    // Admin email from the access token; no FK (users live in aw-auth).
+    requestedBy: text("requested_by").notNull(),
+    workerId: text("worker_id"),
+    result: jsonb("result").$type<PrinterInstallResult>(),
+    error: text("error"),
+    requestedAt: timestamp("requested_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    // Cheap "oldest pending" claim poll (mirrors scan_jobs_pending_idx).
+    index("printer_install_jobs_pending_idx")
+      .on(t.status, t.requestedAt)
+      .where(sql`${t.status} = 'pending'`),
+    // History panel reads the newest jobs for one computer.
+    index("printer_install_jobs_asset_idx").on(t.assetId, t.requestedAt),
+  ],
+);
+
 // Reachability history: one row per printer check (scheduled or manual).
 export const printerChecks = pgTable(
   "printer_checks",
@@ -738,6 +847,7 @@ export type PhoneDetailsRow = typeof phoneDetails.$inferSelect;
 export type NetworkDetailsRow = typeof networkDetails.$inferSelect;
 export type TableColumnConfigRow = typeof tableColumnConfig.$inferSelect;
 export type ScanJobRow = typeof scanJobs.$inferSelect;
+export type PrinterInstallJobRow = typeof printerInstallJobs.$inferSelect;
 export type PrinterCheckRow = typeof printerChecks.$inferSelect;
 export type PrinterStatusRow = typeof printerStatus.$inferSelect;
 export type ScanWorkerRow = typeof scanWorkers.$inferSelect;

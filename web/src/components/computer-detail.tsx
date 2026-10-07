@@ -39,6 +39,15 @@ import {
 } from "@/components/asset-form-dialog";
 import { AssetImageUpload } from "@/components/asset-image-upload";
 import { AssignmentControls } from "@/components/assignment-controls";
+import { PrinterInstallPanel } from "@/components/printer-install-panel";
+import type {
+  PackageOption,
+  PrinterOption,
+} from "@/components/printer-install-dialog";
+import type {
+  InstallJobListItem,
+  PrinterListSnapshot,
+} from "@/db/printer-install";
 import {
   ActivityTable,
   AssignmentTimeline,
@@ -75,6 +84,16 @@ import {
 import type { AssetFormValues } from "@/lib/asset-schema";
 import { TYPE_FIELDS, detailsToFormValues, type TypeField } from "@/lib/asset-fields";
 
+/** Short label for a printer-install job status (Overview summary + tab). */
+const INSTALL_STATUS_LABEL: Record<string, string> = {
+  pending: "Queued",
+  claimed: "Installing…",
+  running: "Installing…",
+  succeeded: "Installed",
+  failed: "Failed",
+  canceled: "Canceled",
+};
+
 /** Format one spec-10 computer field for display. */
 function fmtField(field: TypeField, row: Record<string, unknown> | null): string {
   if (!row) return "—";
@@ -101,6 +120,11 @@ export function ComputerDetail({
   locations = [],
   canWrite = false,
   canScan = false,
+  canInstall = false,
+  installJobs = [],
+  installPackages = [],
+  printerOptions = [],
+  livePrinters = null,
 }: {
   asset: Asset;
   machine?: MachineSummary;
@@ -112,6 +136,11 @@ export function ComputerDetail({
   locations?: LocationOption[];
   canWrite?: boolean;
   canScan?: boolean;
+  canInstall?: boolean;
+  installJobs?: InstallJobListItem[];
+  installPackages?: PackageOption[];
+  printerOptions?: PrinterOption[];
+  livePrinters?: PrinterListSnapshot | null;
 }) {
   const router = useRouter();
   const [tab, setTab] = React.useState("overview");
@@ -274,6 +303,7 @@ export function ComputerDetail({
           <TabsTab value="overview">Overview</TabsTab>
           <TabsTab value="livescan">Live scan</TabsTab>
           <TabsTab value="software">Software</TabsTab>
+          <TabsTab value="printers">Printers</TabsTab>
           <TabsTab value="assignment">Assignment</TabsTab>
           <TabsTab value="activity">Activity</TabsTab>
         </TabsList>
@@ -342,6 +372,59 @@ export function ComputerDetail({
                     <span className="text-muted-foreground">Unassigned — available in the pool</span>
                   )}
                 </p>
+              </Panel>
+
+              <Panel
+                icon={<Printer />}
+                title="Printers"
+                action={
+                  <button
+                    onClick={() => setTab("printers")}
+                    className="text-sm font-medium text-primary hover:underline"
+                  >
+                    Manage →
+                  </button>
+                }
+              >
+                {installJobs.filter((j) => j.action !== "list").length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No printer activity yet.
+                  </p>
+                ) : (
+                  <ul className="flex flex-col gap-1.5 text-sm">
+                    {installJobs
+                      .filter((j) => j.action !== "list")
+                      .slice(0, 3)
+                      .map((j) => (
+                      <li
+                        key={j.id}
+                        className="flex items-center justify-between gap-2"
+                      >
+                        <span className="min-w-0 truncate">{j.printerName}</span>
+                        <span
+                          className={
+                            j.status === "failed"
+                              ? "shrink-0 text-xs text-destructive"
+                              : j.status === "succeeded"
+                                ? "shrink-0 text-xs font-medium"
+                                : "shrink-0 text-xs text-muted-foreground"
+                          }
+                        >
+                          {INSTALL_STATUS_LABEL[j.status]}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {canInstall && (
+                  <Button
+                    size="sm"
+                    className="mt-3"
+                    onClick={() => setTab("printers")}
+                  >
+                    <Printer className="size-4" /> Install printer
+                  </Button>
+                )}
               </Panel>
             </div>
           </div>
@@ -432,6 +515,20 @@ export function ComputerDetail({
         </TabsPanel>
 
         {/* -------- Assignment -------- */}
+        <TabsPanel value="printers">
+          <PrinterInstallPanel
+            assetTag={asset.id}
+            canInstall={canInstall}
+            hasIp={
+              !!(details && typeof details.ipAddress === "string" && details.ipAddress)
+            }
+            packages={installPackages}
+            printerOptions={printerOptions}
+            jobs={installJobs}
+            livePrinters={livePrinters}
+          />
+        </TabsPanel>
+
         <TabsPanel value="assignment" className="flex flex-col gap-5">
           {canWrite && (
             <Panel icon={<User />} title="Assign Device">

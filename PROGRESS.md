@@ -7,6 +7,55 @@ via a feature branch + PR.
 
 ---
 
+## In progress 🚧 — Remote printer install (spec 20)
+
+Push-install a printer onto a managed computer from the UI (full spec in
+`docs/specs/20-remote-printer-install/`). Reuses the outbound worker + atomic
+claim/fenced-status machinery (spec 12) and the cut-out "pull bytes, do work,
+post result" model (spec 18). Admin-set driver catalog is a **filesystem folder
+of manifests** (no upload UI). v1 is single-computer; batch/uninstall are
+follow-ups.
+
+- **Code complete across web + aw-auth + collector; needs deps + db:push +
+  seed_rbac + tests + live verify; not committed.**
+  - **Schema:** `printer_install_jobs` (target asset + frozen package snapshot +
+    connection + fenced status + result). **Needs `npm run db:push`.** New types
+    `PrinterInstallConnection/Result/PackageSnapshot`.
+  - **Catalog:** `web/src/lib/printer-packages.ts` reads/validates
+    `PRINTER_DRIVERS_DIR` (default `web/drivers/`, gitignored; format +
+    example in `web/drivers.example/`). Integrity is a **content hash over the
+    package file tree** (not zip bytes), frozen per job. New dep **fflate**
+    (zip the bundle) — **`npm install`**.
+  - **Data layer:** `web/src/db/printer-install.ts` — atomic `claimNextInstallJob`,
+    fenced `updateInstallJobStatus`, `enqueueInstall`, `cancelPendingInstall`,
+    `listInstallJobsForAssetTag`, `resolveInstallTarget`, `getPrinterPrefillOptions`.
+  - **API:** `POST /api/scan/printer-install/claim`, `GET
+    /api/scan/printer-packages/[id]/bundle` (zip + `x-bundle-sha256`), `POST
+    /api/scan/printer-install/[id]/status` — all service `scan:dequeue`.
+    Server actions `printer-install-actions.ts` (`printer:install`).
+  - **UI:** a **Printers** tab on the computer detail page
+    (`printer-install-panel.tsx` + `printer-install-dialog.tsx`): pick a package,
+    optionally prefill from a printer asset, set name/connection, queue; install
+    history with per-step captured output, cancel, "waiting for collector".
+  - **RBAC:** new `printer:install` permission in `seed_rbac.py`, granted to
+    Owner/Admin. **Needs `manage.py seed_rbac`** (and users re-login).
+  - **Collector:** `install_printer.py` (download bundle → verify content hash →
+    resolve creds via `resolve_profiles` → open WinRM → stage the zip base64 →
+    `Expand-Archive` → `pnputil`/`Add-PrinterDriver`/`Add-PrinterPort`/`Add-Printer`
+    (idempotent) → verify `Get-Printer` → cleanup). Wired into the worker drain
+    loop; config knobs `printer_install_poll_interval` / `install_temp_dir` /
+    `install_smb_transfer`. (Transfer is base64-over-WinRM; SMB fast path is a
+    documented follow-up.)
+  - **Tests:** `printer-install-actions.test.ts` (gate/validation/enqueue),
+    `test_install_printer.py` (tree hash + integrity gate).
+  - **Next:** `cd web && npm install && npm run db:push && npm test && npx tsc
+    --noEmit`; `cd aw-auth && uv run python manage.py seed_rbac && uv run python
+    manage.py test`; `cd collector && uv run pytest -q`; drop a real driver
+    package in `web/drivers/<id>/`, restart web + worker, install to a computer,
+    watch the job go succeeded with Get-Printer output. Commit + PR.
+
+---
+
 ## In progress 🚧 — User management (branch `feat/user-management`)
 
 In-app user & role management, closing the `/admin` "powered by aw-auth in a

@@ -1,0 +1,11 @@
+{
+  "id": "canon-ir1750-v21",
+  "name": "Canon iR1750 (UFR II) v21",
+  "vendor": "Canon",
+  "model": "iR1750",
+  "driverName": "Canon Generic Plus UFR II",
+  "infPath": "driver/CNLB0MA64.INF",
+  "arch": "x64",
+  "connection": { "type": "tcpip", "port": 9100 },
+  "defaultPrinterName": "Canon iR1750"
+}
