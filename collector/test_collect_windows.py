@@ -129,3 +129,55 @@ def test_winrm_port_closed_short_circuits(monkeypatch):
 
     assert out["errors"] == ["winrm_port_closed"]
     assert attempted == []
+
+
+def test_parses_security_posture_into_compliance(monkeypatch):
+    # The posture signals (spec 21) ride the same collect and land on out["compliance"].
+    attempted: list[str] = []
+    payload = json.dumps(
+        {
+            "hostname": "PC1",
+            "bitlocker": "on",
+            "defender_realtime": True,
+            "defender_sig_age_days": 3,
+            "av_product": "Windows Defender",
+            "tpm_ready": True,
+            "secure_boot": "on",
+            "updates_last_days": 9,
+            "updates_pending": None,
+            "system_drive_pct_used": 72.5,
+        }
+    ).encode()
+    _patch_winrm(monkeypatch, {"alice": _result(0, std_out=payload)}, attempted)
+
+    out = collect_windows.collect_windows(
+        "10.0.0.5", [5985], [_profile("good", "alice", "pw")], _config()
+    )
+    c = out["compliance"]
+    assert c is not None
+    assert c.bitlocker == "on"
+    assert c.defender_realtime is True
+    assert c.defender_sig_age_days == 3
+    assert c.av_product == "Windows Defender"
+    assert c.tpm_ready is True
+    assert c.secure_boot == "on"
+    assert c.updates_last_days == 9
+    assert c.system_drive_pct_used == 72.5
+
+
+def test_unreadable_posture_signals_are_none_not_error(monkeypatch):
+    # A filtered token returns $null for each posture field → absent JSON keys →
+    # None (unknown), and the collect still succeeds (AC-1).
+    attempted: list[str] = []
+    payload = json.dumps({"hostname": "PC1", "serial": "SN1"}).encode()
+    _patch_winrm(monkeypatch, {"alice": _result(0, std_out=payload)}, attempted)
+
+    out = collect_windows.collect_windows(
+        "10.0.0.5", [5985], [_profile("good", "alice", "pw")], _config()
+    )
+    c = out["compliance"]
+    assert c is not None
+    assert c.bitlocker is None
+    assert c.tpm_ready is None
+    assert c.secure_boot is None
+    assert out["errors"] == []

@@ -1,0 +1,85 @@
+import "server-only";
+
+import { eq } from "drizzle-orm";
+
+import { db } from "./index";
+import { complianceStatus } from "./schema";
+import type { CompliancePosture } from "@/lib/compliance-score";
+
+/* ================================================================
+   Compliance posture storage (spec 21). One current-state row per
+   Computer asset (no history), upserted at ingest. The health score
+   and verdicts are derived at read time by `scoreCompliance`
+   (src/lib/compliance-score.ts) — nothing scored is stored here.
+   ================================================================ */
+
+/** Loose shape of the collector's `compliance` block in the ingest payload
+   (snake_case, matching `models.Compliance`). Every field is optional/nullable:
+   a signal the collector couldn't read arrives as null ("unknown"). */
+export interface PostedCompliance {
+  bitlocker?: string | null;
+  defender_realtime?: boolean | null;
+  defender_sig_age_days?: number | null;
+  av_product?: string | null;
+  tpm_ready?: boolean | null;
+  secure_boot?: string | null;
+  updates_last_days?: number | null;
+  updates_pending?: number | null;
+  system_drive_pct_used?: number | null;
+}
+
+/**
+ * Upsert a Computer asset's current posture (one row per asset; a new scan
+ * replaces it). Best-effort by the caller (ingest) — a failure here must never
+ * fail the machine ingest, and an absent `compliance` block leaves the prior row
+ * intact (the caller skips this when the collector returned nothing).
+ */
+export async function upsertComplianceStatus(
+  assetId: string,
+  posted: PostedCompliance,
+  assessedAt: Date,
+): Promise<void> {
+  const row = {
+    assetId,
+    bitlocker: posted.bitlocker ?? null,
+    defenderRealtime: posted.defender_realtime ?? null,
+    defenderSigAgeDays: posted.defender_sig_age_days ?? null,
+    avProduct: posted.av_product ?? null,
+    tpmReady: posted.tpm_ready ?? null,
+    secureBoot: posted.secure_boot ?? null,
+    updatesLastDays: posted.updates_last_days ?? null,
+    updatesPending: posted.updates_pending ?? null,
+    systemDrivePctUsed: posted.system_drive_pct_used ?? null,
+    assessedAt,
+  };
+  const { assetId: _pk, ...set } = row;
+  await db
+    .insert(complianceStatus)
+    .values(row)
+    .onConflictDoUpdate({ target: complianceStatus.assetId, set });
+}
+
+/** The stored posture for one asset (null if never assessed). Pass the result to
+   `scoreCompliance` for the score + verdicts. */
+export async function getComplianceStatus(
+  assetId: string,
+): Promise<CompliancePosture | null> {
+  const [r] = await db
+    .select()
+    .from(complianceStatus)
+    .where(eq(complianceStatus.assetId, assetId))
+    .limit(1);
+  if (!r) return null;
+  return {
+    bitlocker: r.bitlocker,
+    defenderRealtime: r.defenderRealtime,
+    defenderSigAgeDays: r.defenderSigAgeDays,
+    avProduct: r.avProduct,
+    tpmReady: r.tpmReady,
+    secureBoot: r.secureBoot,
+    updatesLastDays: r.updatesLastDays,
+    updatesPending: r.updatesPending,
+    systemDrivePctUsed: r.systemDrivePctUsed,
+    assessedAt: r.assessedAt.toISOString(),
+  };
+}
