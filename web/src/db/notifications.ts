@@ -244,6 +244,57 @@ export async function notifyPrinterTransitions(
   }
 }
 
+/* ---------------- Printer install/remove results (spec 19 × spec 20) ---------------- */
+
+/**
+ * Raise an in-app notification for a finished printer install/remove job, called
+ * from `updateInstallJobStatus` the moment a job reaches a terminal state — beside
+ * the install-history record the job already carries. Best-effort and idempotent
+ * per job+status (`createNotification` dedupes on `dedupeKey`), so a re-posted
+ * status never double-fires and a notification failure never affects the status
+ * update. `list` ops are silent: that's a background panel refresh, not a
+ * user-facing event. The job's asset tag resolves the deep link.
+ */
+export async function notifyInstallResult(job: {
+  jobId: string;
+  action: "install" | "list" | "remove";
+  status: "succeeded" | "failed";
+  assetId: string;
+  printerName: string | null;
+  error?: string | null;
+}): Promise<void> {
+  if (job.action === "list") return;
+
+  const [asset] = await db
+    .select({ tag: assets.tag, name: assets.name })
+    .from(assets)
+    .where(eq(assets.id, job.assetId))
+    .limit(1);
+
+  const href = asset ? `/assets/${asset.tag}` : "/assets";
+  const on = asset?.name ?? "the computer";
+  const printer = job.printerName ? `"${job.printerName}"` : "a printer";
+  const v =
+    job.action === "remove"
+      ? { past: "removed", noun: "removal", gerund: "Removing", prep: "from" }
+      : { past: "installed", noun: "install", gerund: "Installing", prep: "on" };
+  const ok = job.status === "succeeded";
+  const err = (job.error ?? "").trim().slice(0, 300);
+
+  await createNotification({
+    type: ok ? "printer-install" : "printer-install-failed",
+    severity: ok ? "info" : "warning",
+    title: ok ? `Printer ${v.past}` : `Printer ${v.noun} failed`,
+    body: ok
+      ? `${printer} was ${v.past} ${v.prep} ${on}.`
+      : `${v.gerund} ${printer} ${v.prep} ${on} failed${err ? `: ${err}` : "."}`,
+    href,
+    dedupeKey: `printer-install:${job.jobId}:${job.status}`,
+    assetId: job.assetId,
+    meta: { jobId: job.jobId, action: job.action, printerName: job.printerName },
+  });
+}
+
 /* ---------------- Warranty sweep (AC-5) ---------------- */
 
 const WARRANTY_WITHIN_DAYS = 30;

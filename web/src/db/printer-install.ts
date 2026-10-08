@@ -3,6 +3,7 @@ import "server-only";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "./index";
+import { notifyInstallResult } from "./notifications";
 import { isWorkerLive } from "./scan";
 import {
   assets,
@@ -158,9 +159,29 @@ export async function updateInstallJobStatus(
         inArray(printerInstallJobs.status, ["claimed", "running"]),
       ),
     )
-    .returning({ id: printerInstallJobs.id });
+    .returning({
+      id: printerInstallJobs.id,
+      assetId: printerInstallJobs.assetId,
+      action: printerInstallJobs.action,
+      printerName: printerInstallJobs.printerName,
+    });
 
-  if (updated.length) return "ok";
+  if (updated.length) {
+    // A finished install/remove raises an in-app notification (spec 19 × 20),
+    // beside the install-history row. Best-effort + idempotent per job+status.
+    if (u.status === "succeeded" || u.status === "failed") {
+      const row = updated[0];
+      await notifyInstallResult({
+        jobId: row.id,
+        action: row.action,
+        status: u.status,
+        assetId: row.assetId,
+        printerName: row.printerName,
+        error: u.error ?? null,
+      });
+    }
+    return "ok";
+  }
 
   const exists = await db
     .select({ id: printerInstallJobs.id })

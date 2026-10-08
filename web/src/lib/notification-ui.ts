@@ -16,6 +16,8 @@ import type { NotificationSeverity, NotificationType } from "@/lib/data";
 export const NOTIFICATION_ICON: Record<NotificationType, LucideIcon> = {
   "printer-down": Printer,
   "printer-recovery": Printer,
+  "printer-install": Printer,
+  "printer-install-failed": Printer,
   "scan-failed": ScanLine,
   "device-discovered": Radar,
   "warranty-expiring": ShieldAlert,
@@ -26,6 +28,8 @@ export const NOTIFICATION_FALLBACK_ICON = Bell;
 export const NOTIFICATION_TYPE_LABEL: Record<NotificationType, string> = {
   "printer-down": "Printer down",
   "printer-recovery": "Printer recovery",
+  "printer-install": "Printer install",
+  "printer-install-failed": "Printer install failed",
   "scan-failed": "Scan failed",
   "device-discovered": "Device discovered",
   "warranty-expiring": "Warranty",

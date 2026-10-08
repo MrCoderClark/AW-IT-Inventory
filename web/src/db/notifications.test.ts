@@ -23,8 +23,10 @@ const H = vi.hoisted(() => {
     return b;
   };
 
+  const insertValues: unknown[] = [];
   const insertMock = vi.fn(() => ({
-    values: () => {
+    values: (v: unknown) => {
+      insertValues.push(v); // capture the payload so tests can assert on it
       // Awaitable (markRead awaits onConflictDoNothing directly) AND chainable
       // with .returning() (createNotification uses it).
       const oc = () => {
@@ -45,6 +47,7 @@ const H = vi.hoisted(() => {
   return {
     selectQueue,
     insertReturning,
+    insertValues,
     deleteReturning,
     publishMock,
     executeMock,
@@ -66,6 +69,7 @@ import {
   getUnreadCount,
   markAllRead,
   markRead,
+  notifyInstallResult,
   pruneNotifications,
   sweepWarrantyNotifications,
 } from "./notifications";
@@ -73,6 +77,7 @@ import {
 beforeEach(() => {
   H.selectQueue.length = 0;
   H.insertReturning.length = 0;
+  H.insertValues.length = 0;
   H.deleteReturning.length = 0;
   vi.clearAllMocks();
   vi.useFakeTimers();
@@ -122,6 +127,94 @@ describe("createNotification", () => {
     });
     expect(id).toBeNull();
     expect(H.publishMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("notifyInstallResult", () => {
+  const asset = [{ tag: "PC-1", name: "Reception PC" }];
+  const createdRow = (type: string) => [
+    {
+      id: "n9",
+      type,
+      severity: "info",
+      title: "t",
+      body: "b",
+      href: "/assets/PC-1",
+      assetId: "a1",
+      createdAt: new Date("2026-10-06T12:00:00Z"),
+    },
+  ];
+
+  it("install succeeded → info printer-install deep-linked to the asset", async () => {
+    H.selectQueue.push(asset);
+    H.insertReturning.push(createdRow("printer-install"));
+    await notifyInstallResult({
+      jobId: "j1",
+      action: "install",
+      status: "succeeded",
+      assetId: "a1",
+      printerName: "Canon iR",
+      error: null,
+    });
+    const v = H.insertValues.at(-1) as Record<string, unknown>;
+    expect(v).toMatchObject({
+      type: "printer-install",
+      severity: "info",
+      title: "Printer installed",
+      href: "/assets/PC-1",
+      dedupeKey: "printer-install:j1:succeeded",
+      assetId: "a1",
+    });
+    expect(v.body).toBe('"Canon iR" was installed on Reception PC.');
+  });
+
+  it("install failed → warning printer-install-failed carrying the trimmed error", async () => {
+    H.selectQueue.push(asset);
+    H.insertReturning.push(createdRow("printer-install-failed"));
+    await notifyInstallResult({
+      jobId: "j2",
+      action: "install",
+      status: "failed",
+      assetId: "a1",
+      printerName: "Canon iR",
+      error: "  publisher not trusted  ",
+    });
+    const v = H.insertValues.at(-1) as Record<string, unknown>;
+    expect(v).toMatchObject({
+      type: "printer-install-failed",
+      severity: "warning",
+      title: "Printer install failed",
+      dedupeKey: "printer-install:j2:failed",
+    });
+    expect(v.body).toBe('Installing "Canon iR" on Reception PC failed: publisher not trusted');
+  });
+
+  it("remove succeeded → 'removed from' wording", async () => {
+    H.selectQueue.push(asset);
+    H.insertReturning.push(createdRow("printer-install"));
+    await notifyInstallResult({
+      jobId: "j3",
+      action: "remove",
+      status: "succeeded",
+      assetId: "a1",
+      printerName: "Old HP",
+      error: null,
+    });
+    const v = H.insertValues.at(-1) as Record<string, unknown>;
+    expect(v.title).toBe("Printer removed");
+    expect(v.body).toBe('"Old HP" was removed from Reception PC.');
+  });
+
+  it("list ops are silent: no asset lookup and no notification", async () => {
+    await notifyInstallResult({
+      jobId: "j4",
+      action: "list",
+      status: "succeeded",
+      assetId: "a1",
+      printerName: null,
+    });
+    expect(H.db.select).not.toHaveBeenCalled();
+    expect(H.insertValues).toHaveLength(0);
   });
 });
 
