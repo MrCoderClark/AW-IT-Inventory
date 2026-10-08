@@ -3,7 +3,7 @@ import "server-only";
 import { eq } from "drizzle-orm";
 
 import { db } from "./index";
-import { complianceStatus } from "./schema";
+import { assets, complianceStatus } from "./schema";
 import type { CompliancePosture } from "@/lib/compliance-score";
 
 /* ================================================================
@@ -59,15 +59,29 @@ export async function upsertComplianceStatus(
     .onConflictDoUpdate({ target: complianceStatus.assetId, set });
 }
 
-/** The stored posture for one asset (null if never assessed). Pass the result to
-   `scoreCompliance` for the score + verdicts. */
+/** The stored posture for one asset, looked up by its human **tag** (the public
+   id the UI holds; `compliance_status.assetId` is the uuid FK, resolved via a join
+   — same pattern as `getInstalledSoftware`). Null if never assessed. Pass the
+   result to `scoreCompliance` for the score + verdicts. */
 export async function getComplianceStatus(
-  assetId: string,
+  tag: string,
 ): Promise<CompliancePosture | null> {
   const [r] = await db
-    .select()
+    .select({
+      bitlocker: complianceStatus.bitlocker,
+      defenderRealtime: complianceStatus.defenderRealtime,
+      defenderSigAgeDays: complianceStatus.defenderSigAgeDays,
+      avProduct: complianceStatus.avProduct,
+      tpmReady: complianceStatus.tpmReady,
+      secureBoot: complianceStatus.secureBoot,
+      updatesLastDays: complianceStatus.updatesLastDays,
+      updatesPending: complianceStatus.updatesPending,
+      systemDrivePctUsed: complianceStatus.systemDrivePctUsed,
+      assessedAt: complianceStatus.assessedAt,
+    })
     .from(complianceStatus)
-    .where(eq(complianceStatus.assetId, assetId))
+    .innerJoin(assets, eq(assets.id, complianceStatus.assetId))
+    .where(eq(assets.tag, tag))
     .limit(1);
   if (!r) return null;
   return {
