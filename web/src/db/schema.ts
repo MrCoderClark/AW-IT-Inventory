@@ -783,6 +783,8 @@ export const notifications = pgTable(
       .$type<
         | "printer-down"
         | "printer-recovery"
+        | "printer-install"
+        | "printer-install-failed"
         | "scan-failed"
         | "device-discovered"
         | "warranty-expiring"

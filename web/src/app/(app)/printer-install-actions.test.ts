@@ -9,6 +9,8 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 
 const {
   enqueueMock,
+  enqueueListMock,
+  enqueueRemoveMock,
   cancelMock,
   resolveTargetMock,
   getPackageMock,
@@ -18,6 +20,8 @@ const {
   revalidateMock,
 } = vi.hoisted(() => ({
   enqueueMock: vi.fn(),
+  enqueueListMock: vi.fn(),
+  enqueueRemoveMock: vi.fn(),
   cancelMock: vi.fn(),
   resolveTargetMock: vi.fn(),
   getPackageMock: vi.fn(),
@@ -29,6 +33,8 @@ const {
 
 vi.mock("@/db/printer-install", () => ({
   enqueueInstall: enqueueMock,
+  enqueueList: enqueueListMock,
+  enqueueRemove: enqueueRemoveMock,
   cancelPendingInstall: cancelMock,
   resolveInstallTarget: resolveTargetMock,
 }));
@@ -125,7 +131,7 @@ describe("installPrinterAction — enqueue", () => {
         targetIp: "192.168.72.10",
         packageId: "canon-ir1750",
         printerName: "Finance Canon",
-        connection: { type: "tcpip", host: "192.168.70.202", port: 9100 },
+        connection: { type: "tcpip", host: "192.168.70.202", port: 9100, replace: true },
         sourcePrinterAssetId: "printer-asset-9",
         requestedBy: "a@x.co",
       }),

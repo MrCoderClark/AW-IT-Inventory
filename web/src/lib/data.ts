@@ -188,6 +188,8 @@ export interface InstalledSoftwareItem {
 export type NotificationType =
   | "printer-down"
   | "printer-recovery"
+  | "printer-install"
+  | "printer-install-failed"
   | "scan-failed"
   | "device-discovered"
   | "warranty-expiring";
