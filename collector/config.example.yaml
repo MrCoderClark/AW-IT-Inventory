@@ -64,7 +64,10 @@ rules:
     try: [win10-infotech, win10-infotech-fallback, ad-infotech, wg-intech]
 
 concurrency: 64
-connect_timeout: 0.6
+# Per-port TCP probe timeout during discovery. Keep this generous (>=2s): a WinRM
+# listener can be slower to accept than a bare TCP connect, and too short a timeout
+# makes a reachable Windows host classify as "unknown" and get skipped.
+connect_timeout: 2.0
 winrm_timeout: 25
 snmp_timeout: 2.0
 output_dir: out
