@@ -7,6 +7,39 @@ via a feature branch + PR.
 
 ---
 
+## Shipped ✅ — Compliance & device health (spec 21, merged)
+
+Security-posture collection, a per-device health score, and a fleet dashboard
+(full spec `docs/specs/21-compliance/index.md`). v1 signal set: **BitLocker ·
+Defender/AV · TPM · Secure Boot · Windows Update age · disk-full %**. Shipped in
+three phases plus two production fixes:
+
+- **Phase 1 — collect + store + score** (`feat/spec-21-compliance-phase1`): the
+  collector reads the posture best-effort (unreadable ⇒ `null`/unknown); new
+  `compliance_status` table (1:1 per Computer asset, upserted at ingest); pure
+  `src/lib/compliance-score.ts` `scoreCompliance()` (0–100, fail-closed unknowns,
+  "not assessed" when all unknown). Rubric: BitLocker 25 / AV 25 / Updates 20 /
+  TPM 10 / Secure Boot 10 / Disk 10.
+- **Phase 2 — per-device tab** (`feat/spec-21-compliance-phase2`): a Compliance
+  tab on the computer detail page (score + 🟢🟡🔴 rows + limited-visibility /
+  not-assessed states).
+- **Phase 3 — fleet dashboard** (`feat/spec-21-compliance-phase3`): `/compliance`
+  rebuilt — summary tiles (avg score, BitLocker/AV coverage, updates behind, not
+  assessed) + a sortable, non-compliant-filterable computers-by-score table.
+- **Fixes:** posture runs as a **separate `PS_POSTURE` WinRM call** — folding it
+  into `PS_COLLECT` overflowed pywinrm's ~8 KB command line ("command line too
+  long"), breaking every computer collect (`fix/pscollect-too-long`). AV detection
+  uses **Security Center** as authoritative so a 3rd-party AV (which puts Defender
+  in passive mode) reads as protecting, not "Defender off" (`fix/compliance-3rd-party-av`).
+  And `getComplianceStatus` reads by **tag** (the app's `Asset.id`), not the uuid
+  (`fix/compliance-read-by-tag`).
+
+Follow-ups (not v1): local administrators, network-adapter enumeration, all
+logged-on sessions, posture history/trend, remediation actions, alerting on a
+failing check (spec 19 hook).
+
+---
+
 ## Shipped ✅ — Cancel a stuck install job from the UI (merged, `feat/cancel-install-job`)
 
 `cancelInstallJob` (web `db/printer-install.ts`) now releases a `claimed`/`running`
@@ -445,10 +478,6 @@ Scan the fleet → authenticate as a service account → ingest → reconcile �
 
 Surfaces that exist in the UI but aren't wired to anything real:
 
-- **Compliance page** (`/compliance`) 🔜 — placeholder. Intended: BitLocker, AV, patch
-  level, local-admin exceptions. **Blocked on collector work** — the collector does not
-  gather these yet (only hardware/health/software). Collector additions first, then the
-  web view.
 - **Scan QR** 🔜 — asset-table button toasts "coming later"; would be browser-camera
   QR → open the matching asset. *Niche.*
 - **Print label** 🔜 — detail-page button toasts "coming later"; needs a label format /
@@ -475,3 +504,6 @@ Surfaces that exist in the UI but aren't wired to anything real:
   (`fix/ingest-orphan-cleanup`).
 - ~~Collector: report all profile failures~~ ✅ (`collect_windows` lists every
   profile's per-profile reason; see the top of this log).
+- ~~Compliance page~~ ✅ — shipped as **spec 21** (posture collect + health score +
+  per-device tab + fleet dashboard); see the top of this log. No longer blocked.
+- ~~Cancel a stuck install job~~ ✅ (`feat/cancel-install-job`).
