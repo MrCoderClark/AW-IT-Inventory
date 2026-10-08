@@ -7,283 +7,146 @@ via a feature branch + PR.
 
 ---
 
-## In progress 🚧 — Remote printer install (spec 20)
+## Shipped ✅ — Printer-install notifications (merged, `feat/notify-printer-install`)
+
+In-app notifications when a printer install/remove job finishes (spec 19 × 20).
+`notifyInstallResult` (`web/src/db/notifications.ts`) fires from
+`updateInstallJobStatus` on a terminal job — best-effort, idempotent per
+job+status — surfaced in the bell + `/notifications` and deep-linked to the
+computer. Two new `NotificationType`s (`printer-install` /
+`printer-install-failed`); `notifications.type` is `text`, so **no migration**.
+Also fixed `printer-install-actions.test.ts`, which had been merged broken
+(incomplete `@/db/printer-install` mock + a stale `connection.replace`
+expectation that never actually ran).
+
+---
+
+## Shipped ✅ — Remote printer install (spec 20) (merged, `docs/spec-20-remote-printer-install`)
 
 Push-install a printer onto a managed computer from the UI (full spec in
 `docs/specs/20-remote-printer-install/`). Reuses the outbound worker + atomic
 claim/fenced-status machinery (spec 12) and the cut-out "pull bytes, do work,
 post result" model (spec 18). Admin-set driver catalog is a **filesystem folder
-of manifests** (no upload UI). v1 is single-computer; batch/uninstall are
-follow-ups.
+of manifests** (`web/drivers/`, gitignored; format + example in
+`web/drivers.example/`; integrity is a content hash over the package file tree,
+frozen per job). v1 is single-computer.
 
-- **Code complete across web + aw-auth + collector; needs deps + db:push +
-  seed_rbac + tests + live verify; not committed.**
-  - **Schema:** `printer_install_jobs` (target asset + frozen package snapshot +
-    connection + fenced status + result). **Needs `npm run db:push`.** New types
-    `PrinterInstallConnection/Result/PackageSnapshot`.
-  - **Catalog:** `web/src/lib/printer-packages.ts` reads/validates
-    `PRINTER_DRIVERS_DIR` (default `web/drivers/`, gitignored; format +
-    example in `web/drivers.example/`). Integrity is a **content hash over the
-    package file tree** (not zip bytes), frozen per job. New dep **fflate**
-    (zip the bundle) — **`npm install`**.
-  - **Data layer:** `web/src/db/printer-install.ts` — atomic `claimNextInstallJob`,
-    fenced `updateInstallJobStatus`, `enqueueInstall`, `cancelPendingInstall`,
-    `listInstallJobsForAssetTag`, `resolveInstallTarget`, `getPrinterPrefillOptions`.
-  - **API:** `POST /api/scan/printer-install/claim`, `GET
-    /api/scan/printer-packages/[id]/bundle` (zip + `x-bundle-sha256`), `POST
-    /api/scan/printer-install/[id]/status` — all service `scan:dequeue`.
-    Server actions `printer-install-actions.ts` (`printer:install`).
-  - **UI:** a **Printers** tab on the computer detail page
-    (`printer-install-panel.tsx` + `printer-install-dialog.tsx`): pick a package,
-    optionally prefill from a printer asset, set name/connection, queue; install
-    history with per-step captured output, cancel, "waiting for collector".
-  - **RBAC:** new `printer:install` permission in `seed_rbac.py`, granted to
-    Owner/Admin. **Needs `manage.py seed_rbac`** (and users re-login).
-  - **Collector:** `install_printer.py` (download bundle → verify content hash →
-    resolve creds via `resolve_profiles` → open WinRM → stage the zip base64 →
-    `Expand-Archive` → `pnputil`/`Add-PrinterDriver`/`Add-PrinterPort`/`Add-Printer`
-    (idempotent) → verify `Get-Printer` → cleanup). Wired into the worker drain
-    loop; config knobs `printer_install_poll_interval` / `install_temp_dir` /
-    `install_smb_transfer`. (Transfer is base64-over-WinRM; SMB fast path is a
-    documented follow-up.)
-  - **Tests:** `printer-install-actions.test.ts` (gate/validation/enqueue),
-    `test_install_printer.py` (tree hash + integrity gate).
-  - **Next:** `cd web && npm install && npm run db:push && npm test && npx tsc
-    --noEmit`; `cd aw-auth && uv run python manage.py seed_rbac && uv run python
-    manage.py test`; `cd collector && uv run pytest -q`; drop a real driver
-    package in `web/drivers/<id>/`, restart web + worker, install to a computer,
-    watch the job go succeeded with Get-Printer output. Commit + PR.
+- `printer_install_jobs` table; data layer `web/src/db/printer-install.ts`
+  (atomic claim, fenced status, enqueue/list/remove, cancel, history). API under
+  `/api/scan/printer-install/*` + `/printer-packages/[id]/bundle` (service
+  `scan:dequeue`); server actions `printer-install-actions.ts` (`printer:install`
+  RBAC, seeded to Owner/Admin).
+- UI: a **Printers** tab on the computer detail page (install / list / remove,
+  replace-existing toggle, per-step captured output, cancel, Overview summary
+  card). Collector `install_printer.py` wired into the worker drain loop.
+- **Transfer is SMB to `\\host\C$`** (smbprotocol); base64-over-WinRM is the
+  fallback. Driver-cert trust (import the `.cat` signer into TrustedPublisher/Root)
+  runs before pnputil. New deps: web **fflate**, collector **smbprotocol**.
+- Onboarding runbook from the WinRM-auth debugging: `docs/runbooks/onboard-computer.md`.
+- Open follow-ups: pnputil `3010` surfaced as "reboot required"; a confirm dialog
+  on Remove; `printer_install_jobs` retention / "clear history"; ingest revalidates
+  an open asset drawer so a scan auto-refreshes it.
 
 ---
 
-## In progress 🚧 — User management (branch `feat/user-management`)
+## Shipped ✅ — In-app user management (merged, PR #52 `feat/user-management`)
 
 In-app user & role management, closing the `/admin` "powered by aw-auth in a
-later phase" gap. Builds the admin/self endpoints spec 02 §4 designs but left
-unbuilt. Email-free by design: admins set/reset passwords (shown once), users
-change their own; no forgot-password email flow. Touches only `aw-auth` and
-`web` — **no Drizzle change, no `db:push`, no RBAC reseed** (`user:admin` is
-already seeded and held by Owner/Admin).
+later phase" gap (the admin/self endpoints spec 02 §4 designs). Email-free:
+admins set/reset passwords (shown once), users change their own; no
+forgot-password email flow. Touches only `aw-auth` + `web` — no Drizzle change,
+no RBAC reseed (`user:admin` already seeded, held by Owner/Admin).
 
-- **Code complete across aw-auth + web; needs `manage.py test accounts`,
-  `npm test` + `tsc`, and live verify; not committed.**
-  - **aw-auth:** new `HasAppPerm` permission class (`accounts/permissions.py`,
-    gates on a `user:admin` RBAC code via `User.get_permission_codes()`). New
-    serializers + views for admin user list/create/detail (name·active·roles)/
-    delete, admin set-password, read-only roles list; self password-change,
-    profile PATCH (on `MeView`), and session list/revoke/revoke-all over
-    SimpleJWT's `OutstandingToken`/`BlacklistedToken`. Safety guards: can't
-    deactivate/delete/de-admin yourself, and can't strip the last active admin.
-    URLs under `/v1/auth/*` (admin at `/v1/auth/admin/users`). Tests in
-    `accounts/tests.py` (gating, create+login, set/change password,
-    role assign, deactivate-blocks-login, guards, sessions).
-  - **web:** admin calls are forwarded with the caller's **own** access token
-    (`src/lib/auth/admin.ts`), so aw-auth re-enforces RBAC — no privileged
-    service account. Server actions `users-actions.ts` (user:admin) +
-    `account-actions.ts` (self). Zod `src/lib/user-schema.ts`. Pages:
-    `/admin/users` (table + create-with-generated-password dialog),
-    `/admin/users/[id]` (roles, activate/deactivate, reset password, delete),
-    `/admin/roles` (read-only), `/account` (change password, edit name,
-    sessions). Nav: Users + Roles added to `NAV_MANAGE` + `ADMIN_ONLY_NAV`;
-    top-bar menu "My account" → `/account`; login card notes "ask an admin to
-    reset". Admin page copy updated + a Users & roles card. Vitest:
-    `users-actions.test.ts`, `account-actions.test.ts`, `user-schema.test.ts`.
-  - **People ↔ Users link (by email, no schema change).** People (staff who
-    hold devices, inventory DB) and Users (logins, aw-auth) stay separate
-    systems but are linked when their emails match — so the overlap (staff who
-    are also operators) isn't maintained twice. `getPersonByEmail` (web db) and
-    `getUserByEmail` (admin client, lists+filters — user set is tiny). Surfaces
-    (all admin-only, since they read the admin API): a "Directory entry" card on
-    the user detail page + a Directory column on `/admin/users`; an "OPUS access"
-    panel on the person detail page (roles/active + "Manage login", or "Create
-    login" which opens the user dialog prefilled with the person's email·name,
-    email locked); a "Login" badge on `/people`. No `authUserId` column, no
-    `db:push`.
-  - Caveats surfaced in the UI: a role change takes effect on the user's next
-    sign-in (perms ride the token), and a revoked session / deactivation takes
-    full effect within one ≤15-min access-token TTL.
-  - **Next:** `cd aw-auth && uv run python manage.py test accounts`;
-    `cd web && npm test && npx tsc --noEmit`; start the 3 processes and walk the
-    verification steps (create user → sign in; assign role → re-login; admin
-    reset; deactivate/reactivate; self password change + sessions; guards).
-    Commit + PR.
+- **aw-auth:** `HasAppPerm` permission class (gates on the `user:admin` RBAC
+  code); admin user list/create/detail/delete + set-password, read-only roles;
+  self password-change, profile PATCH, session list/revoke over SimpleJWT
+  tokens. Guards: can't deactivate/delete/de-admin yourself or strip the last
+  active admin. URLs under `/v1/auth/*`.
+- **web:** admin calls forwarded with the caller's **own** token
+  (`src/lib/auth/admin.ts`) so aw-auth re-enforces RBAC (no privileged service
+  account). Pages `/admin/users`, `/admin/users/[id]`, `/admin/roles`,
+  `/account`; actions `users-actions.ts` + `account-actions.ts`.
+- **People ↔ Users link by matching email** (no schema change): the two systems
+  stay separate but surface each other — "Directory entry" / "OPUS access"
+  panels, a Directory column, a Login badge on `/people`.
 
 ---
 
-## In progress 🚧 — Dashboard redesign (branch `feat/update-dashboard-ui`)
+## Shipped ✅ — Dashboard redesign (merged, PR #51 `feat/update-dashboard-ui`)
 
-Rebuilds `/dashboard` to match `docs/Design/mock-refactor-dashboard.png`, mapping
-the mock's slots to real OPUS data (no fabricated trends, no geo map we can't fill).
+Rebuilt `/dashboard` to the mock, mapping its slots to real OPUS data (no
+fabricated trends).
 
-- **Code complete, needs `npm test` + `tsc` + UI verify; not committed.**
-  - Header: title + subtitle + a live date/time (`dashboard/live-clock.tsx`,
-    client, hydration-safe).
-  - KPI row: `dashboard/stat-card.tsx` — Total Assets / In Use / Maintenance /
-    In Storage, each with a **real % of fleet** in place of the mock's fake
-    "vs last 30 days" (OPUS keeps no history).
-  - Charts: Asset Status donut (status breakdown, `DonutChart` gained `showValues`)
-    + Assets by Type bar chart (new `charts/bar-chart.tsx`, dataviz mark specs,
-    design-system tokens).
-  - Recent Alerts (`dashboard/recent-alerts.tsx`): recent notifications for admins
-    (spec 19), recent discovered devices otherwise.
-  - Recent Assets table (`getRecentAssets`).
-  - **Asset Locations map** (real, FOSS): Leaflet + Esri World Gray Canvas basemap
-    (light/dark; genuinely free, no API key, attribution only — CARTO/Stadia now
-    require a key) for the clean mock look.
-    `locations` gains nullable `latitude`/`longitude`; a coordinates editor on the
-    location detail page (`location-coordinates-form.tsx` + `setLocationCoordinates`
-    action, `location:write`); `getLocationMapPoints` aggregates each geocoded
-    location's whole-subtree device count; `dashboard/location-map.tsx` (client,
-    lazy Leaflet, theme-aware tiles, teardrop count pins, styled controls/popups)
-    plots them, with a fleet-status legend below. Pin popups reverse-geocode the
-    coordinates to a street address on click via Nominatim (free, no key, cached).
-    The map is an **admin-toggleable widget**: `dashboard_widgets` table (absent =
-    on, like discovery toggles), `db/dashboard.ts` + `setDashboardWidgetAction`
-    (`scan:write`), a "Dashboard widgets" card on `/admin`
-    (`dashboard-widgets.tsx`). Off → the dashboard shows the location list instead
-    of the map (no external tiles/geocoding). Falls back to the "Assets by
-    Location" list (`getAssetsByLocation`) until a site is geocoded.
-  - Removed the old all-types `AssetTable` + "Quick Actions" from the dashboard
-    (per-type pages still have the full filterable tables); removed the fake
-    "Collector online / Last scan…" footer from the sidebar as requested.
-  - New queries: `getRecentAssets`, `getAssetsByLocation`, `getLocationMapPoints`
-    (+ `RecentAsset`, `LocationCount`, `LocationMapPoint` types); `getLocationById`
-    now returns coordinates. New dep: **leaflet** (+ `@types/leaflet`).
-  - Tests: `location-schema.test.ts` (coordinates schema), `db/dashboard.test.ts`
-    (widget toggles).
-  - **Next: `cd web && npm install leaflet @types/leaflet`; `npm run db:push`
-    (adds the lat/long columns + `dashboard_widgets` table); `npm test` +
-    `npx tsc --noEmit`; set coordinates on a location, toggle the map widget on
-    `/admin`, then eyeball `/dashboard` (map/list) in light + dark. Commit + PR.**
+- Live clock; KPI row (Total / In Use / Maintenance / In Storage, each a **real
+  % of fleet**); Asset Status donut + Assets-by-Type bar chart; Recent Alerts
+  (notifications for admins, discovered devices otherwise); Recent Assets table.
+- **Admin-toggleable Asset Locations map**: Leaflet + Esri World Gray Canvas
+  (FOSS, no API key). `locations` gains nullable `latitude`/`longitude` + a
+  coordinates editor (`location:write`); `dashboard_widgets` table (absent = on);
+  off → location list instead of tiles. Pin popups reverse-geocode via Nominatim.
+  New dep **leaflet**.
 
 ---
 
-## In progress 🚧 — Printer page count in the list + export, printer-detail refactor (branch `feat/printer-page-count-ui`)
+## Shipped ✅ — Printer page count in list + export, printer-detail refactor (merged, `feat/printer-page-count-ui`)
 
-Surfaces the printer page (life) counter on `/printers` and in its CSV export, and
-migrates `printer-detail.tsx` onto the shared `detail-ui` primitives.
+Surfaced the printer page (life) counter on `/printers` and in its CSV export,
+and migrated `printer-detail.tsx` onto the shared `detail-ui` primitives.
 
-- **Code complete, needs `npm test` + `tsc` + UI verify; not committed.**
-  - Page count on the list: `Asset.pageCount` (spec 14 latest total); new
-    `getPrinterCounterMap` (`queries.ts`, DISTINCT ON latest reading per printer,
-    keyed by tag) attached to printer assets in `getAssetsByType` alongside
-    reachability. New spec-11 **Pages** column (`table-columns.ts` catalog +
-    defaults for `printer`; `COLUMN_REGISTRY` cell, sortable, "—" when no reading).
-  - Export: `assetCsvValue` handles `pages`, so the CSV mirrors the visible column
-    (Pages exports by default on the printers table).
-  - Refactor: `printer-detail.tsx` now imports `fmtDate/fmtDateTime/fmtDay/
-    fmtNumber/Panel/InfoField/StatusRow/Dot` from `detail-ui` (removed the
-    byte-identical local copies); printer-specific `fmtDelta/StatePill/ProtocolRow`
-    and the `PrinterActivityEvent` table stay local. (The detail page already
-    showed the counter — unchanged.)
-  - Tests: updated `table-columns.test.ts` (printer defaults) + `csv.test.ts`
-    (pages value). **Next: `cd web && npm test` + `npx tsc --noEmit`; verify the
-    Pages column on `/printers`, export a CSV, and walk the printer detail page.**
+- New `getPrinterCounterMap` (`queries.ts`, DISTINCT ON latest reading per
+  printer) attached in `getAssetsByType`; new spec-11 **Pages** column (sortable,
+  "—" when no reading), exported by default via `assetCsvValue`.
+- `printer-detail.tsx` now imports the shared `detail-ui` primitives instead of
+  byte-identical local copies.
 
 ---
 
-## In progress 🚧 — Ingest orphan cleanup (branch `fix/ingest-orphan-cleanup`)
+## Shipped ✅ — Ingest orphan cleanup (merged, `fix/ingest-orphan-cleanup`)
 
 Removes the stale weak-keyed (`ip`/`hostname`) `machines` shadow row left when an
 earlier scan couldn't read a hardware id and a later scan keys the same device by
-`hardware_uuid`/`serial`. The latest-scan query already hides it; this deletes it.
-
-- **Code complete, needs `npm test`; not committed.**
-  - `web/src/db/ingest.ts`: after the machine upsert, on the weak→strong matchKey
-    transition, delete the shadow row — scoped to this host's current `ip`/`hostname`,
-    excluding the just-upserted row, and never a row linked to a *different* asset
-    (so a recycled DHCP IP now on another device is left alone).
-  - Test: `web/src/db/ingest.test.ts` (reaps on a strong-key scan; no-op on a
-    weak-id-only scan) + a `delete` mock in the harness.
-  - **Next: `cd web && npm test`; commit + PR.**
+`hardware_uuid`/`serial`. `ingest.ts` deletes it on the weak→strong matchKey
+transition — scoped to this host, excluding the just-upserted row, never a row
+linked to a *different* asset (recycled-DHCP-safe).
 
 ---
 
-## In progress 🚧 — Notifications (spec 19) (branch `feat/notifications`)
+## Shipped ✅ — Notifications (spec 19) (merged, `feat/notifications`)
 
-In-app, admin-facing notification center behind the top-bar bell, live over SSE.
-Full spec at `docs/specs/19-notifications/`. Stacked on `feat/reports-page` +
-`feat/csv-export` (reuses the Reports warranty logic).
+In-app, admin-facing notification center behind the top-bar bell, live over SSE
+(`docs/specs/19-notifications/`).
 
-- **Code complete across web + collector; needs `npm run db:push` + `npm test` +
-  `tsc` + live verify; not committed.**
-  - Schema: `notifications` (one row per event: type/severity/title/body/assetId/
-    href/dedupeKey unique/meta) + `notification_reads` (per-user read state).
-    **Needs `npm run db:push`.**
-  - Data layer `web/src/db/notifications.ts`: `createNotification` (idempotent on
-    `dedupeKey`, publishes to the bus, best-effort), `listNotifications` (keyset,
-    read flag, unread filter), `getUnreadCount`, `markRead`/`markAllRead`,
-    `notifyPrinterTransitions`, `sweepWarrantyNotifications`, `pruneNotifications`.
-    In-process SSE bus `web/src/lib/notification-bus.ts`.
-  - Generation hooks (all best-effort): reachability route (down/recovery, beside
-    the existing email), `updateJobStatus`→failed (scan-failed), ingest reconcile
-    new-machine branch (device-discovered), daily warranty sweep.
-  - API: `GET /api/notifications` (admin), `GET /api/notifications/stream` (SSE,
-    admin), `POST /api/scan/notifications/warranty-sweep` (service `scan:dequeue`);
-    notification prune folded into the daily `reachability/prune`. Server actions
-    `notification-actions.ts` (mark read / all, `user:admin`).
-  - UI: `NotificationBell` (admin-only, badge + panel + live SSE) replaces the
-    static bell in `top-bar.tsx`; `/notifications` page (`notifications-view.tsx`:
-    All/Unread, load-more, mark-all); shared `lib/notification-ui.ts`; nav entry +
-    `ADMIN_ONLY_NAV` gate in the sidebar.
-  - Collector: `run_warranty_sweep` + `notification_sweep_times` config knob +
-    worker cron (schedule line shows "warranty sweep …").
-  - Tests: `notifications.test.ts`, `api/notifications/route.test.ts`,
-    `warranty-sweep/route.test.ts`; updated the reachability route, prune route,
-    and ingest tests for the new hooks/mocks.
-  - **Next: `cd web && npm run db:push`; `npm test` + `npx tsc --noEmit`;
-    `cd collector && uv run pytest -q`; restart web + worker; live-verify the five
-    events, the live badge in a second admin tab, mark-all, and that a non-admin
-    sees no bell. Commit + PR.**
+- Schema: `notifications` (one row per event, `dedupeKey` unique) +
+  `notification_reads` (per-user read state). Data layer
+  `web/src/db/notifications.ts`: `createNotification` (idempotent, best-effort,
+  publishes to an in-process SSE bus), list/unread/mark-read, retention prune.
+- Event sources (all best-effort): printer down/recovery, scan-failed,
+  device-discovered, daily warranty sweep. (Printer-install events were added
+  later — see the top of this log.)
+- UI: admin-only `NotificationBell` (badge + panel + live SSE) + `/notifications`
+  page (All/Unread, load-more, mark-all). Collector `run_warranty_sweep` +
+  `notification_sweep_times` cron.
 
 ---
 
-## In progress 🚧 — Export (CSV) (branch `feat/csv-export`)
+## Shipped ✅ — Export (CSV) (merged, `feat/csv-export`)
 
-The **Export** button on every asset table used to only toast "Export started".
-It now downloads a real CSV of the current view, built client-side from data
-already loaded (no server round-trip).
-
-- **Code complete, needs `npm test` + `tsc` + UI verify; not committed.**
-  - New pure helper `web/src/lib/csv.ts`: `assetCsvValue` (one `ColumnId` → plain
-    text, the export counterpart of each rendered cell) + `assetsToCsv`
-    (RFC 4180: label header, CRLF rows, quote/escape commas·quotes·newlines,
-    drops the `actions` column). Shared by the table and its tests.
-  - `asset-table.tsx`: `exportCsv()` writes the **resolved columns** (spec 11) for
-    `table.getSortedRowModel().rows` — i.e. the current search / status / vendor /
-    model filters and sort, all matching rows (not just the visible page) — as a
-    BOM-prefixed `text/csv` Blob downloaded as `opus-<view>-<YYYY-MM-DD>.csv`.
-    Empty result → an error toast; success toast reports the row count.
-  - Test: `web/src/lib/csv.test.ts` (value mapping, empty/unassigned, reachability
-    labels, header + rows, RFC 4180 escaping, header-only when no rows).
-  - **Next: `cd web && npm test` and `npx tsc --noEmit`; filter/sort a table, hit
-    Export, open the CSV; commit + PR.**
+The **Export** button on every asset table (which used to only toast "Export
+started") now downloads a real CSV of the current view, built client-side from
+already-loaded data. New pure helper `web/src/lib/csv.ts` (`assetCsvValue` +
+`assetsToCsv`, RFC 4180) writes the resolved spec-11 columns for all rows
+matching the current search/filters/sort, as `opus-<view>-<YYYY-MM-DD>.csv`.
 
 ---
 
-## In progress 🚧 — Reports page (branch `feat/reports-page`)
+## Shipped ✅ — Reports page (merged, `feat/reports-page`)
 
-Replaces the `/reports` `PagePlaceholder` with real reports built from existing
-data — no new tables, no collector work. Backlog's "recommended next".
-
-- **Code complete, needs `npm test` + `tsc` + UI verify; not committed.**
-  - Data layer: new `web/src/db/reports.ts` (server-only) — `getWarrantyReport`
-    (expired / ≤30 / ≤90 / covered / unknown buckets + an action list of every
-    device expiring within 90 days, soonest first), `getAgingReport` (age bands
-    <1 / 1–3 / 3–5 / 5+ yr from `purchaseDate` + the oldest 15 as refresh
-    candidates), `getAssignmentSummary` (assigned vs. pool totals, per-type
-    breakdown, top 10 device holders). Day math is relative to today's UTC
-    calendar day; location paths resolve via `getLocationPathMap`. Software reuses
-    `getSoftwareInventory` (spec 15).
-  - UI: `/reports` rebuilt — `HeroHeader` + a four-tab layout (Warranty / Asset
-    aging / Assignments / Software), each tab a row of summary stat tiles over a
-    focused table, linking out to `/assets/[tag]`, `/people/[id]`, `/software/[id]`.
-    `asset:read`-gated (viewing open to any asset viewer, like `/software`). The
-    Reports nav entry already existed in `NAV_MANAGE`.
-  - Tests: `web/src/db/reports.test.ts` (bucketing + ordering + pool math, against
-    a frozen "today").
-  - **Next: `cd web && npm test` and `npx tsc --noEmit`; restart dev, walk the
-    four tabs; commit + PR.**
+Replaced the `/reports` placeholder with real reports from existing data (no new
+tables, no collector work). New `web/src/db/reports.ts`: `getWarrantyReport`
+(expiry buckets + a 90-day action list), `getAgingReport` (age bands + oldest-15
+refresh candidates), `getAssignmentSummary` (assigned vs. pool, top holders);
+Software reuses `getSoftwareInventory` (spec 15). UI is a four-tab layout
+(Warranty / Aging / Assignments / Software), `asset:read`-gated.
 
 ---
 
@@ -549,16 +412,6 @@ Scan the fleet → authenticate as a service account → ingest → reconcile �
 
 Surfaces that exist in the UI but aren't wired to anything real:
 
-- **Reports page** (`/reports`) 🔜 — currently a `PagePlaceholder`. Build real reports
-  from existing data: warranty expiry, asset aging, software/license, assignment
-  summaries. *High value, buildable now.* (Recommended next.)
-- **Export (CSV)** 🔜 — the **Export** button on every asset table only toasts
-  "Export started"; no CSV is produced. Stream a real CSV of the current view.
-  `web/src/components/asset-table.tsx` (~line 778). *Quick win.*
-- **Notifications** 🔜 — the **bell icon** in the top nav is decorative. Wire it to
-  real notifications: printer down/recovery (spec 12 already detects these), scan-job
-  failures, warranty expiry, newly discovered devices. Needs a notifications store +
-  a dropdown/panel; the bell shows an unread count.
 - **Compliance page** (`/compliance`) 🔜 — placeholder. Intended: BitLocker, AV, patch
   level, local-admin exceptions. **Blocked on collector work** — the collector does not
   gather these yet (only hardware/health/software). Collector additions first, then the
@@ -568,17 +421,11 @@ Surfaces that exist in the UI but aren't wired to anything real:
 - **Print label** 🔜 — detail-page button toasts "coming later"; needs a label format /
   printer integration. *Niche.*
 
-### Web app — small cleanups
-
-- **`printer-detail.tsx` → `detail-ui`** — migrate it onto the shared primitives
-  (spec 17.04 left it on local copies to avoid regressing the untested printers page).
-- **Ingest orphan cleanup** — remove the stale IP-keyed `machines` row after a
-  fail→success scan transition (the latest-scan query already hides it; this removes it).
-
 ### Collector / infra
 
 - **Collector: report all profile failures** — not just the last tried (would shorten
-  WinRM credential debugging).
+  WinRM credential debugging; today we built the standalone `diag_winrm.py` for exactly
+  this). *Recommended next.*
 - **WMI-over-DCOM fallback** — scan hosts that only expose SMB (no WinRM).
 - **NSSM service wrappers** — package web + aw-auth + collector `worker` as Windows
   services for prod (the final deploy step; Docker Compose intentionally **not** used).
@@ -591,3 +438,8 @@ Surfaces that exist in the UI but aren't wired to anything real:
 
 - ~~Schedule the collector~~ ✅ — printer reachability schedule (spec 12) + scheduled
   computer sweep (`feat/scheduled-computer-sweep`).
+- ~~Reports page~~ ✅ (`feat/reports-page`) · ~~Export CSV~~ ✅ (`feat/csv-export`) ·
+  ~~Notifications~~ ✅ (spec 19, `feat/notifications`) · ~~Remote printer install~~ ✅
+  (spec 20) · ~~In-app user management~~ ✅ (PR #52) · ~~Dashboard redesign~~ ✅ (PR #51).
+- ~~`printer-detail.tsx` → `detail-ui`~~ ✅ · ~~Ingest orphan cleanup~~ ✅
+  (`fix/ingest-orphan-cleanup`).
