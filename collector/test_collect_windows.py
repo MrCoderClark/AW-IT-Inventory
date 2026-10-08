@@ -33,16 +33,20 @@ def _result(status_code: int, std_out: bytes = b"", std_err: bytes = b""):
     return SimpleNamespace(status_code=status_code, std_out=std_out, std_err=std_err)
 
 
-def _patch_winrm(monkeypatch, plan: dict, attempted: list[str], posture=None, admins=None):
+def _patch_winrm(
+    monkeypatch, plan: dict, attempted: list[str], posture=None, admins=None, endpoint=None
+):
     """plan: qualified-username -> Exception (raise) | result (main PS_COLLECT run).
-    posture: result the PS_POSTURE call returns; admins: result the PS_ADMINS call
-    returns. None for either → that call reports status 1 (failure)."""
+    posture/admins/endpoint: results the PS_POSTURE / PS_ADMINS / PS_ENDPOINT calls
+    return. None for any → that call reports status 1 (failure)."""
 
     class FakeSession:
         def __init__(self, action):
             self._action = action
 
         def run_ps(self, script):
+            if "Get-NetAdapter" in script:  # the PS_ENDPOINT call
+                return endpoint if endpoint is not None else _result(1)
             if "Get-LocalGroupMember" in script:  # the PS_ADMINS call
                 return admins if admins is not None else _result(1)
             if "Get-BitLockerVolume" in script:  # the PS_POSTURE call
@@ -212,6 +216,40 @@ def test_posture_coerces_single_local_admin_to_a_list(monkeypatch):
     )
     result_admins = out["compliance"].local_admins
     assert [a.name for a in result_admins] == ["PC1\\onlyadmin"]
+
+
+def test_endpoint_call_merges_adapters_and_sessions_into_health(monkeypatch):
+    # PS_ENDPOINT (spec 21 v2) is a separate call; its result merges into Health.
+    attempted: list[str] = []
+    main = _result(0, std_out=json.dumps({"hostname": "PC1"}).encode())
+    endpoint = _result(
+        0,
+        std_out=json.dumps(
+            {
+                "network_adapters": [
+                    {
+                        "name": "Ethernet",
+                        "mac": "50-9A-4C-4B-F3-DE",
+                        "status": "Up",
+                        "ips": ["192.168.70.160"],
+                    }
+                ],
+                "logged_on_users": ["esmith", "jclark"],
+            }
+        ).encode(),
+    )
+    _patch_winrm(monkeypatch, {"alice": main}, attempted, endpoint=endpoint)
+
+    out = collect_windows.collect_windows(
+        "10.0.0.5", [5985], [_profile("good", "alice", "pw")], _config()
+    )
+    h = out["health"]
+    assert h is not None
+    assert [a.name for a in h.network_adapters] == ["Ethernet"]
+    assert h.network_adapters[0].mac == "50-9A-4C-4B-F3-DE"
+    assert h.network_adapters[0].ips == ["192.168.70.160"]
+    assert h.logged_on_users == ["esmith", "jclark"]
+    assert out["errors"] == []
 
 
 def test_posture_failure_leaves_compliance_none_without_failing_collect(monkeypatch):

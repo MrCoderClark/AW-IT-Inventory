@@ -19,6 +19,7 @@ import {
   MapPin,
   MemoryStick,
   MonitorCog,
+  Network,
   MoreHorizontal,
   Package,
   Pencil,
@@ -452,7 +453,7 @@ export function ComputerDetail({
         </TabsPanel>
 
         {/* -------- Live scan -------- */}
-        <TabsPanel value="livescan">
+        <TabsPanel value="livescan" className="flex flex-col gap-5">
           <Panel
             icon={<MonitorCog />}
             title={`Live Scan${machine?.lastSeen ? ` · last seen ${machine.lastSeen}` : ""}`}
@@ -485,6 +486,51 @@ export function ComputerDetail({
               </p>
             )}
           </Panel>
+
+          {machine &&
+            ((machine.networkAdapters && machine.networkAdapters.length > 0) ||
+              (machine.loggedOnUsers && machine.loggedOnUsers.length > 0)) && (
+              <Panel icon={<Network />} title="Network & sessions">
+                {machine.networkAdapters && machine.networkAdapters.length > 0 && (
+                  <div className="mb-4">
+                    <p className="mb-2 text-xs font-medium text-muted-foreground">
+                      Network adapters
+                    </p>
+                    <ul className="divide-y text-sm">
+                      {machine.networkAdapters.map((n) => (
+                        <li
+                          key={n.name}
+                          className="flex flex-wrap items-center justify-between gap-2 py-2 first:pt-0 last:pb-0"
+                        >
+                          <span className="font-medium">{n.name}</span>
+                          <span className="font-mono text-xs text-muted-foreground">
+                            {n.mac ?? "—"}
+                            {n.ips.length ? ` · ${n.ips.join(", ")}` : ""}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {machine.loggedOnUsers && machine.loggedOnUsers.length > 0 && (
+                  <div>
+                    <p className="mb-2 text-xs font-medium text-muted-foreground">
+                      Active sessions ({machine.loggedOnUsers.length})
+                    </p>
+                    <ul className="flex flex-wrap gap-1.5">
+                      {machine.loggedOnUsers.map((u) => (
+                        <li
+                          key={u}
+                          className="rounded-md border bg-muted/40 px-2 py-0.5 font-mono text-xs"
+                        >
+                          {u}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </Panel>
+            )}
         </TabsPanel>
 
         {/* -------- Software -------- */}
