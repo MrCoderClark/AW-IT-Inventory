@@ -348,6 +348,7 @@ export function ComputerDetail({
                     <InfoField icon={<MonitorCog />} label="OS" value={[machine.osName, machine.osVersion].filter(Boolean).join(" ") || "—"} />
                     <InfoField icon={<Cpu />} label="CPU" value={machine.cpu || "—"} />
                     <InfoField icon={<MemoryStick />} label="RAM" value={machine.ramGb != null ? `${machine.ramGb} GB` : "—"} />
+                    <InfoField icon={<User />} label="Logged in User" value={machine.loggedOnUser || "—"} mono />
                     <InfoField icon={<Clock />} label="Last seen" value={machine.lastSeen || "—"} />
                   </div>
                 ) : (

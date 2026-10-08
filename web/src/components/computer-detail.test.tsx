@@ -68,6 +68,7 @@ const machine: MachineSummary = {
   ramGb: 32,
   freeDiskGb: 420,
   uptimeHours: 72,
+  loggedOnUser: "AWINYC\\ibrown",
   status: "ok",
 };
 
@@ -126,6 +127,12 @@ describe("ComputerDetail — tabs + content (AC-4.2, AC-4.3)", () => {
     renderDetail();
     expect(screen.getByText("Asset Information")).toBeInTheDocument();
     expect(screen.getAllByText("Dell Latitude 5520").length).toBeGreaterThan(0);
+  });
+
+  it("Overview shows the logged-in user from the live scan", () => {
+    renderDetail();
+    expect(screen.getByText("Logged in User")).toBeInTheDocument();
+    expect(screen.getByText("AWINYC\\ibrown")).toBeInTheDocument();
   });
 
   it("Live scan tab shows collected health", async () => {
