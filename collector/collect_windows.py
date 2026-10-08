@@ -86,6 +86,7 @@ if (($null -eq $defRt) -and $mp) { if ($mp.AMServiceEnabled) { $avName = 'Window
 if ($avName -and ($avName -notmatch 'Microsoft Defender|Windows Defender')) { $defAge = $null }
 $wuDays = $null; try { $s = (New-Object -ComObject Microsoft.Update.Session).CreateUpdateSearcher(); $n = $s.GetTotalHistoryCount(); if ($n -gt 0) { $h = $s.QueryHistory(0, [Math]::Min($n, 50)); $l = $h | Where-Object { $_.Operation -eq 1 -and $_.ResultCode -eq 2 } | Sort-Object Date -Descending | Select-Object -First 1; if ($l) { $wuDays = [int]((Get-Date) - $l.Date).TotalDays } } } catch {}
 $sysPct = $null; try { $ld = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$($env:SystemDrive)'" -ErrorAction Stop; if ($ld -and $ld.Size -gt 0) { $sysPct = [math]::Round((($ld.Size - $ld.FreeSpace) / $ld.Size) * 100, 1) } } catch {}
+$admins = $null; try { $admins = @(Get-LocalGroupMember -Group 'Administrators' -ErrorAction Stop | ForEach-Object { "$($_.Name)" }) } catch {}
 [ordered]@{
     bitlocker             = $bl
     defender_realtime     = $defRt
@@ -96,6 +97,7 @@ $sysPct = $null; try { $ld = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID
     updates_last_days     = $wuDays
     updates_pending       = $null
     system_drive_pct_used = $sysPct
+    local_admins          = @($admins)
 } | ConvertTo-Json -Depth 3 -Compress
 """
 
@@ -171,6 +173,13 @@ def _parse_posture(data: dict) -> Compliance:
         updates_last_days=data.get("updates_last_days"),
         updates_pending=data.get("updates_pending"),
         system_drive_pct_used=data.get("system_drive_pct_used"),
+        # ConvertTo-Json collapses a 1-element array to a scalar; coerce back to a
+        # list. A null (couldn't read the group) stays None.
+        local_admins=(
+            None
+            if data.get("local_admins") is None
+            else [str(x) for x in _as_list(data.get("local_admins"))]
+        ),
     )
 
 

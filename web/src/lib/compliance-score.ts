@@ -20,6 +20,8 @@ export interface CompliancePosture {
   updatesLastDays: number | null;
   updatesPending: number | null;
   systemDrivePctUsed: number | null;
+  // Informational (not scored in v1): members of the local Administrators group.
+  localAdmins?: string[] | null;
   assessedAt?: string | null;
 }
 

@@ -56,4 +56,14 @@ describe("CompliancePanel", () => {
     render(<CompliancePanel posture={{ ...GREEN, bitlocker: null }} />);
     expect(screen.getByText(/Limited visibility/i)).toBeTruthy();
   });
+
+  it("lists local administrators when present", () => {
+    render(
+      <CompliancePanel
+        posture={{ ...GREEN, localAdmins: ["AWINYC\\Domain Admins", "PC1\\ibrown"] }}
+      />,
+    );
+    expect(screen.getByText(/Local administrators \(2\)/)).toBeTruthy();
+    expect(screen.getByText("PC1\\ibrown")).toBeTruthy();
+  });
 });
