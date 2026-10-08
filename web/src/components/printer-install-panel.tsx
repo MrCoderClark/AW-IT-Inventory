@@ -240,18 +240,33 @@ export function PrinterInstallPanel({
                   </div>
                   <div className="flex items-center gap-2">
                     {statusBadge(j.status, j.waitingForCollector)}
-                    {j.status === "pending" && canInstall && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          run(() => cancelInstallJobAction(j.id, assetTag), j.id)
-                        }
-                        disabled={isPending}
-                      >
-                        Cancel
-                      </Button>
-                    )}
+                    {(j.status === "pending" ||
+                      j.status === "claimed" ||
+                      j.status === "running") &&
+                      canInstall && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const inFlight =
+                              j.status === "claimed" || j.status === "running";
+                            if (
+                              inFlight &&
+                              !window.confirm(
+                                "This job may be running on the target now. Canceling releases it from the queue but won't undo changes already made on the machine. Cancel it anyway?",
+                              )
+                            )
+                              return;
+                            run(
+                              () => cancelInstallJobAction(j.id, assetTag),
+                              j.id,
+                            );
+                          }}
+                          disabled={isPending}
+                        >
+                          Cancel
+                        </Button>
+                      )}
                     {(steps.length > 0 || j.error) && (
                       <button
                         type="button"

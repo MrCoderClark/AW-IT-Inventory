@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import {
-  cancelPendingInstall,
+  cancelInstallJob,
   enqueueInstall,
   enqueueList,
   enqueueRemove,
@@ -169,12 +169,12 @@ export async function cancelInstallJobAction(
     return { ok: false, error: "Unknown job." };
   }
 
-  const ok = await cancelPendingInstall(id);
+  const ok = await cancelInstallJob(id);
   if (!ok) {
-    return { ok: false, error: "That job is already running and can't be canceled." };
+    return { ok: false, error: "That job has already finished." };
   }
   if (typeof assetTag === "string" && assetTag) {
     revalidatePath(`/assets/${assetTag}`);
   }
-  return { ok: true, message: "Install canceled." };
+  return { ok: true, message: "Install job canceled." };
 }
