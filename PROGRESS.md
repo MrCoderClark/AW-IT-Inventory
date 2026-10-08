@@ -7,6 +7,27 @@ via a feature branch + PR.
 
 ---
 
+## Shipped ✅ — Cancel a stuck install job from the UI (merged, `feat/cancel-install-job`)
+
+`cancelInstallJob` (web `db/printer-install.ts`) now releases a `claimed`/`running`
+job, not just `pending`; the Printers panel shows **Cancel** on in-flight jobs with
+a confirm. Fence-safe — a late worker status post no-ops against the canceled row.
+Closes the gap that forced a manual DB edit to clear a stuck "Working…" job (e.g.
+after the worker was restarted mid-job, before the 10-min reaper kicks in). No
+migration (`status` is `text`). Test: `printer-install-actions.test.ts`.
+
+---
+
+## Shipped ✅ — WinRM base64 fallback chunk-size fix (merged, `fix/winrm-base64-chunk-size`)
+
+The SMB-unavailable transfer fallback failed on chunk 0 with "command line too
+long": `_CHUNK` was 8 KB, but pywinrm wraps each `run_ps` as
+`powershell -encodedcommand <b64>` (UTF-16+base64, ~2.67×) through the WinRS cmd
+shell (~8 KB line). Dropped `_CHUNK` to 2 KB (~5.6 KB line) plus a test asserting
+every chunk command clears the limit. SMB stays the primary (and fast) transport.
+
+---
+
 ## Shipped ✅ — Collector reports all profile failures (merged)
 
 `collect_windows` now records **every** credential profile's result, not just the
