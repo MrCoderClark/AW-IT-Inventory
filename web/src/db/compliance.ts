@@ -59,6 +59,57 @@ export async function upsertComplianceStatus(
     .onConflictDoUpdate({ target: complianceStatus.assetId, set });
 }
 
+export interface FleetComplianceRow {
+  tag: string;
+  name: string;
+  posture: CompliancePosture | null; // null = never assessed
+}
+
+/** Every Computer asset with its current posture (null when never scanned for it),
+   for the /compliance fleet dashboard (spec 21 phase 3). The caller scores each via
+   `scoreCompliance`. Ordered by name. */
+export async function getFleetCompliance(): Promise<FleetComplianceRow[]> {
+  const rows = await db
+    .select({
+      tag: assets.tag,
+      name: assets.name,
+      bitlocker: complianceStatus.bitlocker,
+      defenderRealtime: complianceStatus.defenderRealtime,
+      defenderSigAgeDays: complianceStatus.defenderSigAgeDays,
+      avProduct: complianceStatus.avProduct,
+      tpmReady: complianceStatus.tpmReady,
+      secureBoot: complianceStatus.secureBoot,
+      updatesLastDays: complianceStatus.updatesLastDays,
+      updatesPending: complianceStatus.updatesPending,
+      systemDrivePctUsed: complianceStatus.systemDrivePctUsed,
+      assessedAt: complianceStatus.assessedAt,
+    })
+    .from(assets)
+    .leftJoin(complianceStatus, eq(complianceStatus.assetId, assets.id))
+    .where(eq(assets.type, "Computer"))
+    .orderBy(assets.name);
+
+  return rows.map((r) => ({
+    tag: r.tag,
+    name: r.name,
+    // assessedAt is only set when a posture row exists (left join).
+    posture: r.assessedAt
+      ? {
+          bitlocker: r.bitlocker,
+          defenderRealtime: r.defenderRealtime,
+          defenderSigAgeDays: r.defenderSigAgeDays,
+          avProduct: r.avProduct,
+          tpmReady: r.tpmReady,
+          secureBoot: r.secureBoot,
+          updatesLastDays: r.updatesLastDays,
+          updatesPending: r.updatesPending,
+          systemDrivePctUsed: r.systemDrivePctUsed,
+          assessedAt: r.assessedAt.toISOString(),
+        }
+      : null,
+  }));
+}
+
 /** The stored posture for one asset, looked up by its human **tag** (the public
    id the UI holds; `compliance_status.assetId` is the uuid FK, resolved via a join
    — same pattern as `getInstalledSoftware`). Null if never assessed. Pass the
