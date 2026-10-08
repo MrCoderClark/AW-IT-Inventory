@@ -107,9 +107,17 @@ function renderDetail() {
 }
 
 describe("ComputerDetail — tabs + content (AC-4.2, AC-4.3)", () => {
-  it("renders all five tabs", () => {
+  it("renders all tabs", () => {
     renderDetail();
-    for (const name of ["Overview", "Live scan", "Software", "Assignment", "Activity"]) {
+    for (const name of [
+      "Overview",
+      "Live scan",
+      "Software",
+      "Compliance",
+      "Printers",
+      "Assignment",
+      "Activity",
+    ]) {
       expect(screen.getByRole("tab", { name })).toBeInTheDocument();
     }
   });

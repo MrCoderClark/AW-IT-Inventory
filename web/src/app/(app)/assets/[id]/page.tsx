@@ -6,6 +6,7 @@ import { PrinterDetail } from "@/components/printer-detail";
 import { ThinAssetDetail } from "@/components/thin-detail";
 import { PagePlaceholder } from "@/components/page-placeholder";
 import { getAssetAssignmentHistory } from "@/db/assignments";
+import { getComplianceStatus } from "@/db/compliance";
 import { getPrinterCounters } from "@/db/counters";
 import { getInstalledSoftware } from "@/db/software";
 import {
@@ -89,6 +90,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
       packages,
       printerOptions,
       livePrinters,
+      compliancePosture,
     ] = await Promise.all([
       getMachineSummary(id),
       canWrite ? getAssetAssigneeId(id) : Promise.resolve(null),
@@ -101,6 +103,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
       canInstall ? listPrinterPackages() : Promise.resolve([]),
       canInstall ? getPrinterPrefillOptions() : Promise.resolve([]),
       canInstall ? getLatestPrinterList(id) : Promise.resolve(null),
+      getComplianceStatus(asset.id),
     ]);
     // Client-safe package options (no file paths / hashes).
     const installPackages = packages.map((p) => ({
@@ -134,6 +137,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
         installPackages={installPackages}
         printerOptions={printerOptions}
         livePrinters={livePrinters}
+        compliancePosture={compliancePosture}
       />
     );
   }
