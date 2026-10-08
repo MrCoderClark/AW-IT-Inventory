@@ -59,7 +59,7 @@ class Config(BaseModel):
     winrm_transport: str = "ntlm"
     winrm_scheme: str = "http"
     concurrency: int = 64
-    connect_timeout: float = 0.6
+    connect_timeout: float = 2.0
     winrm_timeout: int = 25
     snmp_timeout: float = 2.0
     output_dir: str = "out"
