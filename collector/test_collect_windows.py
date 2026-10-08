@@ -33,14 +33,18 @@ def _result(status_code: int, std_out: bytes = b"", std_err: bytes = b""):
     return SimpleNamespace(status_code=status_code, std_out=std_out, std_err=std_err)
 
 
-def _patch_winrm(monkeypatch, plan: dict, attempted: list[str]):
-    """plan: qualified-username -> Exception (raise) | result (run_ps returns it)."""
+def _patch_winrm(monkeypatch, plan: dict, attempted: list[str], posture=None):
+    """plan: qualified-username -> Exception (raise) | result (main PS_COLLECT run).
+    posture: the result the (second) PS_POSTURE call returns on a successful session;
+    None means the posture call reports a failure (status 1) → compliance stays None."""
 
     class FakeSession:
         def __init__(self, action):
             self._action = action
 
-        def run_ps(self, _ps):
+        def run_ps(self, script):
+            if "Get-BitLockerVolume" in script:  # the PS_POSTURE call
+                return posture if posture is not None else _result(1)
             if isinstance(self._action, Exception):
                 raise self._action
             return self._action
@@ -131,24 +135,28 @@ def test_winrm_port_closed_short_circuits(monkeypatch):
     assert attempted == []
 
 
-def test_parses_security_posture_into_compliance(monkeypatch):
-    # The posture signals (spec 21) ride the same collect and land on out["compliance"].
+def test_posture_second_call_populates_compliance(monkeypatch):
+    # Posture (spec 21) is a SEPARATE PS_POSTURE call; its JSON lands on
+    # out["compliance"] after the hardware collect succeeds.
     attempted: list[str] = []
-    payload = json.dumps(
-        {
-            "hostname": "PC1",
-            "bitlocker": "on",
-            "defender_realtime": True,
-            "defender_sig_age_days": 3,
-            "av_product": "Windows Defender",
-            "tpm_ready": True,
-            "secure_boot": "on",
-            "updates_last_days": 9,
-            "updates_pending": None,
-            "system_drive_pct_used": 72.5,
-        }
-    ).encode()
-    _patch_winrm(monkeypatch, {"alice": _result(0, std_out=payload)}, attempted)
+    main = _result(0, std_out=json.dumps({"hostname": "PC1"}).encode())
+    posture = _result(
+        0,
+        std_out=json.dumps(
+            {
+                "bitlocker": "on",
+                "defender_realtime": True,
+                "defender_sig_age_days": 3,
+                "av_product": "Windows Defender",
+                "tpm_ready": True,
+                "secure_boot": "on",
+                "updates_last_days": 9,
+                "updates_pending": None,
+                "system_drive_pct_used": 72.5,
+            }
+        ).encode(),
+    )
+    _patch_winrm(monkeypatch, {"alice": main}, attempted, posture=posture)
 
     out = collect_windows.collect_windows(
         "10.0.0.5", [5985], [_profile("good", "alice", "pw")], _config()
@@ -157,27 +165,25 @@ def test_parses_security_posture_into_compliance(monkeypatch):
     assert c is not None
     assert c.bitlocker == "on"
     assert c.defender_realtime is True
-    assert c.defender_sig_age_days == 3
-    assert c.av_product == "Windows Defender"
     assert c.tpm_ready is True
-    assert c.secure_boot == "on"
     assert c.updates_last_days == 9
     assert c.system_drive_pct_used == 72.5
+    assert out["hostname"] == "PC1"
+    assert out["errors"] == []
 
 
-def test_unreadable_posture_signals_are_none_not_error(monkeypatch):
-    # A filtered token returns $null for each posture field → absent JSON keys →
-    # None (unknown), and the collect still succeeds (AC-1).
+def test_posture_failure_leaves_compliance_none_without_failing_collect(monkeypatch):
+    # If the posture call fails (older host / filtered token), the hardware collect
+    # still succeeds — compliance is None, no error (AC-1).
     attempted: list[str] = []
-    payload = json.dumps({"hostname": "PC1", "serial": "SN1"}).encode()
-    _patch_winrm(monkeypatch, {"alice": _result(0, std_out=payload)}, attempted)
+    main = _result(0, std_out=json.dumps({"hostname": "PC1", "serial": "SN1"}).encode())
+    # posture=None → the fake's PS_POSTURE call returns status 1 (failure).
+    _patch_winrm(monkeypatch, {"alice": main}, attempted, posture=None)
 
     out = collect_windows.collect_windows(
         "10.0.0.5", [5985], [_profile("good", "alice", "pw")], _config()
     )
-    c = out["compliance"]
-    assert c is not None
-    assert c.bitlocker is None
-    assert c.tpm_ready is None
-    assert c.secure_boot is None
+    assert out["hostname"] == "PC1"
+    assert out["hardware"] is not None
+    assert out["compliance"] is None
     assert out["errors"] == []

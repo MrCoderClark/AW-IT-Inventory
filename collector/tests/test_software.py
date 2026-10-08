@@ -36,7 +36,7 @@ def _base(software):
 
 
 def test_parse_extracts_software_entries():
-    _, _, hostname, software, _ = _parse(
+    _, _, hostname, software = _parse(
         _base(
             [
                 {
@@ -58,7 +58,7 @@ def test_parse_extracts_software_entries():
 
 
 def test_parse_normalizes_blank_fields_to_none():
-    _, _, _, software, _ = _parse(
+    _, _, _, software = _parse(
         _base([{"name": "7-Zip", "version": "", "publisher": "   ", "install_date": ""}])
     )
     assert len(software) == 1
@@ -69,7 +69,7 @@ def test_parse_normalizes_blank_fields_to_none():
 
 
 def test_parse_drops_entries_without_a_name():
-    _, _, _, software, _ = _parse(
+    _, _, _, software = _parse(
         _base(
             [
                 {"name": "", "version": "1"},
@@ -85,5 +85,5 @@ def test_parse_drops_entries_without_a_name():
 def test_parse_handles_missing_software_key():
     # A collect that returned no software list at all yields an empty list, never
     # an error (the ingest treats an empty list as "nothing tracked found").
-    _, _, _, software, _ = _parse({"hostname": "PC-1"})
+    _, _, _, software = _parse({"hostname": "PC-1"})
     assert software == []
