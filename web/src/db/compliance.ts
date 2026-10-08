@@ -4,7 +4,22 @@ import { eq } from "drizzle-orm";
 
 import { db } from "./index";
 import { assets, complianceStatus } from "./schema";
-import type { CompliancePosture } from "@/lib/compliance-score";
+import type { CompliancePosture, LocalAdmin } from "@/lib/compliance-score";
+
+/** Normalize the stored `localAdmins` jsonb, tolerating the pre-v2 shape (a plain
+   string[]) alongside the current {name, isGroup}[] until rows are re-scanned. */
+function normalizeAdmins(v: unknown): LocalAdmin[] | null {
+  if (!Array.isArray(v)) return null;
+  const out = v.map((e) =>
+    typeof e === "string"
+      ? { name: e, isGroup: false }
+      : {
+          name: String((e as { name?: unknown })?.name ?? ""),
+          isGroup: Boolean((e as { isGroup?: unknown })?.isGroup),
+        },
+  );
+  return out.filter((a) => a.name);
+}
 
 /* ================================================================
    Compliance posture storage (spec 21). One current-state row per
@@ -26,7 +41,7 @@ export interface PostedCompliance {
   updates_last_days?: number | null;
   updates_pending?: number | null;
   system_drive_pct_used?: number | null;
-  local_admins?: string[] | null;
+  local_admins?: { name?: string | null; is_group?: boolean | null }[] | null;
 }
 
 /**
@@ -51,7 +66,12 @@ export async function upsertComplianceStatus(
     updatesLastDays: posted.updates_last_days ?? null,
     updatesPending: posted.updates_pending ?? null,
     systemDrivePctUsed: posted.system_drive_pct_used ?? null,
-    localAdmins: posted.local_admins ?? null,
+    // Store camelCase {name, isGroup}; drop entries with no name.
+    localAdmins: posted.local_admins
+      ? posted.local_admins
+          .map((a) => ({ name: a.name ?? "", isGroup: Boolean(a.is_group) }))
+          .filter((a) => a.name)
+      : null,
     assessedAt,
   };
   const { assetId: _pk, ...set } = row;
@@ -148,7 +168,7 @@ export async function getComplianceStatus(
     updatesLastDays: r.updatesLastDays,
     updatesPending: r.updatesPending,
     systemDrivePctUsed: r.systemDrivePctUsed,
-    localAdmins: r.localAdmins ?? null,
+    localAdmins: normalizeAdmins(r.localAdmins),
     assessedAt: r.assessedAt.toISOString(),
   };
 }

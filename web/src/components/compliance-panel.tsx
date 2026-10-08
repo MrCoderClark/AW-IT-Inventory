@@ -97,12 +97,17 @@ export function CompliancePanel({
             Local administrators ({posture.localAdmins.length})
           </p>
           <ul className="flex flex-wrap gap-1.5">
-            {posture.localAdmins.map((name) => (
+            {posture.localAdmins.map((a) => (
               <li
-                key={name}
-                className="rounded-md border bg-muted/40 px-2 py-0.5 font-mono text-xs"
+                key={a.name}
+                className="inline-flex items-center gap-1 rounded-md border bg-muted/40 px-2 py-0.5 font-mono text-xs"
               >
-                {name}
+                {a.name}
+                {a.isGroup && (
+                  <span className="rounded bg-primary/10 px-1 font-sans text-[10px] font-medium text-primary">
+                    group
+                  </span>
+                )}
               </li>
             ))}
           </ul>

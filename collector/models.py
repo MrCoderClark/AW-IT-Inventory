@@ -43,6 +43,14 @@ class Software(BaseModel):
     install_date: str | None = None
 
 
+class LocalAdmin(BaseModel):
+    """One member of the local Administrators group (spec 21 v2). ``is_group`` marks
+    a nested group grant (e.g. ``DOMAIN\\Domain Admins``) vs an individual user."""
+
+    name: str | None = None
+    is_group: bool = False
+
+
 class Compliance(BaseModel):
     """Security-posture signals (spec 21). Every field is best-effort — a signal
     the collector couldn't read is ``None`` ("unknown"), never an error. The
@@ -58,7 +66,7 @@ class Compliance(BaseModel):
     updates_last_days: int | None = None  # days since the last successful update
     updates_pending: int | None = None  # pending count (None in v1 — not read yet)
     system_drive_pct_used: float | None = None  # % full of the system drive
-    local_admins: list[str] | None = None  # members of the local Administrators group
+    local_admins: list[LocalAdmin] | None = None  # local Administrators members
 
 
 class PrinterInfo(BaseModel):

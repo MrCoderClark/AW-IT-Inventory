@@ -57,13 +57,20 @@ describe("CompliancePanel", () => {
     expect(screen.getByText(/Limited visibility/i)).toBeTruthy();
   });
 
-  it("lists local administrators when present", () => {
+  it("lists local administrators and badges group grants", () => {
     render(
       <CompliancePanel
-        posture={{ ...GREEN, localAdmins: ["AWINYC\\Domain Admins", "PC1\\ibrown"] }}
+        posture={{
+          ...GREEN,
+          localAdmins: [
+            { name: "AWINYC\\Domain Admins", isGroup: true },
+            { name: "PC1\\ibrown", isGroup: false },
+          ],
+        }}
       />,
     );
     expect(screen.getByText(/Local administrators \(2\)/)).toBeTruthy();
     expect(screen.getByText("PC1\\ibrown")).toBeTruthy();
+    expect(screen.getByText("group")).toBeTruthy();
   });
 });

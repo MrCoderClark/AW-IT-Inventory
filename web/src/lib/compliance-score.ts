@@ -21,8 +21,15 @@ export interface CompliancePosture {
   updatesPending: number | null;
   systemDrivePctUsed: number | null;
   // Informational (not scored in v1): members of the local Administrators group.
-  localAdmins?: string[] | null;
+  localAdmins?: LocalAdmin[] | null;
   assessedAt?: string | null;
+}
+
+/** One member of a machine's local Administrators group. `isGroup` marks a nested
+   group grant (e.g. DOMAIN\Domain Admins) vs an individual user. */
+export interface LocalAdmin {
+  name: string;
+  isGroup: boolean;
 }
 
 export type CheckStatus = "pass" | "warn" | "fail" | "unknown";
