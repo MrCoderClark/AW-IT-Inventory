@@ -24,13 +24,25 @@ class Hardware(BaseModel):
     disks: list[Disk] = Field(default_factory=list)
 
 
+class NetworkAdapter(BaseModel):
+    """One connected network adapter (spec 21 v2)."""
+
+    name: str | None = None
+    mac: str | None = None
+    status: str | None = None
+    ips: list[str] = Field(default_factory=list)
+
+
 class Health(BaseModel):
     os_name: str | None = None
     os_version: str | None = None
     os_build: str | None = None
     uptime_hours: float | None = None
     free_disk_gb: dict[str, float] = Field(default_factory=dict)
-    logged_on_user: str | None = None
+    logged_on_user: str | None = None  # current console user (from PS_COLLECT)
+    # Endpoint detail (spec 21 v2), merged in from PS_ENDPOINT. None = not collected.
+    network_adapters: list[NetworkAdapter] | None = None
+    logged_on_users: list[str] | None = None  # all interactive sessions
 
 
 class Software(BaseModel):

@@ -69,6 +69,10 @@ const machine: MachineSummary = {
   freeDiskGb: 420,
   uptimeHours: 72,
   loggedOnUser: "AWINYC\\ibrown",
+  networkAdapters: [
+    { name: "Ethernet", mac: "50-9A-4C-4B-F3-DE", status: "Up", ips: ["192.168.70.160"] },
+  ],
+  loggedOnUsers: ["esmith"],
   status: "ok",
 };
 
@@ -141,6 +145,16 @@ describe("ComputerDetail — tabs + content (AC-4.2, AC-4.3)", () => {
     await user.click(screen.getByRole("tab", { name: "Live scan" }));
     expect(screen.getByText("Intel i7-1185G7")).toBeInTheDocument();
     expect(screen.getByText("32 GB")).toBeInTheDocument();
+  });
+
+  it("Live scan tab shows network adapters and active sessions", async () => {
+    const user = userEvent.setup();
+    renderDetail();
+    await user.click(screen.getByRole("tab", { name: "Live scan" }));
+    expect(screen.getByText("Network & sessions")).toBeInTheDocument();
+    expect(screen.getByText("Ethernet")).toBeInTheDocument();
+    expect(screen.getByText(/50-9A-4C-4B-F3-DE/)).toBeInTheDocument();
+    expect(screen.getByText("esmith")).toBeInTheDocument();
   });
 
   it("Software tab lists tracked software", async () => {

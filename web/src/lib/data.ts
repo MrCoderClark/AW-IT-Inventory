@@ -471,7 +471,17 @@ export interface MachineSummary {
   freeDiskGb: number | null;
   uptimeHours: number | null;
   loggedOnUser: string | null;
+  // Endpoint detail (spec 21 v2); null = not collected by the latest scan.
+  networkAdapters: NetworkAdapter[] | null;
+  loggedOnUsers: string[] | null;
   status: string;
+}
+
+export interface NetworkAdapter {
+  name: string;
+  mac: string | null;
+  status: string | null;
+  ips: string[];
 }
 
 /* ---------------- Sample fleet (DB seed source) ----------------

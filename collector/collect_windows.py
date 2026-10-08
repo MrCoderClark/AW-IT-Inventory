@@ -11,7 +11,15 @@ import json
 import winrm
 
 from config import Config, CredentialProfile
-from models import Compliance, Disk, Hardware, Health, LocalAdmin, Software
+from models import (
+    Compliance,
+    Disk,
+    Hardware,
+    Health,
+    LocalAdmin,
+    NetworkAdapter,
+    Software,
+)
 
 # Single round-trip: gather hardware + OS/health and emit compact JSON.
 PS_COLLECT = r"""
@@ -118,6 +126,26 @@ try {
 [ordered]@{ local_admins = @($admins) } | ConvertTo-Json -Depth 3 -Compress
 """
 
+# Endpoint detail (spec 21 v2): connected network adapters + all interactive
+# sessions. Its own best-effort WinRM call (keeps the other scripts under the
+# command-line limit); merged into Health. null for a section = couldn't read it.
+PS_ENDPOINT = r"""
+$ErrorActionPreference = 'SilentlyContinue'
+$nics = $null
+try {
+    $nics = @(Get-NetAdapter -Physical -ErrorAction Stop | Where-Object { $_.Status -eq 'Up' } | ForEach-Object {
+        $ad = $_
+        $ips = @(Get-NetIPAddress -InterfaceIndex $ad.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | ForEach-Object { "$($_.IPAddress)" })
+        @{ name = "$($ad.Name)"; mac = "$($ad.MacAddress)"; status = "$($ad.Status)"; ips = @($ips) } })
+} catch {}
+$sessions = $null
+try {
+    $q = quser 2>$null
+    if ($q) { $sessions = @($q | Select-Object -Skip 1 | ForEach-Object { (($_.Trim() -split '\s{2,}')[0]).TrimStart('>') } | Where-Object { $_ }) }
+} catch {}
+[ordered]@{ network_adapters = $nics; logged_on_users = $sessions } | ConvertTo-Json -Depth 4 -Compress
+"""
+
 
 def _as_list(value) -> list:
     if value is None:
@@ -191,6 +219,36 @@ def _parse_posture(data: dict) -> Compliance:
         updates_pending=data.get("updates_pending"),
         system_drive_pct_used=data.get("system_drive_pct_used"),
     )
+
+
+def _parse_endpoint(
+    data: dict,
+) -> tuple[list[NetworkAdapter] | None, list[str] | None]:
+    """Parse PS_ENDPOINT JSON → (network adapters, interactive session users). A
+    null section (couldn't read it) stays None; ConvertTo-Json scalar/array quirks
+    are coerced via _as_list."""
+    na = data.get("network_adapters")
+    adapters = (
+        None
+        if na is None
+        else [
+            NetworkAdapter(
+                name=_clean(x.get("name")),
+                mac=_clean(x.get("mac")),
+                status=_clean(x.get("status")),
+                ips=[str(i) for i in _as_list(x.get("ips")) if _clean(str(i))],
+            )
+            for x in _as_list(na)
+            if isinstance(x, dict)
+        ]
+    )
+    lu = data.get("logged_on_users")
+    sessions = (
+        None
+        if lu is None
+        else [s for s in (_clean(str(x)) for x in _as_list(lu)) if s]
+    )
+    return adapters, sessions
 
 
 def _parse_admins(data: dict) -> list[LocalAdmin] | None:
@@ -294,6 +352,17 @@ def collect_windows(
                         if out["compliance"] is None:
                             out["compliance"] = Compliance()
                         out["compliance"].local_admins = admins
+            except Exception:  # noqa: BLE001 — optional, never fatal
+                pass
+            # Endpoint detail (spec 21 v2): network adapters + sessions, merged
+            # into Health. A fourth small best-effort call.
+            try:
+                er = session.run_ps(PS_ENDPOINT)
+                if er.status_code == 0 and out["health"] is not None:
+                    eraw = (er.std_out or b"").decode("utf-8", errors="ignore").strip() or "{}"
+                    adapters, sessions = _parse_endpoint(json.loads(eraw))
+                    out["health"].network_adapters = adapters
+                    out["health"].logged_on_users = sessions
             except Exception:  # noqa: BLE001 — optional, never fatal
                 pass
             return out

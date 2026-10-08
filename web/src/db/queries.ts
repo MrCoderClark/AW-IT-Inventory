@@ -512,6 +512,17 @@ function toMachineSummary(r: MachineSummaryRow): MachineSummary {
         ? (health.uptime_hours as number)
         : null,
     loggedOnUser: (health.logged_on_user as string) || null,
+    networkAdapters: Array.isArray(health.network_adapters)
+      ? (health.network_adapters as Record<string, unknown>[]).map((n) => ({
+          name: String(n?.name ?? ""),
+          mac: (n?.mac as string) ?? null,
+          status: (n?.status as string) ?? null,
+          ips: Array.isArray(n?.ips) ? (n.ips as unknown[]).map(String) : [],
+        }))
+      : null,
+    loggedOnUsers: Array.isArray(health.logged_on_users)
+      ? (health.logged_on_users as unknown[]).map(String)
+      : null,
     status: r.status ?? "ok",
   };
 }
