@@ -63,14 +63,16 @@ describe("CompliancePanel", () => {
         posture={{
           ...GREEN,
           localAdmins: [
-            { name: "AWINYC\\Domain Admins", isGroup: true },
-            { name: "PC1\\ibrown", isGroup: false },
+            { name: "AWINYC\\Domain Admins", isGroup: true, enabled: true },
+            { name: "PC1\\ibrown", isGroup: false, enabled: true },
+            { name: "PC1\\Administrator", isGroup: false, enabled: false },
           ],
         }}
       />,
     );
-    expect(screen.getByText(/Local administrators \(2\)/)).toBeTruthy();
+    expect(screen.getByText(/Local administrators \(3\)/)).toBeTruthy();
     expect(screen.getByText("PC1\\ibrown")).toBeTruthy();
     expect(screen.getByText("group")).toBeTruthy();
+    expect(screen.getByText("disabled")).toBeTruthy();
   });
 });

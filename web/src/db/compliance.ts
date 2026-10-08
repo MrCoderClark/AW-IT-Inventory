@@ -12,10 +12,12 @@ function normalizeAdmins(v: unknown): LocalAdmin[] | null {
   if (!Array.isArray(v)) return null;
   const out = v.map((e) =>
     typeof e === "string"
-      ? { name: e, isGroup: false }
+      ? { name: e, isGroup: false, enabled: true }
       : {
           name: String((e as { name?: unknown })?.name ?? ""),
           isGroup: Boolean((e as { isGroup?: unknown })?.isGroup),
+          // Older rows have no `enabled` → treat as enabled.
+          enabled: (e as { enabled?: unknown })?.enabled !== false,
         },
   );
   return out.filter((a) => a.name);
@@ -41,7 +43,9 @@ export interface PostedCompliance {
   updates_last_days?: number | null;
   updates_pending?: number | null;
   system_drive_pct_used?: number | null;
-  local_admins?: { name?: string | null; is_group?: boolean | null }[] | null;
+  local_admins?:
+    | { name?: string | null; is_group?: boolean | null; enabled?: boolean | null }[]
+    | null;
 }
 
 /**
@@ -69,7 +73,11 @@ export async function upsertComplianceStatus(
     // Store camelCase {name, isGroup}; drop entries with no name.
     localAdmins: posted.local_admins
       ? posted.local_admins
-          .map((a) => ({ name: a.name ?? "", isGroup: Boolean(a.is_group) }))
+          .map((a) => ({
+            name: a.name ?? "",
+            isGroup: Boolean(a.is_group),
+            enabled: a.enabled !== false,
+          }))
           .filter((a) => a.name)
       : null,
     assessedAt,

@@ -45,10 +45,13 @@ class Software(BaseModel):
 
 class LocalAdmin(BaseModel):
     """One member of the local Administrators group (spec 21 v2). ``is_group`` marks
-    a nested group grant (e.g. ``DOMAIN\\Domain Admins``) vs an individual user."""
+    a nested group grant (e.g. ``DOMAIN\\Domain Admins``) vs an individual user;
+    ``enabled`` is the account state for a LOCAL user (True for groups and domain
+    members, whose state the collector can't read without AD)."""
 
     name: str | None = None
     is_group: bool = False
+    enabled: bool = True
 
 
 class Compliance(BaseModel):

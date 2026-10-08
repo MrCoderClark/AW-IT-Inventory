@@ -739,7 +739,9 @@ export const complianceStatus = pgTable("compliance_status", {
   updatesLastDays: integer("updates_last_days"), // days since last successful update
   updatesPending: integer("updates_pending"), // pending count (null in v1)
   systemDrivePctUsed: doublePrecision("system_drive_pct_used"), // % full
-  localAdmins: jsonb("local_admins").$type<{ name: string; isGroup: boolean }[]>(),
+  localAdmins: jsonb("local_admins").$type<
+    { name: string; isGroup: boolean; enabled: boolean }[]
+  >(),
   assessedAt: timestamp("assessed_at", { withTimezone: true }).notNull(),
 });
 

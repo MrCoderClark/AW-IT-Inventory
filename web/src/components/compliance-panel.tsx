@@ -100,12 +100,19 @@ export function CompliancePanel({
             {posture.localAdmins.map((a) => (
               <li
                 key={a.name}
-                className="inline-flex items-center gap-1 rounded-md border bg-muted/40 px-2 py-0.5 font-mono text-xs"
+                className={`inline-flex items-center gap-1 rounded-md border bg-muted/40 px-2 py-0.5 font-mono text-xs ${
+                  a.enabled ? "" : "opacity-60"
+                }`}
               >
-                {a.name}
+                <span className={a.enabled ? "" : "line-through"}>{a.name}</span>
                 {a.isGroup && (
                   <span className="rounded bg-primary/10 px-1 font-sans text-[10px] font-medium text-primary">
                     group
+                  </span>
+                )}
+                {!a.enabled && (
+                  <span className="rounded bg-muted px-1 font-sans text-[10px] font-medium text-muted-foreground">
+                    disabled
                   </span>
                 )}
               </li>

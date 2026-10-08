@@ -33,16 +33,18 @@ def _result(status_code: int, std_out: bytes = b"", std_err: bytes = b""):
     return SimpleNamespace(status_code=status_code, std_out=std_out, std_err=std_err)
 
 
-def _patch_winrm(monkeypatch, plan: dict, attempted: list[str], posture=None):
+def _patch_winrm(monkeypatch, plan: dict, attempted: list[str], posture=None, admins=None):
     """plan: qualified-username -> Exception (raise) | result (main PS_COLLECT run).
-    posture: the result the (second) PS_POSTURE call returns on a successful session;
-    None means the posture call reports a failure (status 1) → compliance stays None."""
+    posture: result the PS_POSTURE call returns; admins: result the PS_ADMINS call
+    returns. None for either → that call reports status 1 (failure)."""
 
     class FakeSession:
         def __init__(self, action):
             self._action = action
 
         def run_ps(self, script):
+            if "Get-LocalGroupMember" in script:  # the PS_ADMINS call
+                return admins if admins is not None else _result(1)
             if "Get-BitLockerVolume" in script:  # the PS_POSTURE call
                 return posture if posture is not None else _result(1)
             if isinstance(self._action, Exception):
@@ -153,14 +155,22 @@ def test_posture_second_call_populates_compliance(monkeypatch):
                 "updates_last_days": 9,
                 "updates_pending": None,
                 "system_drive_pct_used": 72.5,
-                "local_admins": [
-                    {"name": "AWINYC\\Domain Admins", "is_group": True},
-                    {"name": "PC1\\localadmin", "is_group": False},
-                ],
             }
         ).encode(),
     )
-    _patch_winrm(monkeypatch, {"alice": main}, attempted, posture=posture)
+    admins = _result(
+        0,
+        std_out=json.dumps(
+            {
+                "local_admins": [
+                    {"name": "AWINYC\\Domain Admins", "is_group": True, "enabled": True},
+                    {"name": "PC1\\Administrator", "is_group": False, "enabled": False},
+                    {"name": "PC1\\localadmin", "is_group": False},  # enabled omitted
+                ]
+            }
+        ).encode(),
+    )
+    _patch_winrm(monkeypatch, {"alice": main}, attempted, posture=posture, admins=admins)
 
     out = collect_windows.collect_windows(
         "10.0.0.5", [5985], [_profile("good", "alice", "pw")], _config()
@@ -172,29 +182,36 @@ def test_posture_second_call_populates_compliance(monkeypatch):
     assert c.tpm_ready is True
     assert c.updates_last_days == 9
     assert c.system_drive_pct_used == 72.5
-    assert [a.name for a in c.local_admins] == ["AWINYC\\Domain Admins", "PC1\\localadmin"]
-    assert [a.is_group for a in c.local_admins] == [True, False]
+    assert [a.name for a in c.local_admins] == [
+        "AWINYC\\Domain Admins",
+        "PC1\\Administrator",
+        "PC1\\localadmin",
+    ]
+    assert [a.is_group for a in c.local_admins] == [True, False, False]
+    # enabled: explicit True/False, and defaults True when the key is absent.
+    assert [a.enabled for a in c.local_admins] == [True, False, True]
     assert out["hostname"] == "PC1"
     assert out["errors"] == []
 
 
 def test_posture_coerces_single_local_admin_to_a_list(monkeypatch):
-    # ConvertTo-Json collapses a 1-element array to a scalar; _parse_posture coerces.
+    # ConvertTo-Json collapses a 1-element array to a scalar; _parse_admins coerces.
     attempted: list[str] = []
     main = _result(0, std_out=json.dumps({"hostname": "PC1"}).encode())
-    posture = _result(
+    posture = _result(0, std_out=json.dumps({"bitlocker": "on"}).encode())
+    admins = _result(
         0,
         std_out=json.dumps(
             {"local_admins": {"name": "PC1\\onlyadmin", "is_group": False}}
         ).encode(),
     )
-    _patch_winrm(monkeypatch, {"alice": main}, attempted, posture=posture)
+    _patch_winrm(monkeypatch, {"alice": main}, attempted, posture=posture, admins=admins)
 
     out = collect_windows.collect_windows(
         "10.0.0.5", [5985], [_profile("good", "alice", "pw")], _config()
     )
-    admins = out["compliance"].local_admins
-    assert [a.name for a in admins] == ["PC1\\onlyadmin"]
+    result_admins = out["compliance"].local_admins
+    assert [a.name for a in result_admins] == ["PC1\\onlyadmin"]
 
 
 def test_posture_failure_leaves_compliance_none_without_failing_collect(monkeypatch):

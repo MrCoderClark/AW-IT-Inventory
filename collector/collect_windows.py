@@ -86,7 +86,6 @@ if (($null -eq $defRt) -and $mp) { if ($mp.AMServiceEnabled) { $avName = 'Window
 if ($avName -and ($avName -notmatch 'Microsoft Defender|Windows Defender')) { $defAge = $null }
 $wuDays = $null; try { $s = (New-Object -ComObject Microsoft.Update.Session).CreateUpdateSearcher(); $n = $s.GetTotalHistoryCount(); if ($n -gt 0) { $h = $s.QueryHistory(0, [Math]::Min($n, 50)); $l = $h | Where-Object { $_.Operation -eq 1 -and $_.ResultCode -eq 2 } | Sort-Object Date -Descending | Select-Object -First 1; if ($l) { $wuDays = [int]((Get-Date) - $l.Date).TotalDays } } } catch {}
 $sysPct = $null; try { $ld = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$($env:SystemDrive)'" -ErrorAction Stop; if ($ld -and $ld.Size -gt 0) { $sysPct = [math]::Round((($ld.Size - $ld.FreeSpace) / $ld.Size) * 100, 1) } } catch {}
-$admins = $null; try { $admins = @(Get-LocalGroupMember -Group 'Administrators' -ErrorAction Stop | ForEach-Object { @{ name = "$($_.Name)"; is_group = ($_.ObjectClass -eq 'Group') } }) } catch {}
 [ordered]@{
     bitlocker             = $bl
     defender_realtime     = $defRt
@@ -97,8 +96,26 @@ $admins = $null; try { $admins = @(Get-LocalGroupMember -Group 'Administrators' 
     updates_last_days     = $wuDays
     updates_pending       = $null
     system_drive_pct_used = $sysPct
-    local_admins          = @($admins)
 } | ConvertTo-Json -Depth 3 -Compress
+"""
+
+# Local Administrators membership (spec 21 v2) — its OWN WinRM call so neither this
+# nor PS_POSTURE overflows pywinrm's ~8 KB command line. Best-effort. Each member
+# carries is_group (a nested group grant vs a user) and enabled (local-user account
+# state; True for groups/domain members, whose state needs AD).
+PS_ADMINS = r"""
+$ErrorActionPreference = 'SilentlyContinue'
+$admins = $null
+try {
+    $lu = @{}
+    try { Get-LocalUser -ErrorAction Stop | ForEach-Object { $lu[$_.Name] = [bool]$_.Enabled } } catch {}
+    $admins = @(Get-LocalGroupMember -Group 'Administrators' -ErrorAction Stop | ForEach-Object {
+        $g = ($_.ObjectClass -eq 'Group')
+        $short = ("$($_.Name)" -replace '^.*\\', '')
+        $en = if ($g) { $true } elseif ($lu.ContainsKey($short)) { $lu[$short] } else { $true }
+        @{ name = "$($_.Name)"; is_group = $g; enabled = $en } })
+} catch {}
+[ordered]@{ local_admins = @($admins) } | ConvertTo-Json -Depth 3 -Compress
 """
 
 
@@ -173,19 +190,24 @@ def _parse_posture(data: dict) -> Compliance:
         updates_last_days=data.get("updates_last_days"),
         updates_pending=data.get("updates_pending"),
         system_drive_pct_used=data.get("system_drive_pct_used"),
-        # ConvertTo-Json collapses a 1-element array to a scalar; coerce back to a
-        # list. A null (couldn't read the group) stays None. Each entry is
-        # {name, is_group} (is_group marks a nested group grant).
-        local_admins=(
-            None
-            if data.get("local_admins") is None
-            else [
-                LocalAdmin(name=_clean(x.get("name")), is_group=bool(x.get("is_group")))
-                for x in _as_list(data.get("local_admins"))
-                if isinstance(x, dict) and _clean(x.get("name"))
-            ]
-        ),
     )
+
+
+def _parse_admins(data: dict) -> list[LocalAdmin] | None:
+    """Parse the PS_ADMINS JSON (spec 21 v2). None = couldn't read the group.
+    ConvertTo-Json collapses a 1-element array to a scalar, so coerce to a list."""
+    raw = data.get("local_admins")
+    if raw is None:
+        return None
+    return [
+        LocalAdmin(
+            name=_clean(x.get("name")),
+            is_group=bool(x.get("is_group")),
+            enabled=bool(x.get("enabled", True)),
+        )
+        for x in _as_list(raw)
+        if isinstance(x, dict) and _clean(x.get("name"))
+    ]
 
 
 def _winrm_username(username: str) -> str:
@@ -261,6 +283,18 @@ def collect_windows(
                     praw = (pr.std_out or b"").decode("utf-8", errors="ignore").strip() or "{}"
                     out["compliance"] = _parse_posture(json.loads(praw))
             except Exception:  # noqa: BLE001 — posture is optional, never fatal
+                pass
+            # Local administrators (spec 21 v2): a third small best-effort call.
+            try:
+                ar = session.run_ps(PS_ADMINS)
+                if ar.status_code == 0:
+                    araw = (ar.std_out or b"").decode("utf-8", errors="ignore").strip() or "{}"
+                    admins = _parse_admins(json.loads(araw))
+                    if admins is not None:
+                        if out["compliance"] is None:
+                            out["compliance"] = Compliance()
+                        out["compliance"].local_admins = admins
+            except Exception:  # noqa: BLE001 — optional, never fatal
                 pass
             return out
         except Exception as e:  # noqa: BLE001 - report and try the next profile
