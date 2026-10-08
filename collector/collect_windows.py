@@ -148,20 +148,30 @@ def collect_windows(
         out["errors"].append("winrm_port_closed")
         return out
 
-    last_err = None
+    # Record every profile's result, not just the last — one bad-last-profile
+    # error used to mask which credential actually failed and why. Each line
+    # carries the *qualified* username (what NTLM really sends), mirroring
+    # diag_winrm.py so a failing host is diagnosable straight from the ingest.
+    profile_errors: list[str] = []
     endpoint = f"{config.winrm_scheme}://{ip}:{port}/wsman"
     for prof in profiles:
+        user = _winrm_username(prof.username)
+        if not prof.password:
+            profile_errors.append(f"[{prof.id}] user={user!r}: no password in .env")
+            continue
         try:
             session = winrm.Session(
                 endpoint,
-                auth=(_winrm_username(prof.username), prof.password),
+                auth=(user, prof.password),
                 transport=config.winrm_transport,
                 server_cert_validation="ignore",
             )
             r = session.run_ps(PS_COLLECT)
             if r.status_code != 0:
-                err = (r.std_err or b"")[:200]
-                last_err = f"{prof.id}: ps_exit_{r.status_code} {err.decode(errors='ignore')}"
+                err = (r.std_err or b"")[:200].decode(errors="ignore").strip()
+                profile_errors.append(
+                    f"[{prof.id}] user={user!r}: ps_exit_{r.status_code} {err}"
+                )
                 continue
             raw = (r.std_out or b"").decode("utf-8", errors="ignore").strip() or "{}"
             hw, health, hostname, software = _parse(json.loads(raw))
@@ -173,9 +183,12 @@ def collect_windows(
                 software=software,
             )
             return out
-        except Exception as e:  # noqa: BLE001 - report and try next profile
-            last_err = f"{prof.id}: {type(e).__name__}: {e}"
+        except Exception as e:  # noqa: BLE001 - report and try the next profile
+            profile_errors.append(f"[{prof.id}] user={user!r}: {type(e).__name__}: {e}")
             continue
 
-    out["errors"].append(f"auth_failed_all_profiles ({last_err})")
+    detail = " | ".join(profile_errors) if profile_errors else "no credential profiles"
+    out["errors"].append(
+        f"auth_failed_all_profiles ({len(profile_errors)} profile(s): {detail})"
+    )
     return out

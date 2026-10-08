@@ -7,6 +7,18 @@ via a feature branch + PR.
 
 ---
 
+## Shipped ✅ — Collector reports all profile failures (merged)
+
+`collect_windows` now records **every** credential profile's result, not just the
+last tried. `auth_failed_all_profiles (...)` lists each profile with its
+*qualified* username and per-profile reason (`ps_exit_N …`, the exception, or
+`no password in .env` for a skipped one) — the same per-profile truth
+`diag_winrm.py` prints — so a failing host is diagnosable straight from the
+ingest/drawer, no side-script needed. No-password profiles are skipped without an
+auth attempt. Test: `collector/test_collect_windows.py`.
+
+---
+
 ## Shipped ✅ — Printer-install notifications (merged, `feat/notify-printer-install`)
 
 In-app notifications when a printer install/remove job finishes (spec 19 × 20).
@@ -423,9 +435,6 @@ Surfaces that exist in the UI but aren't wired to anything real:
 
 ### Collector / infra
 
-- **Collector: report all profile failures** — not just the last tried (would shorten
-  WinRM credential debugging; today we built the standalone `diag_winrm.py` for exactly
-  this). *Recommended next.*
 - **WMI-over-DCOM fallback** — scan hosts that only expose SMB (no WinRM).
 - **NSSM service wrappers** — package web + aw-auth + collector `worker` as Windows
   services for prod (the final deploy step; Docker Compose intentionally **not** used).
@@ -443,3 +452,5 @@ Surfaces that exist in the UI but aren't wired to anything real:
   (spec 20) · ~~In-app user management~~ ✅ (PR #52) · ~~Dashboard redesign~~ ✅ (PR #51).
 - ~~`printer-detail.tsx` → `detail-ui`~~ ✅ · ~~Ingest orphan cleanup~~ ✅
   (`fix/ingest-orphan-cleanup`).
+- ~~Collector: report all profile failures~~ ✅ (`collect_windows` lists every
+  profile's per-profile reason; see the top of this log).
