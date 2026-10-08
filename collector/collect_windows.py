@@ -73,10 +73,17 @@ $ErrorActionPreference = 'SilentlyContinue'
 $bl = $null; try { if ((Get-BitLockerVolume -MountPoint $env:SystemDrive -ErrorAction Stop).ProtectionStatus -eq 1) { $bl = 'on' } else { $bl = 'off' } } catch {}
 $tpmReady = $null; try { $t = Get-Tpm -ErrorAction Stop; $tpmReady = [bool]($t.TpmPresent -and $t.TpmReady) } catch {}
 $sb = $null; try { if (Confirm-SecureBootUEFI -ErrorAction Stop) { $sb = 'on' } else { $sb = 'off' } } catch {}
-$mp = $null; try { $mp = Get-MpComputerStatus -ErrorAction Stop } catch {}
 $defRt = $null; $defAge = $null; $avName = $null
-if ($mp) { $defRt = [bool]$mp.RealTimeProtectionEnabled; $defAge = [int]$mp.AntivirusSignatureAge; if ($mp.AMServiceEnabled) { $avName = 'Windows Defender' } }
-if (-not $avName) { try { $p = Get-CimInstance -Namespace root/SecurityCenter2 -Class AntiVirusProduct -ErrorAction Stop | Select-Object -First 1; if ($p) { $avName = "$($p.displayName)"; $defRt = ((([int]$p.productState) -band 0x1000) -ne 0) } } catch {} }
+$mp = $null; try { $mp = Get-MpComputerStatus -ErrorAction Stop } catch {}
+if ($mp) { $defAge = [int]$mp.AntivirusSignatureAge }
+# Security Center is authoritative for which AV is actually protecting the box
+# (covers 3rd-party products, which put Defender in passive/real-time-off mode).
+# Use the first ENABLED product (productState 'on' bit); else the first registered.
+try { $avs = @(Get-CimInstance -Namespace root/SecurityCenter2 -Class AntiVirusProduct -ErrorAction Stop); $act = $avs | Where-Object { ((([int]$_.productState) -band 0x1000) -ne 0) } | Select-Object -First 1; if ($act) { $avName = "$($act.displayName)"; $defRt = $true } elseif ($avs.Count) { $avName = "$($avs[0].displayName)"; $defRt = $false } } catch {}
+# No Security Center (e.g. Windows Server) → fall back to Defender's own real-time flag.
+if (($null -eq $defRt) -and $mp) { if ($mp.AMServiceEnabled) { $avName = 'Windows Defender' }; $defRt = [bool]$mp.RealTimeProtectionEnabled }
+# Defender's signature age only applies when Defender is the active AV.
+if ($avName -and ($avName -notmatch 'Microsoft Defender|Windows Defender')) { $defAge = $null }
 $wuDays = $null; try { $s = (New-Object -ComObject Microsoft.Update.Session).CreateUpdateSearcher(); $n = $s.GetTotalHistoryCount(); if ($n -gt 0) { $h = $s.QueryHistory(0, [Math]::Min($n, 50)); $l = $h | Where-Object { $_.Operation -eq 1 -and $_.ResultCode -eq 2 } | Sort-Object Date -Descending | Select-Object -First 1; if ($l) { $wuDays = [int]((Get-Date) - $l.Date).TotalDays } } } catch {}
 $sysPct = $null; try { $ld = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$($env:SystemDrive)'" -ErrorAction Stop; if ($ld -and $ld.Size -gt 0) { $sysPct = [math]::Round((($ld.Size - $ld.FreeSpace) / $ld.Size) * 100, 1) } } catch {}
 [ordered]@{
