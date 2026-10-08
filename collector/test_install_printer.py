@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import io
 import zipfile
 
@@ -84,3 +85,39 @@ def test_integrity_match_proceeds_to_creds(monkeypatch):
     }
     with pytest.raises(RuntimeError, match="no credential profiles"):
         install_printer.run_install(Config(), "tok", job)
+
+
+def test_base64_chunks_stay_under_the_command_line_limit():
+    # Every fallback chunk must fit pywinrm's `powershell -encodedcommand <b64>`
+    # command line (WinRS cmd shell, ~8 KB) — an oversized chunk fails with
+    # "The command line is too long" on chunk 0 (the bug this guards against).
+    scripts: list[str] = []
+
+    class FakeResult:
+        status_code = 0
+        std_out = b""
+        std_err = b""
+
+    class FakeSession:
+        def run_ps(self, script):
+            scripts.append(script)
+            return FakeResult()
+
+    payload = bytes(range(256)) * 300  # ~77 KB → forces many chunks
+    steps = install_printer._transfer_zip(
+        FakeSession(),
+        payload,
+        r"C:\Windows\Temp\opus-print\job",
+        install_printer._CHUNK,
+    )
+
+    assert all(s["exitCode"] == 0 for s in steps)
+    # The payload was actually split (chunking happened, not one giant command).
+    chunk_scripts = [s for s in scripts if "Add-Content" in s]
+    assert len(chunk_scripts) > 1
+
+    # Replicate pywinrm's encoding and assert every command line clears the limit.
+    for script in scripts:
+        encoded = base64.b64encode(script.encode("utf-16-le")).decode("ascii")
+        cmd_line = f"powershell -encodedcommand {encoded}"
+        assert len(cmd_line) < 8000, f"command line {len(cmd_line)} chars — too long"
