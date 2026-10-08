@@ -35,7 +35,7 @@ vi.mock("@/db/printer-install", () => ({
   enqueueInstall: enqueueMock,
   enqueueList: enqueueListMock,
   enqueueRemove: enqueueRemoveMock,
-  cancelPendingInstall: cancelMock,
+  cancelInstallJob: cancelMock,
   resolveInstallTarget: resolveTargetMock,
 }));
 vi.mock("@/lib/printer-packages", () => ({
@@ -48,7 +48,10 @@ vi.mock("@/lib/auth/session", () => ({
 }));
 vi.mock("next/cache", () => ({ revalidatePath: revalidateMock }));
 
-import { installPrinterAction } from "./printer-install-actions";
+import {
+  cancelInstallJobAction,
+  installPrinterAction,
+} from "./printer-install-actions";
 
 function grant(allowed: boolean) {
   getCurrentUserMock.mockResolvedValue(
@@ -137,5 +140,39 @@ describe("installPrinterAction — enqueue", () => {
       }),
     );
     expect(revalidateMock).toHaveBeenCalledWith("/assets/OPUS-COMP-1");
+  });
+});
+
+describe("cancelInstallJobAction", () => {
+  it("refuses a caller without printer:install and cancels nothing (AC-9)", async () => {
+    grant(false);
+    const res = await cancelInstallJobAction("job-1", "OPUS-COMP-1");
+    expect(res.ok).toBe(false);
+    expect(cancelMock).not.toHaveBeenCalled();
+  });
+
+  it("cancels an active job (pending or in-flight) and revalidates", async () => {
+    grant(true);
+    cancelMock.mockResolvedValue(true);
+    const res = await cancelInstallJobAction("job-1", "OPUS-COMP-1");
+    expect(res.ok).toBe(true);
+    expect(cancelMock).toHaveBeenCalledWith("job-1");
+    expect(revalidateMock).toHaveBeenCalledWith("/assets/OPUS-COMP-1");
+  });
+
+  it("reports when the job already finished (nothing to cancel)", async () => {
+    grant(true);
+    cancelMock.mockResolvedValue(false);
+    const res = await cancelInstallJobAction("job-1", "OPUS-COMP-1");
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/finished/i);
+    expect(revalidateMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects a missing job id", async () => {
+    grant(true);
+    const res = await cancelInstallJobAction("", "OPUS-COMP-1");
+    expect(res.ok).toBe(false);
+    expect(cancelMock).not.toHaveBeenCalled();
   });
 });

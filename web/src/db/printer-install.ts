@@ -288,8 +288,20 @@ export async function getLatestPrinterList(
   };
 }
 
-/** Cancel a still-pending install job. False if it isn't pending. */
-export async function cancelPendingInstall(jobId: string): Promise<boolean> {
+/**
+ * Cancel a still-active install job — `pending`, or a `claimed`/`running` job a
+ * worker is (or was) handling. Marks it `canceled` and stamps `finishedAt`.
+ * Returns false when the job is already terminal (succeeded/failed/canceled) or
+ * doesn't exist.
+ *
+ * Safe to call mid-run: the worker's status post is fenced on
+ * `workerId`+`claimedAt`+`status in (claimed,running)`, so once this flips the
+ * row to `canceled` the worker's late result cleanly no-ops (409 stale). It does
+ * NOT stop work already underway on the target — it just releases the job from
+ * the queue/UI (e.g. a stuck job whose worker died), which is why the UI confirms
+ * before canceling an in-flight one.
+ */
+export async function cancelInstallJob(jobId: string): Promise<boolean> {
   const now = new Date();
   const updated = await db
     .update(printerInstallJobs)
@@ -297,7 +309,7 @@ export async function cancelPendingInstall(jobId: string): Promise<boolean> {
     .where(
       and(
         eq(printerInstallJobs.id, jobId),
-        eq(printerInstallJobs.status, "pending"),
+        inArray(printerInstallJobs.status, ["pending", "claimed", "running"]),
       ),
     )
     .returning({ id: printerInstallJobs.id });
