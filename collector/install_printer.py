@@ -39,12 +39,15 @@ except ImportError:  # pragma: no cover
 
 console = Console()
 
-# Base64 fallback chunk (used only when SMB is unavailable). pywinrm puts each
-# run_ps command on the PowerShell command LINE, which Windows caps at ~32 KB, and
-# pywinrm re-encodes it (UTF-16 + base64, ~2.7x). So the chunk must be tiny:
-# 8 KB base64 → ~22 KB on the wire, under the limit. (This path is slow for big
-# files — SMB is the real transfer.)
-_CHUNK = 8_000
+# Base64 fallback chunk (used only when SMB is unavailable). pywinrm runs each
+# `run_ps` as `powershell -encodedcommand <b64>` through the WinRS **cmd** shell,
+# whose command line is capped at ~8 KB (exceeding it fails with "The command line
+# is too long"). The encoding is UTF-16 + base64 (~2.67x), so a chunk of N base64
+# chars becomes an ~N*2.67 char command line. Keep N well under 8192/2.67 ≈ 3000:
+# at 2 KB the command line is ~5.6 KB, leaving headroom for the wrapper + path.
+# (An earlier 8 KB chunk produced a ~22 KB command line and failed on chunk 0.)
+# This path is slow for big files — SMB is the real transfer.
+_CHUNK = 2_000
 
 
 # ---------------- WinRM helpers ----------------
