@@ -470,6 +470,7 @@ export interface MachineSummary {
   ramGb: number | null;
   freeDiskGb: number | null;
   uptimeHours: number | null;
+  loggedOnUser: string | null;
   status: string;
 }
 

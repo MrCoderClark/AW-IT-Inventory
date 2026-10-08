@@ -511,6 +511,7 @@ function toMachineSummary(r: MachineSummaryRow): MachineSummary {
       typeof health.uptime_hours === "number"
         ? (health.uptime_hours as number)
         : null,
+    loggedOnUser: (health.logged_on_user as string) || null,
     status: r.status ?? "ok",
   };
 }
