@@ -103,7 +103,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
       canInstall ? listPrinterPackages() : Promise.resolve([]),
       canInstall ? getPrinterPrefillOptions() : Promise.resolve([]),
       canInstall ? getLatestPrinterList(id) : Promise.resolve(null),
-      getComplianceStatus(asset.id),
+      getComplianceStatus(id),
     ]);
     // Client-safe package options (no file paths / hashes).
     const installPackages = packages.map((p) => ({
