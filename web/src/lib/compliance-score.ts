@@ -30,6 +30,7 @@ export interface CompliancePosture {
 export interface LocalAdmin {
   name: string;
   isGroup: boolean;
+  enabled: boolean; // false = a disabled local account (inert grant)
 }
 
 export type CheckStatus = "pass" | "warn" | "fail" | "unknown";
