@@ -26,6 +26,7 @@ export interface PostedCompliance {
   updates_last_days?: number | null;
   updates_pending?: number | null;
   system_drive_pct_used?: number | null;
+  local_admins?: string[] | null;
 }
 
 /**
@@ -50,6 +51,7 @@ export async function upsertComplianceStatus(
     updatesLastDays: posted.updates_last_days ?? null,
     updatesPending: posted.updates_pending ?? null,
     systemDrivePctUsed: posted.system_drive_pct_used ?? null,
+    localAdmins: posted.local_admins ?? null,
     assessedAt,
   };
   const { assetId: _pk, ...set } = row;
@@ -128,6 +130,7 @@ export async function getComplianceStatus(
       updatesLastDays: complianceStatus.updatesLastDays,
       updatesPending: complianceStatus.updatesPending,
       systemDrivePctUsed: complianceStatus.systemDrivePctUsed,
+      localAdmins: complianceStatus.localAdmins,
       assessedAt: complianceStatus.assessedAt,
     })
     .from(complianceStatus)
@@ -145,6 +148,7 @@ export async function getComplianceStatus(
     updatesLastDays: r.updatesLastDays,
     updatesPending: r.updatesPending,
     systemDrivePctUsed: r.systemDrivePctUsed,
+    localAdmins: r.localAdmins ?? null,
     assessedAt: r.assessedAt.toISOString(),
   };
 }

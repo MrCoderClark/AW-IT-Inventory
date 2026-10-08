@@ -58,6 +58,7 @@ class Compliance(BaseModel):
     updates_last_days: int | None = None  # days since the last successful update
     updates_pending: int | None = None  # pending count (None in v1 — not read yet)
     system_drive_pct_used: float | None = None  # % full of the system drive
+    local_admins: list[str] | None = None  # members of the local Administrators group
 
 
 class PrinterInfo(BaseModel):

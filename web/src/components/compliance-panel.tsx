@@ -90,6 +90,24 @@ export function CompliancePanel({
           </StatusRow>
         ))}
       </div>
+
+      {posture.localAdmins && posture.localAdmins.length > 0 && (
+        <div className="mt-4 border-t pt-3">
+          <p className="mb-2 text-xs font-medium text-muted-foreground">
+            Local administrators ({posture.localAdmins.length})
+          </p>
+          <ul className="flex flex-wrap gap-1.5">
+            {posture.localAdmins.map((name) => (
+              <li
+                key={name}
+                className="rounded-md border bg-muted/40 px-2 py-0.5 font-mono text-xs"
+              >
+                {name}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </Panel>
   );
 }

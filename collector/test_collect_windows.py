@@ -153,6 +153,7 @@ def test_posture_second_call_populates_compliance(monkeypatch):
                 "updates_last_days": 9,
                 "updates_pending": None,
                 "system_drive_pct_used": 72.5,
+                "local_admins": ["AWINYC\\Domain Admins", "PC1\\localadmin"],
             }
         ).encode(),
     )
@@ -168,8 +169,22 @@ def test_posture_second_call_populates_compliance(monkeypatch):
     assert c.tpm_ready is True
     assert c.updates_last_days == 9
     assert c.system_drive_pct_used == 72.5
+    assert c.local_admins == ["AWINYC\\Domain Admins", "PC1\\localadmin"]
     assert out["hostname"] == "PC1"
     assert out["errors"] == []
+
+
+def test_posture_coerces_single_local_admin_to_a_list(monkeypatch):
+    # ConvertTo-Json collapses a 1-element array to a scalar; _parse_posture coerces.
+    attempted: list[str] = []
+    main = _result(0, std_out=json.dumps({"hostname": "PC1"}).encode())
+    posture = _result(0, std_out=json.dumps({"local_admins": "PC1\\onlyadmin"}).encode())
+    _patch_winrm(monkeypatch, {"alice": main}, attempted, posture=posture)
+
+    out = collect_windows.collect_windows(
+        "10.0.0.5", [5985], [_profile("good", "alice", "pw")], _config()
+    )
+    assert out["compliance"].local_admins == ["PC1\\onlyadmin"]
 
 
 def test_posture_failure_leaves_compliance_none_without_failing_collect(monkeypatch):
