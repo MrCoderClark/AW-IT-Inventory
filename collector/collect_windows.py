@@ -11,7 +11,7 @@ import json
 import winrm
 
 from config import Config, CredentialProfile
-from models import Disk, Hardware, Health, Software
+from models import Compliance, Disk, Hardware, Health, Software
 
 # Single round-trip: gather hardware + OS/health and emit compact JSON.
 PS_COLLECT = r"""
@@ -39,6 +39,33 @@ $swPaths = @(
     'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*')
 $sw = @(Get-ItemProperty $swPaths | Where-Object { $_.DisplayName } | ForEach-Object {
     @{ name = "$($_.DisplayName)"; version = "$($_.DisplayVersion)"; publisher = "$($_.Publisher)"; install_date = "$($_.InstallDate)" } })
+# Security posture (spec 21). Each is best-effort → $null on failure, so an
+# unreadable signal (e.g. BitLocker/TPM on a UAC-filtered token) is "unknown", not
+# an error. The web app derives the 🟢🟡🔴 verdicts + health score from these.
+$bl = try { switch ((Get-BitLockerVolume -MountPoint $env:SystemDrive -ErrorAction Stop).ProtectionStatus) { 1 { 'on' } default { 'off' } } } catch { $null }
+$tpmReady = try { $t = Get-Tpm -ErrorAction Stop; [bool]($t.TpmPresent -and $t.TpmReady) } catch { $null }
+$sb = try { if (Confirm-SecureBootUEFI -ErrorAction Stop) { 'on' } else { 'off' } } catch { $null }
+$mp = try { Get-MpComputerStatus -ErrorAction Stop } catch { $null }
+$defRt = if ($mp) { [bool]$mp.RealTimeProtectionEnabled } else { $null }
+$defAge = if ($mp) { [int]$mp.AntivirusSignatureAge } else { $null }
+$avName = if ($mp -and $mp.AMServiceEnabled) { 'Windows Defender' } else { $null }
+if (-not $avName) {
+    try {
+        $p = Get-CimInstance -Namespace root/SecurityCenter2 -Class AntiVirusProduct -ErrorAction Stop | Select-Object -First 1
+        if ($p) { $avName = "$($p.displayName)"; $defRt = ((([int]$p.productState) -band 0x1000) -ne 0) }
+    } catch {}
+}
+$wuDays = try {
+    $srch = (New-Object -ComObject Microsoft.Update.Session).CreateUpdateSearcher()
+    $n = $srch.GetTotalHistoryCount()
+    $hist = if ($n -gt 0) { $srch.QueryHistory(0, [Math]::Min($n, 50)) } else { @() }
+    $last = $hist | Where-Object { $_.Operation -eq 1 -and $_.ResultCode -eq 2 } | Sort-Object Date -Descending | Select-Object -First 1
+    if ($last) { [int]((Get-Date) - $last.Date).TotalDays } else { $null }
+} catch { $null }
+$sysPct = try {
+    $ld = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$($env:SystemDrive)'" -ErrorAction Stop
+    if ($ld -and $ld.Size -gt 0) { [math]::Round((($ld.Size - $ld.FreeSpace) / $ld.Size) * 100, 1) } else { $null }
+} catch { $null }
 [ordered]@{
     hostname       = $cs.DNSHostName
     manufacturer   = $cs.Manufacturer
@@ -58,6 +85,15 @@ $sw = @(Get-ItemProperty $swPaths | Where-Object { $_.DisplayName } | ForEach-Ob
     free_disk_gb   = $free
     logged_on_user = $cs.UserName
     software       = $sw
+    bitlocker             = $bl
+    defender_realtime     = $defRt
+    defender_sig_age_days = $defAge
+    av_product            = $avName
+    tpm_ready             = $tpmReady
+    secure_boot           = $sb
+    updates_last_days     = $wuDays
+    updates_pending       = $null
+    system_drive_pct_used = $sysPct
 } | ConvertTo-Json -Depth 5 -Compress
 """
 
@@ -77,7 +113,9 @@ def _clean(value) -> str | None:
     return v or None
 
 
-def _parse(data: dict) -> tuple[Hardware, Health, str | None, list[Software]]:
+def _parse(
+    data: dict,
+) -> tuple[Hardware, Health, str | None, list[Software], Compliance]:
     disks = [
         Disk(
             model=d.get("model"),
@@ -117,7 +155,18 @@ def _parse(data: dict) -> tuple[Hardware, Health, str | None, list[Software]]:
         for s in _as_list(data.get("software"))
         if isinstance(s, dict) and _clean(s.get("name"))
     ]
-    return hardware, health, data.get("hostname"), software
+    compliance = Compliance(
+        bitlocker=_clean(data.get("bitlocker")),
+        defender_realtime=data.get("defender_realtime"),
+        defender_sig_age_days=data.get("defender_sig_age_days"),
+        av_product=_clean(data.get("av_product")),
+        tpm_ready=data.get("tpm_ready"),
+        secure_boot=_clean(data.get("secure_boot")),
+        updates_last_days=data.get("updates_last_days"),
+        updates_pending=data.get("updates_pending"),
+        system_drive_pct_used=data.get("system_drive_pct_used"),
+    )
+    return hardware, health, data.get("hostname"), software, compliance
 
 
 def _winrm_username(username: str) -> str:
@@ -141,6 +190,7 @@ def collect_windows(
         "hostname": None,
         "credential_profile": None,
         "software": None,
+        "compliance": None,
         "errors": [],
     }
     port = config.ports.winrm
@@ -174,13 +224,14 @@ def collect_windows(
                 )
                 continue
             raw = (r.std_out or b"").decode("utf-8", errors="ignore").strip() or "{}"
-            hw, health, hostname, software = _parse(json.loads(raw))
+            hw, health, hostname, software, compliance = _parse(json.loads(raw))
             out.update(
                 hardware=hw,
                 health=health,
                 hostname=hostname,
                 credential_profile=prof.id,
                 software=software,
+                compliance=compliance,
             )
             return out
         except Exception as e:  # noqa: BLE001 - report and try the next profile

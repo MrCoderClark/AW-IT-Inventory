@@ -70,6 +70,7 @@ vi.mock("@/db/index", () => ({
 }));
 vi.mock("./counters", () => ({ upsertPrinterCounter: vi.fn() }));
 vi.mock("./software", () => ({ replaceInstalledSoftware: vi.fn() }));
+vi.mock("./compliance", () => ({ upsertComplianceStatus: vi.fn() }));
 vi.mock("./notifications", () => ({ createNotification: vi.fn(async () => null) }));
 
 import { ingestScan } from "./ingest";

@@ -2,6 +2,7 @@ import "server-only";
 
 import { and, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 
+import { upsertComplianceStatus, type PostedCompliance } from "./compliance";
 import { upsertPrinterCounter } from "./counters";
 import { db } from "./index";
 import { createNotification } from "./notifications";
@@ -53,6 +54,9 @@ export interface IngestHost {
   // Installed programs from a Windows collect (spec 15). null/absent = not
   // collected (leave stored software intact); an array = the current set.
   software?: PostedSoftware[] | null;
+  // Security posture from a Windows collect (spec 21). null/absent = not
+  // collected (leave the prior posture row intact).
+  compliance?: PostedCompliance | null;
   errors?: string[];
 }
 export interface IngestPayload {
@@ -318,6 +322,21 @@ export async function ingestScan(payload: IngestPayload): Promise<IngestResult> 
         } catch (err) {
           console.error(
             `[ingest] software inventory failed for asset ${assetId}:`,
+            err,
+          );
+        }
+      }
+
+      // Security posture (spec 21, AC-2): a matched Computer with a compliance
+      // block upserts its current posture (one row per asset). null/absent means
+      // the collector didn't read it (non-Windows or a failure) → leave the prior
+      // row intact. Best-effort — a posture write must never fail the machine ingest.
+      if (assetType === "Computer" && h.compliance) {
+        try {
+          await upsertComplianceStatus(assetId, h.compliance, now);
+        } catch (err) {
+          console.error(
+            `[ingest] compliance upsert failed for asset ${assetId}:`,
             err,
           );
         }

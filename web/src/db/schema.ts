@@ -718,6 +718,30 @@ export const installedSoftware = pgTable(
   ],
 );
 
+// ── Compliance / device health posture (spec 21) ─────────────────────────────
+// Current security-posture signals per Computer asset — no history in v1 (like
+// installed_software / printer_counters). Values are stored exactly as the
+// collector observed them; a NULL means "unknown" (the signal was unreadable,
+// e.g. BitLocker/TPM on a UAC-filtered token). The health score and the
+// 🟢/🟡/🔴 verdicts are DERIVED at read time (src/lib/compliance-score.ts), never
+// stored, so the rubric can change with no migration.
+export const complianceStatus = pgTable("compliance_status", {
+  // 1:1 with the asset; PK = assetId, so an upsert replaces the latest state.
+  assetId: uuid("asset_id")
+    .primaryKey()
+    .references(() => assets.id, { onDelete: "cascade" }),
+  bitlocker: text("bitlocker"), // "on" | "off" | null=unknown (system drive)
+  defenderRealtime: boolean("defender_realtime"), // real-time protection on?
+  defenderSigAgeDays: integer("defender_sig_age_days"),
+  avProduct: text("av_product"), // Defender or 3rd-party product name
+  tpmReady: boolean("tpm_ready"), // present AND ready
+  secureBoot: text("secure_boot"), // "on" | "off" | null
+  updatesLastDays: integer("updates_last_days"), // days since last successful update
+  updatesPending: integer("updates_pending"), // pending count (null in v1)
+  systemDrivePctUsed: doublePrecision("system_drive_pct_used"), // % full
+  assessedAt: timestamp("assessed_at", { withTimezone: true }).notNull(),
+});
+
 // ── Device assignment history (spec 16) ──────────────────────────────────────
 // The custody log: one row per assignment of a device to a person. A row opens
 // when a device is handed out (`assignedAt`/`assignedBy` set, `unassignedAt`
