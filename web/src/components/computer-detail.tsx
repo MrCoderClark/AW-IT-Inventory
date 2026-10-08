@@ -39,7 +39,9 @@ import {
 } from "@/components/asset-form-dialog";
 import { AssetImageUpload } from "@/components/asset-image-upload";
 import { AssignmentControls } from "@/components/assignment-controls";
+import { CompliancePanel } from "@/components/compliance-panel";
 import { PrinterInstallPanel } from "@/components/printer-install-panel";
+import type { CompliancePosture } from "@/lib/compliance-score";
 import type {
   PackageOption,
   PrinterOption,
@@ -125,6 +127,7 @@ export function ComputerDetail({
   installPackages = [],
   printerOptions = [],
   livePrinters = null,
+  compliancePosture = null,
 }: {
   asset: Asset;
   machine?: MachineSummary;
@@ -141,6 +144,7 @@ export function ComputerDetail({
   installPackages?: PackageOption[];
   printerOptions?: PrinterOption[];
   livePrinters?: PrinterListSnapshot | null;
+  compliancePosture?: CompliancePosture | null;
 }) {
   const router = useRouter();
   const [tab, setTab] = React.useState("overview");
@@ -303,6 +307,7 @@ export function ComputerDetail({
           <TabsTab value="overview">Overview</TabsTab>
           <TabsTab value="livescan">Live scan</TabsTab>
           <TabsTab value="software">Software</TabsTab>
+          <TabsTab value="compliance">Compliance</TabsTab>
           <TabsTab value="printers">Printers</TabsTab>
           <TabsTab value="assignment">Assignment</TabsTab>
           <TabsTab value="activity">Activity</TabsTab>
@@ -514,7 +519,12 @@ export function ComputerDetail({
           </Panel>
         </TabsPanel>
 
-        {/* -------- Assignment -------- */}
+        {/* -------- Compliance -------- */}
+        <TabsPanel value="compliance">
+          <CompliancePanel posture={compliancePosture} />
+        </TabsPanel>
+
+        {/* -------- Printers -------- */}
         <TabsPanel value="printers">
           <PrinterInstallPanel
             assetTag={asset.id}
