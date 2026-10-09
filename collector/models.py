@@ -53,6 +53,8 @@ class Software(BaseModel):
     version: str | None = None
     publisher: str | None = None
     install_date: str | None = None
+    install_location: str | None = None
+    arch: str | None = None  # "x64" | "x86" | "user" (from the registry hive)
 
 
 class LocalAdmin(BaseModel):

@@ -46,7 +46,8 @@ $swPaths = @(
     'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
     'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*')
 $sw = @(Get-ItemProperty $swPaths | Where-Object { $_.DisplayName } | ForEach-Object {
-    @{ name = "$($_.DisplayName)"; version = "$($_.DisplayVersion)"; publisher = "$($_.Publisher)"; install_date = "$($_.InstallDate)" } })
+    $arch = if ($_.PSPath -match 'WOW6432Node') { 'x86' } elseif ($_.PSPath -match 'HKEY_CURRENT_USER') { 'user' } else { 'x64' }
+    @{ name = "$($_.DisplayName)"; version = "$($_.DisplayVersion)"; publisher = "$($_.Publisher)"; install_date = "$($_.InstallDate)"; install_location = "$($_.InstallLocation)"; arch = $arch } })
 [ordered]@{
     hostname       = $cs.DNSHostName
     manufacturer   = $cs.Manufacturer
@@ -198,6 +199,8 @@ def _parse(data: dict) -> tuple[Hardware, Health, str | None, list[Software]]:
             version=_clean(s.get("version")),
             publisher=_clean(s.get("publisher")),
             install_date=_clean(s.get("install_date")),
+            install_location=_clean(s.get("install_location")),
+            arch=_clean(s.get("arch")),
         )
         for s in _as_list(data.get("software"))
         if isinstance(s, dict) and _clean(s.get("name"))

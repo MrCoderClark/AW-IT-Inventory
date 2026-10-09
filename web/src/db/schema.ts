@@ -701,6 +701,8 @@ export const installedSoftware = pgTable(
     version: text("version"),
     publisher: text("publisher"),
     installDate: text("install_date"), // registry value is a string, stored as-is
+    installLocation: text("install_location"), // spec 22
+    architecture: text("architecture"), // "x64" | "x86" | "user" (spec 22)
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull(),
   },
   (t) => [
