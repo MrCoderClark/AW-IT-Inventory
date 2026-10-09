@@ -60,6 +60,7 @@ import {
   fmtDate,
 } from "@/components/detail-ui";
 import { StatusBadge } from "@/components/status-badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -544,10 +545,25 @@ export function ComputerDetail({
                     className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0"
                   >
                     <span className="min-w-0">
-                      <span className="block truncate font-medium">{s.name}</span>
+                      <span className="flex items-center gap-2">
+                        <span className="truncate font-medium">{s.name}</span>
+                        {s.architecture && (
+                          <Badge variant="outline" className="shrink-0 font-mono text-[10px] uppercase">
+                            {s.architecture}
+                          </Badge>
+                        )}
+                      </span>
                       {s.publisher && (
                         <span className="block truncate text-xs text-muted-foreground">
                           {s.publisher}
+                        </span>
+                      )}
+                      {s.installLocation && (
+                        <span
+                          className="block truncate font-mono text-[11px] text-muted-foreground"
+                          title={s.installLocation}
+                        >
+                          {s.installLocation}
                         </span>
                       )}
                     </span>

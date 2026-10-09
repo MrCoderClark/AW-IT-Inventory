@@ -1,17 +1,10 @@
-import Link from "next/link";
-import { AppWindow, ChevronRight, Lock } from "lucide-react";
+import { Code2, Lock, Monitor, MonitorSmartphone, Tags } from "lucide-react";
 
+import { HeroHeader } from "@/components/hero-header";
 import { PagePlaceholder } from "@/components/page-placeholder";
-import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { getSoftwareInventory } from "@/db/software";
+import { SoftwareInventory } from "@/components/software-inventory";
+import { StatCard } from "@/components/dashboard/stat-card";
+import { getSoftwareInventory, getSoftwareStats } from "@/db/software";
 import { hasPermission, requireUser } from "@/lib/auth/session";
 
 // The watchlist and its matches change on each scan or admin edit; read fresh.
@@ -31,81 +24,47 @@ export default async function Page() {
     );
   }
 
-  const rows = await getSoftwareInventory();
+  // Managing the watchlist reuses scan:write (spec 15, AC-7).
+  const canWrite = hasPermission(user, "scan:write");
+
+  const [rows, stats] = await Promise.all([
+    getSoftwareInventory(),
+    getSoftwareStats(),
+  ]);
 
   return (
-    <div className="mx-auto flex max-w-[1100px] flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-extrabold tracking-tight">Software</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Tracked software titles across the fleet: how many computers have each,
-          and which versions are out there. Manage the watchlist on the Admin page.
-        </p>
+    <div className="mx-auto flex max-w-[1400px] flex-col gap-6">
+      <HeroHeader
+        title="Software"
+        subtitle="Track software titles across the fleet: computer counts, versions and publishers. Manage the watchlist here or on the Admin page."
+        icon={<Code2 />}
+      />
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <StatCard
+          icon={Tags}
+          colorVar="var(--chart-1)"
+          label="Total software titles"
+          value={stats.titleCount}
+          meta="on the watchlist"
+        />
+        <StatCard
+          icon={Monitor}
+          colorVar="var(--chart-2)"
+          label="Total computers"
+          value={stats.computerCount}
+          meta="with tracked software installed"
+        />
+        <StatCard
+          icon={MonitorSmartphone}
+          colorVar="var(--chart-3)"
+          label="Unique versions"
+          value={stats.versionCount}
+          meta="across all tracked software"
+        />
       </div>
 
-      {rows.length === 0 ? (
-        <PagePlaceholder
-          title="No software tracked yet"
-          description="Add titles to the watchlist on the Admin page. Once a Windows scan runs, each tracked title shows here with its fleet count and versions."
-          icon={AppWindow}
-        />
-      ) : (
-        <div className="overflow-hidden rounded-xl border bg-card">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Title</TableHead>
-                <TableHead className="w-[120px] text-right">Computers</TableHead>
-                <TableHead>Versions</TableHead>
-                <TableHead className="w-[40px]" aria-label="Open" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((r) => (
-                <TableRow key={r.id} className="group">
-                  <TableCell>
-                    <Link
-                      href={`/software/${r.id}`}
-                      className="font-medium hover:underline"
-                    >
-                      {r.name}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-right font-mono tabular-nums">
-                    {r.machineCount === 0 ? (
-                      <span className="text-muted-foreground">0</span>
-                    ) : (
-                      r.machineCount
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {r.versions.length === 0 ? (
-                      <span className="text-sm text-muted-foreground">—</span>
-                    ) : (
-                      <span className="flex flex-wrap gap-1">
-                        {r.versions.map((v) => (
-                          <Badge key={v} variant="secondary" className="font-mono">
-                            {v}
-                          </Badge>
-                        ))}
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Link
-                      href={`/software/${r.id}`}
-                      aria-label={`View computers with ${r.name}`}
-                      className="grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                    >
-                      <ChevronRight className="size-4" />
-                    </Link>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+      <SoftwareInventory rows={rows} canWrite={canWrite} />
     </div>
   );
 }
