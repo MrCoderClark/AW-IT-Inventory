@@ -97,6 +97,7 @@ import {
   removeTrackedSoftware,
   replaceInstalledSoftware,
   getSoftwareInventory,
+  getSoftwareStats,
   getSoftwareTitleDetail,
   getInstalledSoftware,
 } from "./software";
@@ -253,10 +254,20 @@ describe("removeTrackedSoftware (AC-1)", () => {
   });
 });
 
-describe("getSoftwareInventory — aggregate shape (AC-4)", () => {
+describe("getSoftwareInventory — aggregate shape (AC-4, spec 22)", () => {
   it("sorts versions numerically and passes the machine count through", async () => {
+    const seen = new Date("2026-10-01T12:00:00Z");
     H.state.selectResults = [
-      [{ id: "t1", name: "Chrome", machineCount: 2, versions: ["2", "10", "1"] }],
+      [
+        {
+          id: "t1",
+          name: "Chrome",
+          machineCount: 2,
+          versions: ["2", "10", "1"],
+          publishers: ["Google LLC"],
+          lastSeen: seen,
+        },
+      ],
     ];
     const rows = await getSoftwareInventory();
     expect(rows[0]).toEqual({
@@ -264,15 +275,71 @@ describe("getSoftwareInventory — aggregate shape (AC-4)", () => {
       name: "Chrome",
       machineCount: 2,
       versions: ["1", "2", "10"],
+      publishers: ["Google LLC"],
+      lastSeen: seen.toISOString(),
     });
   });
 
-  it("shows a zero-count title with no versions", async () => {
+  it("sorts publishers case-insensitively", async () => {
     H.state.selectResults = [
-      [{ id: "t2", name: "Slack", machineCount: 0, versions: null }],
+      [
+        {
+          id: "t3",
+          name: "Office",
+          machineCount: 1,
+          versions: [],
+          publishers: ["microsoft", "Adobe Inc."],
+          lastSeen: null,
+        },
+      ],
     ];
     const rows = await getSoftwareInventory();
-    expect(rows[0]).toMatchObject({ machineCount: 0, versions: [] });
+    expect(rows[0].publishers).toEqual(["Adobe Inc.", "microsoft"]);
+  });
+
+  it("shows a zero-count title with no versions, publishers, or last-seen", async () => {
+    H.state.selectResults = [
+      [
+        {
+          id: "t2",
+          name: "Slack",
+          machineCount: 0,
+          versions: null,
+          publishers: null,
+          lastSeen: null,
+        },
+      ],
+    ];
+    const rows = await getSoftwareInventory();
+    expect(rows[0]).toMatchObject({
+      machineCount: 0,
+      versions: [],
+      publishers: [],
+      lastSeen: "",
+    });
+  });
+});
+
+describe("getSoftwareStats — dashboard KPIs (spec 22)", () => {
+  it("returns the title, computer and version counts", async () => {
+    H.state.selectResults = [
+      [{ count: 3 }], // tracked_software count
+      [{ computerCount: 7, versionCount: 12 }], // installed_software distinct counts
+    ];
+    expect(await getSoftwareStats()).toEqual({
+      titleCount: 3,
+      computerCount: 7,
+      versionCount: 12,
+    });
+  });
+
+  it("coalesces missing rows to zero", async () => {
+    H.state.selectResults = [[], []];
+    expect(await getSoftwareStats()).toEqual({
+      titleCount: 0,
+      computerCount: 0,
+      versionCount: 0,
+    });
   });
 });
 

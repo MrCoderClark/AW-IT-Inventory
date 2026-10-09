@@ -158,12 +158,22 @@ export interface PrinterActivityEvent {
 /* ---------------- Software inventory (spec 15) ---------------- */
 
 /** One tracked title on the /software aggregate page (AC-4): its fleet install
-   count (distinct Computer assets) and the distinct versions seen. */
+   count (distinct Computer assets) and the distinct versions seen. The publisher
+   and last-seen fields back the spec-22 dashboard columns/filters. */
 export interface SoftwareInventoryRow {
   id: string; // tracked_software id
   name: string; // the tracked title
   machineCount: number; // distinct Computer assets with a matching row (0 shown)
   versions: string[]; // distinct versions seen across the fleet
+  publishers: string[]; // distinct publishers seen across the fleet (spec 22)
+  lastSeen: string; // ISO of the most recent scan that recorded a match ("" if none)
+}
+
+/** The /software dashboard KPI tiles (spec 22). */
+export interface SoftwareStats {
+  titleCount: number; // tracked titles on the watchlist
+  computerCount: number; // distinct Computer assets with any tracked software
+  versionCount: number; // distinct versions across all tracked software
 }
 
 /** A Computer asset that has a tracked title, for the per-title drill-down
