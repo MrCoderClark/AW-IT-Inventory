@@ -57,6 +57,24 @@ def test_parse_extracts_software_entries():
     assert s.install_date == "20240901"
 
 
+def test_parse_extracts_install_location_and_arch():
+    # spec 22: install location + architecture (from the registry hive).
+    _, _, _, software = _parse(
+        _base(
+            [
+                {
+                    "name": "7-Zip",
+                    "version": "24.09",
+                    "install_location": "C:\\Program Files\\7-Zip\\",
+                    "arch": "x64",
+                }
+            ]
+        )
+    )
+    assert software[0].install_location == "C:\\Program Files\\7-Zip\\"
+    assert software[0].arch == "x64"
+
+
 def test_parse_normalizes_blank_fields_to_none():
     _, _, _, software = _parse(
         _base([{"name": "7-Zip", "version": "", "publisher": "   ", "install_date": ""}])
