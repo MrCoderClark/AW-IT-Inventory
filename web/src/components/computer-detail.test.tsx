@@ -83,6 +83,7 @@ const software: InstalledSoftwareItem[] = [
     publisher: "Google LLC",
     architecture: "x64",
     installLocation: "C:\\Program Files\\Google\\Chrome\\Application\\",
+    iconUrl: null,
   },
 ];
 

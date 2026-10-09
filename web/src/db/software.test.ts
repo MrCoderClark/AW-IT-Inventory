@@ -277,7 +277,30 @@ describe("getSoftwareInventory — aggregate shape (AC-4, spec 22)", () => {
       versions: ["1", "2", "10"],
       publishers: ["Google LLC"],
       lastSeen: seen.toISOString(),
+      iconUrl: null, // no custom icon, "Chrome" not in the built-in registry
     });
+  });
+
+  it("resolves a custom icon to the cache-busted route url", async () => {
+    const seen = new Date("2026-10-02T08:00:00Z");
+    H.state.selectResults = [
+      [
+        {
+          id: "t9",
+          name: "Chrome",
+          machineCount: 1,
+          versions: [],
+          publishers: [],
+          lastSeen: null,
+          iconKey: "software-icons/t9.png",
+          iconUpdatedAt: seen,
+        },
+      ],
+    ];
+    const rows = await getSoftwareInventory();
+    expect(rows[0].iconUrl).toBe(
+      `/api/software/t9/icon?v=${encodeURIComponent(seen.toISOString())}`,
+    );
   });
 
   it("sorts publishers case-insensitively", async () => {
@@ -386,6 +409,10 @@ describe("getInstalledSoftware — detail panel (AC-6)", () => {
           publisher: null,
           architecture: null,
           installLocation: null,
+          trackedId: "tc",
+          trackedName: "Chrome",
+          iconKey: null,
+          iconUpdatedAt: null,
         },
       ],
     ];
@@ -397,11 +424,13 @@ describe("getInstalledSoftware — detail panel (AC-6)", () => {
         publisher: "",
         architecture: "",
         installLocation: "",
+        iconUrl: null,
       },
     ]);
   });
 
-  it("passes through architecture and install location (spec 22)", async () => {
+  it("passes through architecture, install location and the title icon (spec 22)", async () => {
+    const seen = new Date("2026-10-03T00:00:00Z");
     H.state.selectResults = [
       [
         {
@@ -410,6 +439,10 @@ describe("getInstalledSoftware — detail panel (AC-6)", () => {
           publisher: "Igor Pavlov",
           architecture: "x64",
           installLocation: "C:\\Program Files\\7-Zip\\",
+          trackedId: "tz",
+          trackedName: "7-Zip",
+          iconKey: "software-icons/tz.png",
+          iconUpdatedAt: seen,
         },
       ],
     ];
@@ -420,6 +453,7 @@ describe("getInstalledSoftware — detail panel (AC-6)", () => {
         publisher: "Igor Pavlov",
         architecture: "x64",
         installLocation: "C:\\Program Files\\7-Zip\\",
+        iconUrl: `/api/software/tz/icon?v=${encodeURIComponent(seen.toISOString())}`,
       },
     ]);
   });

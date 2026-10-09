@@ -1,15 +1,17 @@
 "use client";
 
 import * as React from "react";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Loader2, Package, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
   addTrackedSoftwareAction,
   removeTrackedSoftwareAction,
 } from "@/app/(app)/software-actions";
+import { SoftwareIconUpload } from "@/components/software-icon-upload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import type { TrackedSoftwareItem } from "@/lib/data";
 
 /**
  * The tracked-software watchlist manager on the Admin page (spec 15, AC-1). Only
@@ -21,7 +23,7 @@ import { Input } from "@/components/ui/input";
 export function TrackedSoftwareCard({
   titles,
 }: {
-  titles: { id: string; name: string }[];
+  titles: TrackedSoftwareItem[];
 }) {
   const [name, setName] = React.useState("");
   const [isAdding, startAdd] = React.useTransition();
@@ -77,11 +79,28 @@ export function TrackedSoftwareCard({
       {titles.length > 0 ? (
         <ul className="divide-y rounded-lg border">
           {titles.map((t) => (
-            <li
-              key={t.id}
-              className="flex items-center justify-between gap-2 px-3 py-2"
-            >
-              <span className="truncate text-sm font-medium">{t.name}</span>
+            <li key={t.id} className="flex items-center gap-2 px-3 py-2">
+              {t.iconUrl ? (
+                <img
+                  src={t.iconUrl}
+                  alt=""
+                  aria-hidden
+                  className="size-7 shrink-0 rounded-md object-contain"
+                />
+              ) : (
+                <span
+                  aria-hidden
+                  className="grid size-7 shrink-0 place-items-center rounded-md bg-accent text-primary [&_svg]:size-4"
+                >
+                  <Package />
+                </span>
+              )}
+              <span className="flex-1 truncate text-sm font-medium">{t.name}</span>
+              <SoftwareIconUpload
+                id={t.id}
+                name={t.name}
+                hasCustomIcon={t.hasCustomIcon}
+              />
               <Button
                 variant="ghost"
                 size="icon"

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Lock } from "lucide-react";
+import { AppWindow, ArrowLeft, Lock } from "lucide-react";
 
 import { PagePlaceholder } from "@/components/page-placeholder";
 import { Badge } from "@/components/ui/badge";
@@ -59,15 +59,32 @@ export default async function Page({
         Back to software
       </Link>
 
-      <div>
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-          Tracked software
-        </p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight">{title.name}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Installed on {machines.length} computer
-          {machines.length === 1 ? "" : "s"}.
-        </p>
+      <div className="flex items-center gap-3">
+        {title.iconUrl ? (
+          <img
+            src={title.iconUrl}
+            alt=""
+            aria-hidden
+            className="size-11 shrink-0 rounded-lg object-contain"
+          />
+        ) : (
+          <span
+            aria-hidden
+            className="grid size-11 shrink-0 place-items-center rounded-lg bg-accent text-primary [&_svg]:size-6"
+          >
+            <AppWindow />
+          </span>
+        )}
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Tracked software
+          </p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight">{title.name}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Installed on {machines.length} computer
+            {machines.length === 1 ? "" : "s"}.
+          </p>
+        </div>
       </div>
 
       {machines.length === 0 ? (

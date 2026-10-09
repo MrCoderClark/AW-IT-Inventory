@@ -167,6 +167,15 @@ export interface SoftwareInventoryRow {
   versions: string[]; // distinct versions seen across the fleet
   publishers: string[]; // distinct publishers seen across the fleet (spec 22)
   lastSeen: string; // ISO of the most recent scan that recorded a match ("" if none)
+  iconUrl: string | null; // resolved icon (custom → registry → null glyph) (spec 22)
+}
+
+/** A tracked title for the Admin watchlist card (spec 22): name + icon state. */
+export interface TrackedSoftwareItem {
+  id: string;
+  name: string;
+  iconUrl: string | null; // resolved icon (custom upload → built-in registry → null)
+  hasCustomIcon: boolean; // true when an admin uploaded one (Remove is offered)
 }
 
 /** The /software dashboard KPI tiles (spec 22). */
@@ -193,6 +202,7 @@ export interface InstalledSoftwareItem {
   publisher: string;
   architecture: string; // "x64" | "x86" | "user" (spec 22); "" when unknown
   installLocation: string; // registry InstallLocation (spec 22); "" when unknown
+  iconUrl: string | null; // the matched title's resolved icon (spec 22)
 }
 
 /* ---------------- Notifications (spec 19) ---------------- */

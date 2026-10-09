@@ -31,6 +31,7 @@ function makeRow(overrides: Partial<SoftwareInventoryRow> = {}): SoftwareInvento
     versions: ["138.0.7204.96"],
     publishers: ["Google LLC"],
     lastSeen: "2026-05-08T09:42:00Z",
+    iconUrl: null,
     ...overrides,
   };
 }
@@ -57,6 +58,22 @@ describe("SoftwareInventory — render (AC-4)", () => {
   it("shows the empty state when nothing is tracked", () => {
     render(<SoftwareInventory rows={[]} canWrite />);
     expect(screen.getByText(/No software tracked yet/i)).toBeInTheDocument();
+  });
+
+  it("renders a resolved icon when present, generic glyph otherwise", () => {
+    const { container } = render(
+      <SoftwareInventory
+        rows={[
+          makeRow({ id: "av", name: "AV Defender", iconUrl: "/software-icons/av-defender.png" }),
+          makeRow({ id: "cr", name: "Google Chrome", iconUrl: null }),
+        ]}
+        canWrite
+      />,
+    );
+    // AV Defender has an icon; Chrome falls back to the glyph (one img total).
+    const imgs = container.querySelectorAll("img");
+    expect(imgs).toHaveLength(1);
+    expect(imgs[0].getAttribute("src")).toBe("/software-icons/av-defender.png");
   });
 
   it("collapses multiple versions to the latest plus a +N hint, and shows Multiple publishers", () => {

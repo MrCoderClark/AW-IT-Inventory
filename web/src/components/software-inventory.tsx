@@ -217,12 +217,7 @@ export function SoftwareInventory({
                       href={`/software/${r.id}`}
                       className="flex items-center gap-2.5 font-medium hover:underline"
                     >
-                      <span
-                        aria-hidden
-                        className="grid size-7 shrink-0 place-items-center rounded-md bg-accent text-primary [&_svg]:size-4"
-                      >
-                        <Package />
-                      </span>
+                      <SoftwareIcon iconUrl={r.iconUrl} name={r.name} />
                       {r.name}
                     </Link>
                   </TableCell>
@@ -323,6 +318,35 @@ export function SoftwareInventory({
 
       {canWrite && <AddSoftwareDialog open={addOpen} onOpenChange={setAddOpen} />}
     </div>
+  );
+}
+
+/** A title's brand icon (resolved custom → registry), falling back to a glyph. */
+function SoftwareIcon({
+  iconUrl,
+  name,
+}: {
+  iconUrl: string | null;
+  name: string;
+}) {
+  if (iconUrl) {
+    return (
+      <img
+        src={iconUrl}
+        alt=""
+        aria-hidden
+        data-testid={`software-icon-${name}`}
+        className="size-7 shrink-0 rounded-md object-contain"
+      />
+    );
+  }
+  return (
+    <span
+      aria-hidden
+      className="grid size-7 shrink-0 place-items-center rounded-md bg-accent text-primary [&_svg]:size-4"
+    >
+      <Package />
+    </span>
   );
 }
 

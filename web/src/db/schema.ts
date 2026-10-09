@@ -671,6 +671,11 @@ export const trackedSoftware = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     name: text("name").notNull(), // the tracked title AND the match term
+    // Admin-uploaded brand icon (spec 22): the S3 object key `software-icons/{id}.png`
+    // (null = use the built-in registry / generic glyph). `iconUpdatedAt` cache-busts
+    // the serve URL when an admin replaces the icon.
+    iconKey: text("icon_key"),
+    iconUpdatedAt: timestamp("icon_updated_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

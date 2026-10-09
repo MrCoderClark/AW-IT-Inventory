@@ -20,6 +20,21 @@ import type { AllowedImageType } from "@/lib/storage";
 export const MAX_ORIGINAL_DIM = 2000;
 /** Longest-edge size for the generated thumbnail. */
 export const THUMB_DIM = 400;
+/** Longest-edge size for an admin-uploaded software icon (spec 22). */
+export const ICON_DIM = 128;
+
+/**
+ * Normalize an admin-uploaded software icon (spec 22) to a small PNG: contained
+ * within ICON_DIM (never upscaled), EXIF orientation baked in, transparency
+ * preserved. Output is always PNG so the serve route can assume `image/png`.
+ */
+export async function processIcon(bytes: Buffer): Promise<Buffer> {
+  return sharp(bytes, { failOn: "none" })
+    .rotate()
+    .resize(ICON_DIM, ICON_DIM, { fit: "inside", withoutEnlargement: true })
+    .png()
+    .toBuffer();
+}
 
 export type ProcessedImage = {
   /** The (possibly downscaled) original, re-encoded in its original format. */
