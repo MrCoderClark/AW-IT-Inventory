@@ -26,10 +26,14 @@ vi.mock("@/app/(app)/software-actions", () => ({
 vi.mock("sonner", () => ({
   toast: Object.assign(vi.fn(), { success: toastSuccess, error: toastError }),
 }));
+// The icon-upload control (rendered per row) pulls in the router.
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
+}));
 
 const titles = [
-  { id: "t1", name: "Google Chrome" },
-  { id: "t2", name: "7-Zip" },
+  { id: "t1", name: "Google Chrome", iconUrl: null, hasCustomIcon: false },
+  { id: "t2", name: "7-Zip", iconUrl: "/api/software/t2/icon", hasCustomIcon: true },
 ];
 
 beforeEach(() => vi.clearAllMocks());
