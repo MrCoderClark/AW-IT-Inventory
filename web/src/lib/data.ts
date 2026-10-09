@@ -191,6 +191,8 @@ export interface InstalledSoftwareItem {
   name: string; // the actual DisplayName found
   version: string;
   publisher: string;
+  architecture: string; // "x64" | "x86" | "user" (spec 22); "" when unknown
+  installLocation: string; // registry InstallLocation (spec 22); "" when unknown
 }
 
 /* ---------------- Notifications (spec 19) ---------------- */

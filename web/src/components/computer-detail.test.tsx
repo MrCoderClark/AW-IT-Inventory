@@ -77,7 +77,13 @@ const machine: MachineSummary = {
 };
 
 const software: InstalledSoftwareItem[] = [
-  { name: "Google Chrome", version: "128.0", publisher: "Google LLC" },
+  {
+    name: "Google Chrome",
+    version: "128.0",
+    publisher: "Google LLC",
+    architecture: "x64",
+    installLocation: "C:\\Program Files\\Google\\Chrome\\Application\\",
+  },
 ];
 
 const history: AssignmentEvent[] = [
@@ -162,6 +168,11 @@ describe("ComputerDetail — tabs + content (AC-4.2, AC-4.3)", () => {
     renderDetail();
     await user.click(screen.getByRole("tab", { name: "Software" }));
     expect(screen.getByText("Google Chrome")).toBeInTheDocument();
+    // spec 22: architecture badge + install location are shown.
+    expect(screen.getByText("x64")).toBeInTheDocument();
+    expect(
+      screen.getByText("C:\\Program Files\\Google\\Chrome\\Application\\"),
+    ).toBeInTheDocument();
   });
 
   it("Assignment tab shows the current holder in history", async () => {

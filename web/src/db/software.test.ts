@@ -377,13 +377,50 @@ describe("getSoftwareTitleDetail — drill-down grouping (AC-5)", () => {
 });
 
 describe("getInstalledSoftware — detail panel (AC-6)", () => {
-  it("maps null version/publisher to empty strings", async () => {
+  it("maps null fields to empty strings", async () => {
     H.state.selectResults = [
-      [{ name: "Google Chrome", version: null, publisher: null }],
+      [
+        {
+          name: "Google Chrome",
+          version: null,
+          publisher: null,
+          architecture: null,
+          installLocation: null,
+        },
+      ],
     ];
     const items = await getInstalledSoftware("PC-A");
     expect(items).toEqual([
-      { name: "Google Chrome", version: "", publisher: "" },
+      {
+        name: "Google Chrome",
+        version: "",
+        publisher: "",
+        architecture: "",
+        installLocation: "",
+      },
+    ]);
+  });
+
+  it("passes through architecture and install location (spec 22)", async () => {
+    H.state.selectResults = [
+      [
+        {
+          name: "7-Zip",
+          version: "24.09",
+          publisher: "Igor Pavlov",
+          architecture: "x64",
+          installLocation: "C:\\Program Files\\7-Zip\\",
+        },
+      ],
+    ];
+    expect(await getInstalledSoftware("PC-A")).toEqual([
+      {
+        name: "7-Zip",
+        version: "24.09",
+        publisher: "Igor Pavlov",
+        architecture: "x64",
+        installLocation: "C:\\Program Files\\7-Zip\\",
+      },
     ]);
   });
 
