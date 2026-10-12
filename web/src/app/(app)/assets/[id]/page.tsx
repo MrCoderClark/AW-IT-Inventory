@@ -17,6 +17,7 @@ import {
 import { listPrinterPackages } from "@/lib/printer-packages";
 import { listDeploymentsForAssetTag } from "@/db/software-deploy";
 import { listSoftwarePackages } from "@/db/software-packages";
+import { listRemoteSessionsForAsset } from "@/db/remote-sessions";
 import { getPrinterActivity, getPrinterNetworkHealth } from "@/db/printers";
 import {
   getAssetAssigneeId,
@@ -97,6 +98,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
       compliancePosture,
       deployPkgs,
       deployHistoryRows,
+      remoteSessions,
     ] = await Promise.all([
       getMachineSummary(id),
       canWrite ? getAssetAssigneeId(id) : Promise.resolve(null),
@@ -112,6 +114,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
       getComplianceStatus(id),
       canDeploy ? listSoftwarePackages() : Promise.resolve([]),
       canDeploy ? listDeploymentsForAssetTag(id) : Promise.resolve([]),
+      canRemote ? listRemoteSessionsForAsset(id) : Promise.resolve([]),
     ]);
     // Client-safe package options (no file paths / hashes).
     const installPackages = packages.map((p) => ({
@@ -169,6 +172,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
         canScan={canScan}
         canInstall={canInstall}
         canRemote={canRemote}
+        remoteSessions={remoteSessions}
         canDeploy={canDeploy}
         installJobs={installJobs}
         installPackages={installPackages}
