@@ -27,6 +27,7 @@ import {
   ScanLine,
   ShieldCheck,
   Tag as TagIcon,
+  TerminalSquare,
   Trash2,
   User,
 } from "lucide-react";
@@ -59,6 +60,7 @@ import {
   deriveActivity,
   fmtDate,
 } from "@/components/detail-ui";
+import { RemoteTerminal } from "@/components/remote-terminal";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -125,6 +127,7 @@ export function ComputerDetail({
   canWrite = false,
   canScan = false,
   canInstall = false,
+  canRemote = false,
   installJobs = [],
   installPackages = [],
   printerOptions = [],
@@ -142,6 +145,7 @@ export function ComputerDetail({
   canWrite?: boolean;
   canScan?: boolean;
   canInstall?: boolean;
+  canRemote?: boolean;
   installJobs?: InstallJobListItem[];
   installPackages?: PackageOption[];
   printerOptions?: PrinterOption[];
@@ -311,6 +315,7 @@ export function ComputerDetail({
           <TabsTab value="software">Software</TabsTab>
           <TabsTab value="compliance">Compliance</TabsTab>
           <TabsTab value="printers">Printers</TabsTab>
+          {canRemote && <TabsTab value="remote">Remote Actions</TabsTab>}
           <TabsTab value="assignment">Assignment</TabsTab>
           <TabsTab value="activity">Activity</TabsTab>
         </TabsList>
@@ -616,6 +621,15 @@ export function ComputerDetail({
             livePrinters={livePrinters}
           />
         </TabsPanel>
+
+        {/* -------- Remote Actions (spec 24) -------- */}
+        {canRemote && (
+          <TabsPanel value="remote">
+            <Panel icon={<TerminalSquare />} title="Remote Terminal">
+              <RemoteTerminal assetTag={asset.id} />
+            </Panel>
+          </TabsPanel>
+        )}
 
         <TabsPanel value="assignment" className="flex flex-col gap-5">
           {canWrite && (

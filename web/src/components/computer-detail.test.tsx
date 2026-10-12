@@ -38,6 +38,10 @@ vi.mock("@/app/(app)/people-actions", () => ({
   returnAssetAction: vi.fn(),
 }));
 vi.mock("@/app/(app)/media-actions", () => ({ setAssetImage: vi.fn() }));
+vi.mock("@/app/(app)/remote-actions", () => ({
+  startRemoteSessionAction: vi.fn(),
+  endRemoteSessionAction: vi.fn(),
+}));
 
 function makeAsset(overrides: Partial<Asset> = {}): Asset {
   return {

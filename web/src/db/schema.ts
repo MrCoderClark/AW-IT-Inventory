@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
+  bigint,
   boolean,
   date,
   doublePrecision,
@@ -905,6 +906,99 @@ export const dashboardWidgets = pgTable("dashboard_widgets", {
     .notNull(),
 });
 
+// ── Remote Actions: interactive terminal sessions (spec 24) ──────────────────
+// An on-demand, audited PowerShell-remoting session to a managed computer. Same
+// outbound-only, atomic-claim / fenced / reaper machinery as scan_jobs and
+// printer_install_jobs: the web owns the session, the collector worker claims it,
+// opens the runspace, and relays a live terminal. This is arbitrary remote code
+// execution, gated on the narrow `remote:shell` permission (Owner-only by default)
+// and fully recorded in remote_session_events. The session carries NO credentials
+// (fleet creds live only in collector/.env, resolved per subnet like scanning).
+export const remoteSessions = pgTable(
+  "remote_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // The target computer asset. Cascade so deleting the computer clears sessions.
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    targetIp: text("target_ip").notNull(), // snapshot of computer_details.ip_address
+    shell: text("shell").$type<"powershell">().notNull().default("powershell"),
+    status: text("status")
+      .$type<
+        | "pending"
+        | "claimed"
+        | "active"
+        | "closing"
+        | "closed"
+        | "failed"
+        | "canceled"
+      >()
+      .notNull()
+      .default("pending"),
+    // Admin email from the access token; no FK (users live in aw-auth). Also the
+    // session owner: only this user may stream or send input (spec 24, AC-5).
+    requestedBy: text("requested_by").notNull(),
+    workerId: text("worker_id"),
+    error: text("error"), // worker-level error when status = failed
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+    lastActivityAt: timestamp("last_activity_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    // Cheap "oldest pending" claim poll (mirrors scan_jobs_pending_idx).
+    index("remote_sessions_pending_idx")
+      .on(t.status, t.createdAt)
+      .where(sql`${t.status} = 'pending'`),
+    // "One open session per computer" guard + history reads for one computer.
+    index("remote_sessions_asset_idx").on(t.assetId, t.createdAt),
+    // At most one live session per target (spec 24, AC-9). Partial unique over the
+    // open statuses; a second Start races to a clean 23505 the action turns into
+    // "a session is already open".
+    uniqueIndex("remote_sessions_open_uq")
+      .on(t.assetId)
+      .where(sql`${t.status} in ('pending','claimed','active','closing')`),
+  ],
+);
+
+// Append-only session log: the live relay buffer, the audit trail, AND the
+// SSE/long-poll resume cursor, all in one structure (spec 24, AC-7). `seq` is
+// monotonic per session; readers (browser output, collector input) hold their own
+// cursor and query "events after <seq>". Never mutated; only the retention prune
+// deletes. Output chunk size is capped by the writers.
+export const remoteSessionEvents = pgTable(
+  "remote_session_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => remoteSessions.id, { onDelete: "cascade" }),
+    seq: bigint("seq", { mode: "number" }).notNull(), // monotonic per session
+    direction: text("direction")
+      .$type<"input" | "output" | "system">()
+      .notNull(),
+    // output: stdout|stderr; system: status (e.g. a status token); input: null.
+    channel: text("channel").$type<"stdout" | "stderr" | "status">(),
+    data: text("data").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    // The "after my cursor" read, and the monotonic-seq guarantee per session.
+    uniqueIndex("remote_session_events_seq_uq").on(t.sessionId, t.seq),
+  ],
+);
+
 export type NotificationRow = typeof notifications.$inferSelect;
 export type NotificationReadRow = typeof notificationReads.$inferSelect;
 export type DashboardWidgetRow = typeof dashboardWidgets.$inferSelect;
+export type RemoteSessionRow = typeof remoteSessions.$inferSelect;
+export type RemoteSessionEventRow = typeof remoteSessionEvents.$inferSelect;

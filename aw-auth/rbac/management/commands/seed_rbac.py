@@ -18,6 +18,7 @@ PERMISSIONS = [
     ("scan:read", "View scan data and discovered devices"),
     ("scan:write", "Trigger and configure scans"),
     ("printer:install", "Remotely install printers onto computers"),
+    ("remote:shell", "Open an interactive remote terminal to a computer"),
     ("ingest:write", "Ingest scan data (service accounts)"),
     ("report:read", "View reports"),
     ("audit:read", "View the audit log"),

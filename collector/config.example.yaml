@@ -99,6 +99,23 @@ install_temp_dir: 'C:\Windows\Temp\opus-print'
 # collector always uses the base64-over-WinRM path (works everywhere). Reserved
 # for a future SMB fast path.
 install_smb_transfer: true
+# Interactive remote terminal sessions (spec 24). Poll the remote-session queue on
+# this cadence when no scan job is waiting, so a "Start session" click connects
+# quickly. Needs the `remote:agent` scope on the collector service account.
+remote_session_poll_interval: 3.0
+# An active session with no owner input for this long self-closes, so an abandoned
+# terminal never pins the worker open. 0 disables the idle cap.
+remote_session_idle_timeout: 300.0
+# Terminal prompt theme: "robbyrussell" (oh-my-zsh default: green arrow + cyan
+# ~-path) or "plain" (native "PS <path>>").
+remote_session_prompt_theme: robbyrussell
+# Run sessions through PowerShell 7 (pwsh) when the target has it, so output is
+# COLOURED (file listings, tables, errors). Falls back to Windows PowerShell 5.1
+# (plain text) when pwsh isn't installed. Set false to always use 5.1.
+remote_session_prefer_pwsh: true
+# Retention for the remote-session event log (terminal transcript / audit trail);
+# the worker's daily prune deletes rows older than this.
+remote_session_retention_days: 30
 # The printer reachability schedule (spec 12): TCP-probe every printer at these
 # times; the first also runs a full SNMP collect. Needs `apscheduler` installed.
 schedule_times: ["08:00", "13:00", "18:00"]
