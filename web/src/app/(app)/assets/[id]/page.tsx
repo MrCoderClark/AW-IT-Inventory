@@ -149,8 +149,10 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
       steps:
         d.result?.steps.map((s) => ({
           name: s.name,
+          kind: s.kind,
           status: s.status,
           exitCode: s.exitCode,
+          outputTail: s.outputTail,
         })) ?? null,
     }));
     return (

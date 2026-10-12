@@ -2,7 +2,14 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Rocket } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  FileCode2,
+  Loader2,
+  Rocket,
+  Terminal,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -30,8 +37,10 @@ export type DeployPackageOption = {
 
 export type DeployStepResult = {
   name: string;
+  kind: "script" | "install";
   status: "ok" | "failed" | "skipped";
   exitCode: number | null;
+  outputTail: string;
 };
 
 export type DeployHistoryItem = {
@@ -71,6 +80,14 @@ function statusBadge(item: DeployHistoryItem) {
   return <Badge variant="outline">Canceled</Badge>;
 }
 
+function stepBadge(status: DeployStepResult["status"]) {
+  if (status === "ok")
+    return <Badge className="bg-emerald-600 text-white text-[10px]">ok</Badge>;
+  if (status === "failed")
+    return <Badge variant="destructive" className="text-[10px]">failed</Badge>;
+  return <Badge variant="outline" className="text-[10px]">skipped</Badge>;
+}
+
 /**
  * Deploy a library package to this computer and show its deployment history
  * (spec 23). Only rendered for a `software:deploy` admin. The server owns the
@@ -89,6 +106,7 @@ export function SoftwareDeployPanel({
   const [selected, setSelected] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [cancelingId, setCancelingId] = React.useState<string | null>(null);
+  const [expanded, setExpanded] = React.useState<string | null>(null);
 
   const hasInFlight = initialHistory.some((d) => ACTIVE.has(d.status));
 
@@ -177,47 +195,111 @@ export function SoftwareDeployPanel({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {initialHistory.map((d) => (
-                  <TableRow key={d.id}>
-                    <TableCell>
-                      <div className="font-medium">
-                        {d.packageName}{" "}
-                        <span className="font-normal text-muted-foreground">
-                          {d.packageVersion}
-                        </span>
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {d.stepCount} step{d.stepCount === 1 ? "" : "s"}
-                      </div>
-                      {d.status === "failed" && d.error && (
-                        <div className="mt-0.5 max-w-sm truncate text-xs text-red-600" title={d.error}>
-                          {d.error}
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell>{statusBadge(d)}</TableCell>
-                    <TableCell className="text-muted-foreground">{d.requestedBy}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {new Date(d.requestedAt).toLocaleString()}
-                    </TableCell>
-                    <TableCell>
-                      {ACTIVE.has(d.status) && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => cancel(d.id)}
-                          disabled={cancelingId === d.id}
-                        >
-                          {cancelingId === d.id ? (
-                            <Loader2 className="size-3.5 animate-spin" />
-                          ) : (
-                            "Cancel"
+                {initialHistory.map((d) => {
+                  const hasDetail = !!(d.steps && d.steps.length > 0);
+                  const isOpen = expanded === d.id;
+                  return (
+                    <React.Fragment key={d.id}>
+                      <TableRow
+                        className={hasDetail ? "cursor-pointer" : undefined}
+                        onClick={
+                          hasDetail
+                            ? () => setExpanded(isOpen ? null : d.id)
+                            : undefined
+                        }
+                      >
+                        <TableCell>
+                          <div className="flex items-center gap-1.5 font-medium">
+                            {hasDetail ? (
+                              isOpen ? (
+                                <ChevronDown className="size-3.5 text-muted-foreground" />
+                              ) : (
+                                <ChevronRight className="size-3.5 text-muted-foreground" />
+                              )
+                            ) : (
+                              <span className="w-3.5" />
+                            )}
+                            {d.packageName}{" "}
+                            <span className="font-normal text-muted-foreground">
+                              {d.packageVersion}
+                            </span>
+                          </div>
+                          <div className="pl-5 text-xs text-muted-foreground">
+                            {d.stepCount} step{d.stepCount === 1 ? "" : "s"}
+                          </div>
+                          {d.status === "failed" && d.error && (
+                            <div
+                              className="mt-0.5 max-w-sm truncate pl-5 text-xs text-red-600"
+                              title={d.error}
+                            >
+                              {d.error}
+                            </div>
                           )}
-                        </Button>
+                        </TableCell>
+                        <TableCell>{statusBadge(d)}</TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {d.requestedBy}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {new Date(d.requestedAt).toLocaleString()}
+                        </TableCell>
+                        <TableCell>
+                          {ACTIVE.has(d.status) && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                cancel(d.id);
+                              }}
+                              disabled={cancelingId === d.id}
+                            >
+                              {cancelingId === d.id ? (
+                                <Loader2 className="size-3.5 animate-spin" />
+                              ) : (
+                                "Cancel"
+                              )}
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                      {isOpen && d.steps && (
+                        <TableRow>
+                          <TableCell colSpan={5} className="bg-muted/30">
+                            <ol className="flex flex-col gap-2 py-1">
+                              {d.steps.map((s, i) => (
+                                <li key={i} className="flex flex-col gap-1">
+                                  <div className="flex items-center gap-2 text-sm">
+                                    <span className="w-5 text-right tabular-nums text-muted-foreground">
+                                      {i + 1}.
+                                    </span>
+                                    {s.kind === "script" ? (
+                                      <Terminal className="size-3.5 text-muted-foreground" />
+                                    ) : (
+                                      <FileCode2 className="size-3.5 text-muted-foreground" />
+                                    )}
+                                    <span className="font-medium">{s.name}</span>
+                                    {stepBadge(s.status)}
+                                    {s.exitCode !== null && (
+                                      <span className="text-xs text-muted-foreground">
+                                        exit {s.exitCode}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {s.outputTail && (
+                                    <pre className="ml-7 max-h-40 overflow-auto rounded border bg-background p-2 text-[11px] whitespace-pre-wrap text-muted-foreground">
+                                      {s.outputTail}
+                                    </pre>
+                                  )}
+                                </li>
+                              ))}
+                            </ol>
+                          </TableCell>
+                        </TableRow>
                       )}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                    </React.Fragment>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
