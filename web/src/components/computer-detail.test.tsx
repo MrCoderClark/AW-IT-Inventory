@@ -42,6 +42,10 @@ vi.mock("@/app/(app)/remote-actions", () => ({
   startRemoteSessionAction: vi.fn(),
   endRemoteSessionAction: vi.fn(),
 }));
+vi.mock("@/app/(app)/software-deploy-actions", () => ({
+  deploySoftwareAction: vi.fn(),
+  cancelDeploymentAction: vi.fn(),
+}));
 
 function makeAsset(overrides: Partial<Asset> = {}): Asset {
   return {

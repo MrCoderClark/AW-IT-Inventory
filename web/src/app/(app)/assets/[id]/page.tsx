@@ -15,6 +15,8 @@ import {
   listInstallJobsForAssetTag,
 } from "@/db/printer-install";
 import { listPrinterPackages } from "@/lib/printer-packages";
+import { listDeploymentsForAssetTag } from "@/db/software-deploy";
+import { listSoftwarePackages } from "@/db/software-packages";
 import { getPrinterActivity, getPrinterNetworkHealth } from "@/db/printers";
 import {
   getAssetAssigneeId,
@@ -45,6 +47,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
   const canScan = hasPermission(user, "scan:write");
   const canInstall = hasPermission(user, "printer:install");
   const canRemote = hasPermission(user, "remote:shell");
+  const canDeploy = hasPermission(user, "software:deploy");
 
   const asset = await getAssetById(id);
   if (!asset) notFound();
@@ -92,6 +95,8 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
       printerOptions,
       livePrinters,
       compliancePosture,
+      deployPkgs,
+      deployHistoryRows,
     ] = await Promise.all([
       getMachineSummary(id),
       canWrite ? getAssetAssigneeId(id) : Promise.resolve(null),
@@ -105,6 +110,8 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
       canInstall ? getPrinterPrefillOptions() : Promise.resolve([]),
       canInstall ? getLatestPrinterList(id) : Promise.resolve(null),
       getComplianceStatus(id),
+      canDeploy ? listSoftwarePackages() : Promise.resolve([]),
+      canDeploy ? listDeploymentsForAssetTag(id) : Promise.resolve([]),
     ]);
     // Client-safe package options (no file paths / hashes).
     const installPackages = packages.map((p) => ({
@@ -121,6 +128,31 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
           : null,
       defaultPrinterName: p.defaultPrinterName,
     }));
+    // Client-safe deploy options + history (no storage keys / hashes).
+    const deployPackages = deployPkgs.map((p) => ({
+      id: p.id,
+      name: p.name,
+      version: p.version,
+      stepCount: p.steps.length,
+    }));
+    const deployHistory = deployHistoryRows.map((d) => ({
+      id: d.id,
+      packageName: d.packageName,
+      packageVersion: d.packageVersion,
+      stepCount: d.stepCount,
+      status: d.status,
+      requestedBy: d.requestedBy,
+      error: d.error,
+      requestedAt: d.requestedAt,
+      finishedAt: d.finishedAt,
+      waitingForCollector: d.waitingForCollector,
+      steps:
+        d.result?.steps.map((s) => ({
+          name: s.name,
+          status: s.status,
+          exitCode: s.exitCode,
+        })) ?? null,
+    }));
     return (
       <ComputerDetail
         asset={asset}
@@ -135,11 +167,14 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
         canScan={canScan}
         canInstall={canInstall}
         canRemote={canRemote}
+        canDeploy={canDeploy}
         installJobs={installJobs}
         installPackages={installPackages}
         printerOptions={printerOptions}
         livePrinters={livePrinters}
         compliancePosture={compliancePosture}
+        deployPackages={deployPackages}
+        deployHistory={deployHistory}
       />
     );
   }

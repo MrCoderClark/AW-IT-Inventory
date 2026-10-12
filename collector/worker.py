@@ -363,6 +363,113 @@ def _drain_installs(config: Config, tokens: "TokenCache", worker_id: str) -> Non
         _run_install_job(config, tokens, worker_id, job)
 
 
+def _claim_deploy(config: Config, token: str, worker_id: str) -> dict | None:
+    """Claim one pending software deployment (spec 23), or None."""
+    resp = httpx.post(
+        f"{config.ingest_url}/api/deploy/claim",
+        json={"workerId": worker_id},
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=30,
+    )
+    if resp.status_code == 204:
+        return None
+    if resp.status_code != 200:
+        raise RuntimeError(
+            f"deploy claim failed ({resp.status_code}): {resp.text[:200]}"
+        )
+    return resp.json()
+
+
+def _post_deploy_status(
+    config: Config,
+    token: str,
+    job_id: str,
+    worker_id: str,
+    claimed_at: str,
+    status: str,
+    *,
+    result: dict | None = None,
+    error: str | None = None,
+) -> bool:
+    """Report a deployment's status, fenced by the claim (False on 409)."""
+    body: dict = {"workerId": worker_id, "claimedAt": claimed_at, "status": status}
+    if result is not None:
+        body["result"] = result
+    if error is not None:
+        body["error"] = error
+    resp = httpx.post(
+        f"{config.ingest_url}/api/deploy/{job_id}/status",
+        json=body,
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=60,
+    )
+    if resp.status_code == 409:
+        console.print(
+            f"  [yellow]claim lost[/yellow] on deployment {job_id}; dropping result."
+        )
+        return False
+    if resp.status_code != 200:
+        raise RuntimeError(
+            f"deploy status update failed ({resp.status_code}): {resp.text[:200]}"
+        )
+    return True
+
+
+def _run_deploy_job(
+    config: Config, tokens: "TokenCache", worker_id: str, job: dict
+) -> None:
+    from software_deploy import run_deployment
+
+    job_id = job["id"]
+    claimed_at = job["claimedAt"]
+    snap = job.get("packageSnapshot") or {}
+    target = job.get("assetTag") or job.get("targetIp")
+    console.print(
+        f"[bold]Deploy[/bold] {job_id}: '{snap.get('name')}' {snap.get('version')} "
+        f"({len(snap.get('steps') or [])} step(s)) on {target} …"
+    )
+
+    if not _post_deploy_status(
+        config, tokens.get(), job_id, worker_id, claimed_at, "running"
+    ):
+        return
+
+    try:
+        status, result = run_deployment(config, tokens.get(), job)
+    except Exception as e:  # noqa: BLE001 — a worker-level error fails the job
+        console.print(f"  [red]deploy failed:[/red] {e}")
+        _post_deploy_status(
+            config, tokens.get(), job_id, worker_id, claimed_at, "failed",
+            error=str(e)[:800],
+        )
+        return
+
+    # Log each step's outcome so the real cause is visible right here.
+    for s in result.get("steps", []):
+        tag = {"ok": "green", "failed": "red", "skipped": "dim"}.get(s.get("status"), "white")
+        console.print(
+            f"    step [{tag}]{s.get('status')}[/{tag}] {s.get('name')} "
+            f"(exit {s.get('exitCode')})"
+        )
+        if (s.get("outputTail") or "").strip() and s.get("status") == "failed":
+            console.print(f"      {s['outputTail'].strip()[:600]}")
+
+    if _post_deploy_status(
+        config, tokens.get(), job_id, worker_id, claimed_at, status, result=result
+    ):
+        reboot = " (reboot required)" if result.get("rebootRequired") else ""
+        console.print(f"  [green]done[/green] — {result.get('outcome')}{reboot}.")
+
+
+def _drain_deploy(config: Config, tokens: "TokenCache", worker_id: str) -> None:
+    """Process any pending software deployments (spec 23)."""
+    while True:
+        job = _claim_deploy(config, tokens.get(), worker_id)
+        if job is None:
+            return
+        _run_deploy_job(config, tokens, worker_id, job)
+
+
 def _claim_remote(config: Config, token: str, worker_id: str) -> dict | None:
     """Claim one pending remote terminal session (spec 24), or None."""
     resp = httpx.post(
@@ -616,6 +723,9 @@ def run_worker(args: argparse.Namespace) -> int:
     remote_poll = config.remote_session_poll_interval
     last_remote = 0.0
 
+    deploy_poll = config.software_deploy_poll_interval
+    last_deploy = 0.0
+
     console.print(
         f"[bold]Worker[/bold] {worker_id} (v{WORKER_VERSION}) — polling "
         f"{config.ingest_url} every {poll}s · remote sessions every {remote_poll}s · "
@@ -644,6 +754,9 @@ def run_worker(args: argparse.Namespace) -> int:
                 if now - last_install >= install_poll:
                     last_install = now
                     _drain_installs(config, tokens, worker_id)
+                if now - last_deploy >= deploy_poll:
+                    last_deploy = now
+                    _drain_deploy(config, tokens, worker_id)
                 if cutout_enabled and now - last_cutout >= cutout_poll:
                     last_cutout = now
                     _drain_cutout(config, tokens, worker_id)

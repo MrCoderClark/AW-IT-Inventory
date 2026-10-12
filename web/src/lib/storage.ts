@@ -210,3 +210,87 @@ function isNotFound(err: unknown): boolean {
       : undefined;
   return name === "NoSuchKey" || name === "NotFound" || status === 404;
 }
+
+/* ---------------- Software installers (spec 23) ---------------- */
+
+/** Max uploaded installer size (MSI/EXE can be large). Default 300 MB. */
+export const MAX_INSTALLER_BYTES = Number(
+  process.env.SOFTWARE_MAX_UPLOAD_BYTES ?? 300 * 1024 * 1024,
+);
+
+export type InstallerType = "msi" | "exe";
+
+/**
+ * The authoritative installer type from the upload's filename. MSI/EXE MIME types
+ * are unreliable across browsers/OSes (often `application/octet-stream`), so the
+ * extension is the gate; a non-installer returns null (the caller refuses, 415).
+ */
+export function installerTypeFromName(fileName: string): InstallerType | null {
+  const ext = fileName.toLowerCase().split(".").pop();
+  if (ext === "msi") return "msi";
+  if (ext === "exe") return "exe";
+  return null;
+}
+
+/** A random, unguessable object key for one uploaded installer. */
+export function newInstallerKey(packageId: string, type: InstallerType): string {
+  return `software/${packageId}/${randomBytes(16).toString("hex")}.${type}`;
+}
+
+/** A random key for a companion file (any type: .iss / .mst / config), keeping a
+   short sanitized extension from the original name. */
+export function newPackageFileKey(packageId: string, fileName: string): string {
+  const ext = (fileName.toLowerCase().split(".").pop() || "bin").replace(
+    /[^a-z0-9]/g,
+    "",
+  );
+  return `software/${packageId}/${randomBytes(16).toString("hex")}.${ext || "bin"}`;
+}
+
+/** Store an arbitrary object (e.g. installer bytes) under `key`. Ensures the
+   bucket first, like the image path. */
+export async function putObject(
+  key: string,
+  body: Buffer,
+  contentType: string,
+): Promise<void> {
+  await ensureBucket();
+  const { client, bucket } = connect();
+  await client.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: body,
+      ContentType: contentType,
+    }),
+  );
+}
+
+/** Read an arbitrary object's bytes + content type (the collector installer pull),
+   or null when the key is missing. */
+export async function getObjectBytes(
+  key: string,
+): Promise<{ bytes: Uint8Array; contentType: string } | null> {
+  const { client, bucket } = connect();
+  try {
+    const res = await client.send(
+      new GetObjectCommand({ Bucket: bucket, Key: key }),
+    );
+    if (!res.Body) return null;
+    const bytes = await res.Body.transformToByteArray();
+    return { bytes, contentType: res.ContentType || "application/octet-stream" };
+  } catch (err) {
+    if (isNotFound(err)) return null;
+    throw err;
+  }
+}
+
+/** Delete an arbitrary object. Idempotent (missing keys ignored). */
+export async function removeObject(key: string): Promise<void> {
+  const { client, bucket } = connect();
+  try {
+    await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+  } catch (err) {
+    if (!isNotFound(err)) throw err;
+  }
+}

@@ -92,6 +92,12 @@ class Config(BaseModel):
     # Temp dir on the TARGET computer where the driver bundle is staged + unpacked
     # (cleaned up after each job).
     install_temp_dir: str = r"C:\Windows\Temp\opus-print"
+    # Software deployment (spec 23). The worker polls the deploy queue on this
+    # cadence when no scan job is waiting; a queued deployment starts within it.
+    software_deploy_poll_interval: float = 5.0
+    # Temp dir on the TARGET computer where installer files are staged + run
+    # (cleaned up after each deployment).
+    software_deploy_temp_dir: str = r"C:\Windows\Temp\opus-deploy"
     # Interactive remote terminal sessions (spec 24). The worker polls the remote
     # session queue on this cadence when no scan job is waiting. Kept short so a
     # "Start session" click connects quickly.

@@ -99,6 +99,12 @@ install_temp_dir: 'C:\Windows\Temp\opus-print'
 # collector always uses the base64-over-WinRM path (works everywhere). Reserved
 # for a future SMB fast path.
 install_smb_transfer: true
+# Software deployment (spec 23). Poll the deploy queue on this cadence when no scan
+# job is waiting; a queued deployment starts within this window.
+software_deploy_poll_interval: 5.0
+# Temp dir on the TARGET computer where installer files are staged + run (cleaned up
+# after each deployment).
+software_deploy_temp_dir: 'C:\Windows\Temp\opus-deploy'
 # Interactive remote terminal sessions (spec 24). Poll the remote-session queue on
 # this cadence when no scan job is waiting, so a "Start session" click connects
 # quickly. Needs the `remote:agent` scope on the collector service account.

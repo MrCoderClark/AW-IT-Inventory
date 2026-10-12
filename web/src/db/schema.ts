@@ -997,8 +997,161 @@ export const remoteSessionEvents = pgTable(
   ],
 );
 
+// ---------------- Software deployment (spec 23) ----------------
+
+/**
+ * One ordered step in a software package (spec 23). A package is a sequence of
+ * steps the collector runs in order, stopping on the first failure. A `script`
+ * step is inline PowerShell run elevated; an `install` step runs an uploaded
+ * MSI/EXE silently. A plain single installer is just a one-`install`-step package.
+ */
+/** A stored file an install step transfers to the target (the installer itself, or
+    a companion like a response .iss / .mst / config). */
+export type SoftwareFileRef = {
+  storageKey: string; // private object-store key the collector pulls from
+  sha256: string; // hex, of the uploaded bytes (re-verified on the target)
+  fileName: string; // original upload name + on-target name
+  fileSize: number;
+};
+
+export type SoftwareStep =
+  | {
+      id: string; // stable per step (reorder/remove in the UI, per-step results)
+      kind: "script";
+      name: string;
+      script: string; // PowerShell, run elevated over WinRM
+      continueOnError?: boolean; // default false: a non-zero exit stops the package
+    }
+  | {
+      id: string;
+      kind: "install";
+      name: string;
+      installerType: "msi" | "exe";
+      fileName: string; // original upload name + on-target name
+      silentArgs: string; // required for EXE; MSI defaults to /qn /norestart.
+      // `%DIR%` in silentArgs is replaced with the on-target temp dir, so a
+      // response/transform file shipped as a companion can be referenced, e.g.
+      // `/s /f1"%DIR%\app.iss" /v"/qn"`.
+      sha256: string; // hex, of the uploaded bytes (re-verified on the target)
+      storageKey: string; // private object-store key the collector pulls from
+      fileSize: number;
+      // Extra files transferred into the same temp dir beside the installer (not
+      // executed): response files, transforms, config, etc.
+      companions?: SoftwareFileRef[];
+      continueOnError?: boolean;
+    };
+
+/** The package frozen onto a deployment at enqueue, so a later edit or delete of
+    the catalog row never changes a queued/running job. */
+export type SoftwarePackageSnapshot = {
+  name: string;
+  version: string;
+  steps: SoftwareStep[];
+};
+
+export type SoftwareStepResult = {
+  stepId: string;
+  name: string;
+  kind: "script" | "install";
+  status: "ok" | "failed" | "skipped"; // skipped = a prior step failed and stopped
+  exitCode: number | null;
+  outputTail: string;
+};
+
+export type SoftwareDeployResult = {
+  outcome: "installed" | "install-failed" | "integrity-failed";
+  rebootRequired: boolean; // true on msiexec 3010 / a step that signals a reboot
+  steps: SoftwareStepResult[];
+};
+
+// Software package catalog (spec 23). A package is a header plus an ordered list of
+// steps (`steps` jsonb). Installer-step bytes live in the private object store
+// under each step's `storageKey`. Soft-archived (`archivedAt`) rather than hard-
+// deleted while deployment history references it, so history stays resolvable.
+export const softwarePackages = pgTable(
+  "software_packages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    version: text("version").notNull(),
+    publisher: text("publisher"),
+    steps: jsonb("steps")
+      .$type<SoftwareStep[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    uploadedBy: text("uploaded_by").notNull(), // admin email; no FK (aw-auth)
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [index("software_packages_created_idx").on(t.createdAt)],
+);
+
+// Deploy queue (spec 23) — the same outbound-only atomic-claim / fenced-status /
+// reaper machinery as scan_jobs and printer_install_jobs. One worker claims the
+// oldest pending row; its result post is fenced by workerId + claimedAt.
+export const softwareDeployments = pgTable(
+  "software_deployments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // The target computer asset. Cascade so deleting the computer clears its jobs.
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    targetIp: text("target_ip").notNull(), // snapshot of computer_details.ip_address
+    // Null after the catalog row is hard-deleted; the frozen snapshot still drives
+    // the job either way.
+    packageId: uuid("package_id").references(() => softwarePackages.id, {
+      onDelete: "set null",
+    }),
+    packageSnapshot: jsonb("package_snapshot")
+      .$type<SoftwarePackageSnapshot>()
+      .notNull(),
+    status: text("status")
+      .$type<
+        "pending" | "claimed" | "running" | "succeeded" | "failed" | "canceled"
+      >()
+      .notNull()
+      .default("pending"),
+    requestedBy: text("requested_by").notNull(), // admin email; no FK (aw-auth)
+    workerId: text("worker_id"),
+    result: jsonb("result").$type<SoftwareDeployResult>(),
+    error: text("error"),
+    requestedAt: timestamp("requested_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    // Cheap "oldest pending" claim poll (mirrors printer_install_jobs_pending_idx).
+    index("software_deployments_pending_idx")
+      .on(t.status, t.requestedAt)
+      .where(sql`${t.status} = 'pending'`),
+    // History panel reads the newest jobs for one computer.
+    index("software_deployments_asset_idx").on(t.assetId, t.requestedAt),
+    // "Is a deploy already in flight on this computer" read (spec 23, AC-10).
+    index("software_deployments_inflight_idx")
+      .on(t.assetId)
+      .where(sql`${t.status} in ('pending','claimed','running')`),
+  ],
+);
+
 export type NotificationRow = typeof notifications.$inferSelect;
 export type NotificationReadRow = typeof notificationReads.$inferSelect;
 export type DashboardWidgetRow = typeof dashboardWidgets.$inferSelect;
 export type RemoteSessionRow = typeof remoteSessions.$inferSelect;
 export type RemoteSessionEventRow = typeof remoteSessionEvents.$inferSelect;
+export type SoftwarePackageRow = typeof softwarePackages.$inferSelect;
+export type SoftwareDeploymentRow = typeof softwareDeployments.$inferSelect;

@@ -17,6 +17,7 @@ import {
   UserCog,
   Shield,
   Images,
+  Boxes,
   Bell,
 } from "lucide-react";
 
@@ -416,6 +417,7 @@ export const NAV_ASSETS: NavItem[] = [
 
 export const NAV_MANAGE: NavItem[] = [
   { label: "People", href: "/people", icon: Users },
+  { label: "Software Library", href: "/software/library", icon: Boxes },
   { label: "Media", href: "/media", icon: Images },
   { label: "Compliance", href: "/compliance", icon: ShieldCheck },
   { label: "Reports", href: "/reports", icon: FileText },
