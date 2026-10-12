@@ -14,6 +14,7 @@ services:
     command: "server -s3 -s3.config=/etc/seaweedfs/s3.json -dir=/data"
     ports:
       - "8333:8333" # S3 API (the only port the web app needs)
+      - "8888:8888" # Filer HTTP UI — browse objects at /buckets/<bucket>/ (dev convenience)
     volumes:
       - ./s3.json:/etc/seaweedfs/s3.json:ro
       - seaweed-data:/data

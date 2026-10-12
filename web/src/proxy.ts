@@ -20,6 +20,7 @@ import {
 export async function proxy(request: NextRequest) {
   const access = request.cookies.get(ACCESS_COOKIE)?.value;
   const refresh = request.cookies.get(REFRESH_COOKIE)?.value;
+  const isApi = request.nextUrl.pathname.startsWith("/api");
 
   if (access) return NextResponse.next();
 
@@ -41,6 +42,14 @@ export async function proxy(request: NextRequest) {
     }
   }
 
+  // No valid session. /api routes self-authenticate — the cookie ones return 401
+  // (the client refreshed its cookie on this same pass if a refresh token was
+  // present, so a retry succeeds), and the service/bearer ones (ingest, scan,
+  // deploy, remote agent) never had a cookie. Never redirect them to /login; only
+  // pages redirect, so a long in-page editing session no longer dead-ends on a
+  // 401 the moment the access token lapses.
+  if (isApi) return NextResponse.next();
+
   const loginUrl = request.nextUrl.clone();
   loginUrl.pathname = "/login";
   loginUrl.search = "";
@@ -54,7 +63,9 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Protect pages only. All /api routes (auth, assets, ingest) self-authenticate,
-  // so the proxy must not redirect them to /login.
-  matcher: ["/((?!login|api|_next/static|_next/image|favicon.ico).*)"],
+  // Runs on pages AND /api (so API requests get the same token refresh as page
+  // navigations). Pages redirect to /login when unauthenticated; /api never does
+  // (it self-authenticates — cookie routes 401, bearer/service routes verify their
+  // own token).
+  matcher: ["/((?!login|_next/static|_next/image|favicon.ico).*)"],
 };

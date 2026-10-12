@@ -19,6 +19,7 @@ PERMISSIONS = [
     ("scan:write", "Trigger and configure scans"),
     ("printer:install", "Remotely install printers onto computers"),
     ("remote:shell", "Open an interactive remote terminal to a computer"),
+    ("software:deploy", "Upload installers and deploy software to computers"),
     ("ingest:write", "Ingest scan data (service accounts)"),
     ("report:read", "View reports"),
     ("audit:read", "View the audit log"),
@@ -32,7 +33,8 @@ ROLES = {
     "Admin": [
         "user:admin", "asset:read", "asset:write", "asset:delete",
         "location:write", "columns:write", "assignment:write", "scan:read",
-        "scan:write", "printer:install", "report:read", "audit:read",
+        "scan:write", "printer:install", "software:deploy", "report:read",
+        "audit:read",
     ],
     "Technician": [
         "asset:read", "asset:write", "location:write", "assignment:write",

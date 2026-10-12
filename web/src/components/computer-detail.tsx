@@ -61,6 +61,11 @@ import {
   fmtDate,
 } from "@/components/detail-ui";
 import { RemoteTerminal } from "@/components/remote-terminal";
+import {
+  SoftwareDeployPanel,
+  type DeployHistoryItem,
+  type DeployPackageOption,
+} from "@/components/software-deploy-panel";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -128,11 +133,14 @@ export function ComputerDetail({
   canScan = false,
   canInstall = false,
   canRemote = false,
+  canDeploy = false,
   installJobs = [],
   installPackages = [],
   printerOptions = [],
   livePrinters = null,
   compliancePosture = null,
+  deployPackages = [],
+  deployHistory = [],
 }: {
   asset: Asset;
   machine?: MachineSummary;
@@ -146,11 +154,14 @@ export function ComputerDetail({
   canScan?: boolean;
   canInstall?: boolean;
   canRemote?: boolean;
+  canDeploy?: boolean;
   installJobs?: InstallJobListItem[];
   installPackages?: PackageOption[];
   printerOptions?: PrinterOption[];
   livePrinters?: PrinterListSnapshot | null;
   compliancePosture?: CompliancePosture | null;
+  deployPackages?: DeployPackageOption[];
+  deployHistory?: DeployHistoryItem[];
 }) {
   const router = useRouter();
   const [tab, setTab] = React.useState("overview");
@@ -540,7 +551,7 @@ export function ComputerDetail({
         </TabsPanel>
 
         {/* -------- Software -------- */}
-        <TabsPanel value="software">
+        <TabsPanel value="software" className="flex flex-col gap-5">
           <Panel icon={<Package />} title="Tracked Software">
             {software.length > 0 ? (
               <ul className="divide-y text-sm">
@@ -600,6 +611,13 @@ export function ComputerDetail({
               </p>
             )}
           </Panel>
+          {canDeploy && (
+            <SoftwareDeployPanel
+              assetTag={asset.id}
+              packages={deployPackages}
+              initialHistory={deployHistory}
+            />
+          )}
         </TabsPanel>
 
         {/* -------- Compliance -------- */}
