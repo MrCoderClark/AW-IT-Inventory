@@ -92,6 +92,23 @@ class Config(BaseModel):
     # Temp dir on the TARGET computer where the driver bundle is staged + unpacked
     # (cleaned up after each job).
     install_temp_dir: str = r"C:\Windows\Temp\opus-print"
+    # Interactive remote terminal sessions (spec 24). The worker polls the remote
+    # session queue on this cadence when no scan job is waiting. Kept short so a
+    # "Start session" click connects quickly.
+    remote_session_poll_interval: float = 3.0
+    # An active session with no owner input for this long self-closes, so an
+    # abandoned terminal never pins the worker open indefinitely. 0 disables.
+    remote_session_idle_timeout: float = 300.0
+    # Terminal prompt theme: "robbyrussell" (oh-my-zsh default: green ➜ + cyan
+    # ~-path), or "plain" (native "PS <path>>").
+    remote_session_prompt_theme: str = "robbyrussell"
+    # Run remote sessions through PowerShell 7 (`pwsh`) when the target has it, so
+    # output is COLOURED (Get-ChildItem, tables, errors). Falls back to Windows
+    # PowerShell 5.1 (plain) when pwsh is absent. Set False to always use 5.1.
+    remote_session_prefer_pwsh: bool = True
+    # Retention for the remote-session event log (the terminal transcript / audit
+    # trail). The worker's daily prune deletes event rows older than this.
+    remote_session_retention_days: int = 30
     # Transfer the driver bundle to the target over the SMB admin share (C$); when
     # False (or 445 is closed), fall back to base64 chunks over WinRM.
     install_smb_transfer: bool = True

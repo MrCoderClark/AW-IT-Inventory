@@ -363,6 +363,36 @@ def _drain_installs(config: Config, tokens: "TokenCache", worker_id: str) -> Non
         _run_install_job(config, tokens, worker_id, job)
 
 
+def _claim_remote(config: Config, token: str, worker_id: str) -> dict | None:
+    """Claim one pending remote terminal session (spec 24), or None."""
+    resp = httpx.post(
+        f"{config.ingest_url}/api/remote/sessions/claim",
+        json={"workerId": worker_id},
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=30,
+    )
+    if resp.status_code == 204:
+        return None
+    if resp.status_code != 200:
+        raise RuntimeError(
+            f"remote claim failed ({resp.status_code}): {resp.text[:200]}"
+        )
+    return resp.json()  # {id, assetTag, targetIp, shell, workerId, claimedAt}
+
+
+def _drain_remote(config: Config, tokens: "TokenCache", worker_id: str) -> None:
+    """Run any pending remote terminal sessions (spec 24). Each session is relayed
+    to completion before the next claim; `run_remote_session` carries the claim
+    fence and never raises. Imported lazily (pulls in winrm) and to avoid a cycle."""
+    from remote_session import run_remote_session
+
+    while True:
+        claim = _claim_remote(config, tokens.get(), worker_id)
+        if claim is None:
+            return
+        run_remote_session(config, tokens.get, worker_id, claim)
+
+
 def _resolve_tz(config: Config) -> ZoneInfo | None:
     """The explicit schedule zone, so fire times don't drift with the host OS or
     DST (spec 12). None means APScheduler uses the host's local zone."""
@@ -409,6 +439,14 @@ def _build_scheduler(config: Config, tokens: "TokenCache"):
             run_retention_prune(config, tokens.get())
         except Exception as e:  # noqa: BLE001
             console.print(f"  [red]retention job error:[/red] {e}")
+            tokens.invalidate()
+        # Prune the remote-session transcript/audit log too (spec 24, AC-7).
+        try:
+            from remote_session import prune_session_events
+
+            prune_session_events(config, tokens.get())
+        except Exception as e:  # noqa: BLE001
+            console.print(f"  [red]remote-session retention error:[/red] {e}")
             tokens.invalidate()
 
     def counter_report_job() -> None:
@@ -575,9 +613,13 @@ def run_worker(args: argparse.Namespace) -> int:
     install_poll = config.printer_install_poll_interval
     last_install = 0.0
 
+    remote_poll = config.remote_session_poll_interval
+    last_remote = 0.0
+
     console.print(
         f"[bold]Worker[/bold] {worker_id} (v{WORKER_VERSION}) — polling "
-        f"{config.ingest_url} every {poll}s · background removal "
+        f"{config.ingest_url} every {poll}s · remote sessions every {remote_poll}s · "
+        f"background removal "
         f"{'on (every ' + str(cutout_poll) + 's)' if cutout_enabled else 'off (rembg not installed)'}. "
         "Ctrl+C to stop."
     )
@@ -594,8 +636,11 @@ def run_worker(args: argparse.Namespace) -> int:
                 if job is not None:
                     _run_job(config, tokens, worker_id, job)
                     continue  # drain the scan queue first
-                # No scan job queued — poll install + cut-out jobs on their cadence.
+                # No scan job queued — poll remote / install / cut-out on cadence.
                 now = time.monotonic()
+                if now - last_remote >= remote_poll:
+                    last_remote = now
+                    _drain_remote(config, tokens, worker_id)
                 if now - last_install >= install_poll:
                     last_install = now
                     _drain_installs(config, tokens, worker_id)

@@ -21,6 +21,7 @@ jobs and runs the printer reachability + daily report schedule).
 | `collect_snmp.py` | SNMP printer collection: identity, status, and the page counter (see Gotchas) |
 | `reachability.py` | Worker's scheduled printer TCP probes, daily SNMP collect, counter report, prune |
 | `worker.py` | Long-running worker: the job claim loop + an in-process APScheduler |
+| `remote_session.py` | Interactive remote terminal (spec 24): claim a session, open WinRM, relay the owner's input lines ↔ command output (a REPL, not a PTY) |
 | `ingest.py` | Auth to aw-auth (client-credentials) + POST the run to the web ingest API; reads the discovery toggles |
 | `models.py` | Typed result models (`HostResult`, `PrinterInfo`, `RunReport`, …) |
 | `report.py` | Persist a run as JSON and print the console summary |
@@ -59,6 +60,6 @@ uv run pytest -q                                              # tests
 
 ## Related specs
 
-- [04](../docs/specs/04-collector-agent-spec.md) collector agent · [12](../docs/specs/12-scheduled-manual-scans/index.md) scheduled/manual scans + reachability · [13](../docs/specs/13-discovery-type-toggles/index.md) discovery toggles · [14](../docs/specs/14-printer-page-counter/index.md) printer page counter · [15](../docs/specs/15-software-inventory/index.md) software inventory
+- [04](../docs/specs/04-collector-agent-spec.md) collector agent · [12](../docs/specs/12-scheduled-manual-scans/index.md) scheduled/manual scans + reachability · [13](../docs/specs/13-discovery-type-toggles/index.md) discovery toggles · [14](../docs/specs/14-printer-page-counter/index.md) printer page counter · [15](../docs/specs/15-software-inventory/index.md) software inventory · [24](../docs/specs/24-remote-actions/index.md) remote actions (interactive terminal)
 
 _Drafted by /audit from the repo, worth a quick human pass. Edit freely: once a line stops matching this draft, later runs treat it as curated and will flag rather than overwrite it._

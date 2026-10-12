@@ -44,6 +44,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
   const canWrite = hasPermission(user, "asset:write");
   const canScan = hasPermission(user, "scan:write");
   const canInstall = hasPermission(user, "printer:install");
+  const canRemote = hasPermission(user, "remote:shell");
 
   const asset = await getAssetById(id);
   if (!asset) notFound();
@@ -133,6 +134,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
         canWrite={canWrite}
         canScan={canScan}
         canInstall={canInstall}
+        canRemote={canRemote}
         installJobs={installJobs}
         installPackages={installPackages}
         printerOptions={printerOptions}
