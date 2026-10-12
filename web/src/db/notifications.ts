@@ -295,6 +295,49 @@ export async function notifyInstallResult(job: {
   });
 }
 
+/**
+ * Raise an in-app notification when a software deployment finishes (spec 23). Best-
+ * effort + idempotent per deployment+status, like the printer-install notification;
+ * the deep link goes to the target computer.
+ */
+export async function notifyDeployResult(job: {
+  deploymentId: string;
+  status: "succeeded" | "failed";
+  assetId: string;
+  packageName: string;
+  packageVersion: string;
+  error?: string | null;
+}): Promise<void> {
+  const [asset] = await db
+    .select({ tag: assets.tag, name: assets.name })
+    .from(assets)
+    .where(eq(assets.id, job.assetId))
+    .limit(1);
+
+  const href = asset ? `/assets/${asset.tag}` : "/assets";
+  const on = asset?.name ?? "the computer";
+  const pkg = `"${job.packageName}" ${job.packageVersion}`;
+  const ok = job.status === "succeeded";
+  const err = (job.error ?? "").trim().slice(0, 300);
+
+  await createNotification({
+    type: ok ? "software-deploy" : "software-deploy-failed",
+    severity: ok ? "info" : "warning",
+    title: ok ? "Software deployed" : "Software deploy failed",
+    body: ok
+      ? `${pkg} was deployed to ${on}.`
+      : `Deploying ${pkg} to ${on} failed${err ? `: ${err}` : "."}`,
+    href,
+    dedupeKey: `software-deploy:${job.deploymentId}:${job.status}`,
+    assetId: job.assetId,
+    meta: {
+      deploymentId: job.deploymentId,
+      packageName: job.packageName,
+      packageVersion: job.packageVersion,
+    },
+  });
+}
+
 /* ---------------- Warranty sweep (AC-5) ---------------- */
 
 const WARRANTY_WITHIN_DAYS = 30;

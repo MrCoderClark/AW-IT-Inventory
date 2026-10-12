@@ -3,6 +3,7 @@ import "server-only";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "./index";
+import { notifyDeployResult } from "./notifications";
 import { isWorkerLive } from "./scan";
 import {
   assets,
@@ -218,9 +219,28 @@ export async function updateDeploymentStatus(
         inArray(softwareDeployments.status, ["claimed", "running"]),
       ),
     )
-    .returning({ id: softwareDeployments.id });
+    .returning({
+      id: softwareDeployments.id,
+      assetId: softwareDeployments.assetId,
+      snapshot: softwareDeployments.packageSnapshot,
+    });
 
-  if (updated.length) return "ok";
+  if (updated.length) {
+    // A finished deployment raises an in-app notification (spec 23, AC-6), like the
+    // printer-install one. Best-effort + idempotent per deployment+status.
+    if (u.status === "succeeded" || u.status === "failed") {
+      const row = updated[0];
+      await notifyDeployResult({
+        deploymentId: row.id,
+        status: u.status,
+        assetId: row.assetId,
+        packageName: row.snapshot.name,
+        packageVersion: row.snapshot.version,
+        error: u.error ?? null,
+      });
+    }
+    return "ok";
+  }
 
   const [exists] = await db
     .select({ id: softwareDeployments.id })
@@ -263,6 +283,21 @@ export async function getDeployment(
     .where(eq(softwareDeployments.id, deploymentId))
     .limit(1);
   return row ?? null;
+}
+
+/** Delete terminal deployments (succeeded/failed/canceled) finished before the
+    cutoff — daily retention prune. In-flight rows are never touched. */
+export async function pruneDeployments(cutoff: Date): Promise<number> {
+  const deleted = await db
+    .delete(softwareDeployments)
+    .where(
+      and(
+        inArray(softwareDeployments.status, ["succeeded", "failed", "canceled"]),
+        sql`${softwareDeployments.finishedAt} < ${cutoff.toISOString()}`,
+      ),
+    )
+    .returning({ id: softwareDeployments.id });
+  return deleted.length;
 }
 
 /* ---------------- History (read) ---------------- */

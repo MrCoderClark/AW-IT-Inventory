@@ -175,6 +175,23 @@ def _run_install(
     return r.status_code, _dec(r.std_out), _clean_stderr(_dec(r.std_err))
 
 
+def prune_deployments(config: Config, token: str) -> None:
+    """Daily retention prune of old terminal deployments (spec 23). Called from the
+    worker's prune schedule; best-effort, never kills the scheduler."""
+    try:
+        resp = httpx.post(
+            f"{config.ingest_url}/api/deploy/prune",
+            json={"retentionDays": config.deploy_retention_days},
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=60,
+        )
+        resp.raise_for_status()
+        pruned = resp.json().get("pruned", 0)
+        console.print(f"[dim]retention: pruned {pruned} old deployment(s).[/dim]")
+    except Exception as e:  # noqa: BLE001
+        console.print(f"  [yellow]deployment prune failed:[/yellow] {e}")
+
+
 # ---------------- Orchestration ----------------
 
 

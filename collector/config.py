@@ -98,6 +98,9 @@ class Config(BaseModel):
     # Temp dir on the TARGET computer where installer files are staged + run
     # (cleaned up after each deployment).
     software_deploy_temp_dir: str = r"C:\Windows\Temp\opus-deploy"
+    # Retention for finished (succeeded/failed/canceled) deployment rows; the
+    # worker's daily prune deletes ones older than this.
+    deploy_retention_days: int = 90
     # Interactive remote terminal sessions (spec 24). The worker polls the remote
     # session queue on this cadence when no scan job is waiting. Kept short so a
     # "Start session" click connects quickly.

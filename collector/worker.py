@@ -555,6 +555,14 @@ def _build_scheduler(config: Config, tokens: "TokenCache"):
         except Exception as e:  # noqa: BLE001
             console.print(f"  [red]remote-session retention error:[/red] {e}")
             tokens.invalidate()
+        # Prune old finished software deployments (spec 23).
+        try:
+            from software_deploy import prune_deployments
+
+            prune_deployments(config, tokens.get())
+        except Exception as e:  # noqa: BLE001
+            console.print(f"  [red]deployment retention error:[/red] {e}")
+            tokens.invalidate()
 
     def counter_report_job() -> None:
         try:

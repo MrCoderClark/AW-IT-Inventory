@@ -269,7 +269,13 @@ type CompanionFile = {
 };
 
 type EditorStep =
-  | { uiId: string; kind: "script"; name: string; script: string }
+  | {
+      uiId: string;
+      kind: "script";
+      name: string;
+      script: string;
+      continueOnError: boolean;
+    }
   | {
       uiId: string;
       kind: "install";
@@ -282,13 +288,20 @@ type EditorStep =
       fileSize: number;
       uploading: boolean;
       companions: CompanionFile[];
+      continueOnError: boolean;
     };
 
 /** Hydrate a saved package's steps into editor steps (files already uploaded). */
 function toEditorSteps(steps: SoftwareStep[]): EditorStep[] {
   return steps.map((s) =>
     s.kind === "script"
-      ? { uiId: crypto.randomUUID(), kind: "script", name: s.name, script: s.script }
+      ? {
+          uiId: crypto.randomUUID(),
+          kind: "script",
+          name: s.name,
+          script: s.script,
+          continueOnError: s.continueOnError ?? false,
+        }
       : {
           uiId: crypto.randomUUID(),
           kind: "install",
@@ -300,6 +313,7 @@ function toEditorSteps(steps: SoftwareStep[]): EditorStep[] {
           storageKey: s.storageKey,
           fileSize: s.fileSize,
           uploading: false,
+          continueOnError: s.continueOnError ?? false,
           companions: (s.companions ?? []).map((c) => ({
             uiId: crypto.randomUUID(),
             fileName: c.fileName,
@@ -352,7 +366,13 @@ function PackageEditor({
   function addScript() {
     setSteps((prev) => [
       ...prev,
-      { uiId: crypto.randomUUID(), kind: "script", name: "", script: "" },
+      {
+        uiId: crypto.randomUUID(),
+        kind: "script",
+        name: "",
+        script: "",
+        continueOnError: false,
+      },
     ]);
   }
 
@@ -374,6 +394,7 @@ function PackageEditor({
         fileSize: file.size,
         uploading: true,
         companions: [],
+        continueOnError: false,
       },
     ]);
     const body = new FormData();
@@ -487,7 +508,12 @@ function PackageEditor({
         publisher: publisher.trim(),
         steps: steps.map((s) =>
           s.kind === "script"
-            ? { kind: "script", name: s.name.trim(), script: s.script }
+            ? {
+                kind: "script",
+                name: s.name.trim(),
+                script: s.script,
+                continueOnError: s.continueOnError,
+              }
             : {
                 kind: "install",
                 name: s.name.trim(),
@@ -497,6 +523,7 @@ function PackageEditor({
                 sha256: s.sha256,
                 storageKey: s.storageKey,
                 fileSize: s.fileSize,
+                continueOnError: s.continueOnError,
                 companions: s.companions.map((c) => ({
                   storageKey: c.storageKey,
                   sha256: c.sha256,
@@ -698,6 +725,17 @@ function PackageEditor({
                     </div>
                   </div>
                 )}
+                <label className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    className="size-3.5"
+                    checked={s.continueOnError}
+                    onChange={(e) =>
+                      patch(s.uiId, { continueOnError: e.target.checked })
+                    }
+                  />
+                  Continue to the next step even if this one fails
+                </label>
               </li>
             ))}
           </ol>

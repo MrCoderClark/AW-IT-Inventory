@@ -57,12 +57,14 @@ const H = vi.hoisted(() => {
   }));
 
   const executeMock = vi.fn(() => Promise.resolve(state.execResult));
+  const notifyMock = vi.fn();
 
-  return { state, selectMock, insertMock, updateMock, executeMock };
+  return { state, selectMock, insertMock, updateMock, executeMock, notifyMock };
 });
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/db/scan", () => ({ isWorkerLive: vi.fn().mockResolvedValue(true) }));
+vi.mock("@/db/notifications", () => ({ notifyDeployResult: H.notifyMock }));
 vi.mock("@/db/index", () => ({
   db: {
     select: H.selectMock,
@@ -192,6 +194,20 @@ describe("updateDeploymentStatus — fenced (AC-3)", () => {
       await updateDeploymentStatus(DID, { ...FENCE, status: "running" }),
     ).toBe("ok");
     expect(H.state.updateSets[0]).toMatchObject({ status: "running" });
+  });
+
+  it("notifies on a successful finish", async () => {
+    H.state.updateReturns = [[{ id: DID, assetId: "a1", snapshot: SNAP }]];
+    expect(
+      await updateDeploymentStatus(DID, { ...FENCE, status: "succeeded" }),
+    ).toBe("ok");
+    expect(H.notifyMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        deploymentId: DID,
+        status: "succeeded",
+        packageName: "App",
+      }),
+    );
   });
 
   it("is stale when the row exists but the claim lost", async () => {
