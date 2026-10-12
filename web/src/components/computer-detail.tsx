@@ -62,6 +62,10 @@ import {
 } from "@/components/detail-ui";
 import { RemoteTerminal } from "@/components/remote-terminal";
 import {
+  RemoteSessionHistory,
+  type RemoteSessionHistoryItem,
+} from "@/components/remote-session-history";
+import {
   SoftwareDeployPanel,
   type DeployHistoryItem,
   type DeployPackageOption,
@@ -133,6 +137,7 @@ export function ComputerDetail({
   canScan = false,
   canInstall = false,
   canRemote = false,
+  remoteSessions = [],
   canDeploy = false,
   installJobs = [],
   installPackages = [],
@@ -154,6 +159,7 @@ export function ComputerDetail({
   canScan?: boolean;
   canInstall?: boolean;
   canRemote?: boolean;
+  remoteSessions?: RemoteSessionHistoryItem[];
   canDeploy?: boolean;
   installJobs?: InstallJobListItem[];
   installPackages?: PackageOption[];
@@ -642,10 +648,11 @@ export function ComputerDetail({
 
         {/* -------- Remote Actions (spec 24) -------- */}
         {canRemote && (
-          <TabsPanel value="remote">
+          <TabsPanel value="remote" className="flex flex-col gap-5">
             <Panel icon={<TerminalSquare />} title="Remote Terminal">
               <RemoteTerminal assetTag={asset.id} />
             </Panel>
+            <RemoteSessionHistory sessions={remoteSessions} />
           </TabsPanel>
         )}
 

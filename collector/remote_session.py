@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import base64
 import re
+import time
 from collections.abc import Callable
 from xml.sax.saxutils import unescape
 
@@ -331,12 +332,24 @@ def run_remote_session(
     )
 
     idle_cap = config.remote_session_idle_timeout
+    duration_cap = config.remote_session_max_duration
     idle_waited = 0.0
+    started = time.monotonic()
     after = 0
 
     # 3) Relay loop.
     try:
         while True:
+            # Hard max-duration ceiling, regardless of activity (spec 24, AC-9).
+            if duration_cap and (time.monotonic() - started) >= duration_cap:
+                _post_output(
+                    config, get_token(), session_id, fence,
+                    events=[{"channel": "status", "data": "\r\n[max session duration reached — closed]\r\n"}],
+                    status="closed",
+                )
+                console.print("  [yellow]closed[/yellow] — max duration reached.")
+                return
+
             outcome, events, status = _poll_input(
                 config, get_token(), session_id, fence, after
             )

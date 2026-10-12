@@ -108,6 +108,12 @@ class Config(BaseModel):
     # An active session with no owner input for this long self-closes, so an
     # abandoned terminal never pins the worker open indefinitely. 0 disables.
     remote_session_idle_timeout: float = 300.0
+    # Hard ceiling on a single session's lifetime regardless of activity; it closes
+    # when reached. 0 disables the cap. (Idle cap above bounds quiet sessions.)
+    remote_session_max_duration: float = 1800.0
+    # Max remote terminals relayed at once (each on its own thread). Beyond this the
+    # worker stops claiming new sessions until one ends.
+    remote_session_max_concurrent: int = 3
     # Terminal prompt theme: "robbyrussell" (oh-my-zsh default: green ➜ + cyan
     # ~-path), or "plain" (native "PS <path>>").
     remote_session_prompt_theme: str = "robbyrussell"

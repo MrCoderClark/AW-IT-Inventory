@@ -22,6 +22,7 @@ import importlib.util
 import json
 import os
 import platform
+import threading
 import time
 from zoneinfo import ZoneInfo
 
@@ -72,18 +73,23 @@ class TokenCache:
         self._config = config
         self._token: str | None = None
         self._exp: float = 0.0
+        # Remote sessions run on their own threads (spec 24), so the cache is shared
+        # across threads — serialize get/refresh so two threads don't race a refresh.
+        self._lock = threading.Lock()
 
     def get(self) -> str:
-        now = time.time()
-        if self._token and now < self._exp - 60:
-            return self._token
-        token = get_token(self._config)
-        self._token = token
-        self._exp = _jwt_exp(token) or (now + 240)
-        return token
+        with self._lock:
+            now = time.time()
+            if self._token and now < self._exp - 60:
+                return self._token
+            token = get_token(self._config)
+            self._token = token
+            self._exp = _jwt_exp(token) or (now + 240)
+            return token
 
     def invalidate(self) -> None:
-        self._token = None
+        with self._lock:
+            self._token = None
 
 
 def _job_config(config: Config, targets: list[str]) -> Config:
@@ -487,17 +493,33 @@ def _claim_remote(config: Config, token: str, worker_id: str) -> dict | None:
     return resp.json()  # {id, assetTag, targetIp, shell, workerId, claimedAt}
 
 
+# Live remote-session relay threads (spec 24). An interactive terminal is long-
+# lived, so it runs on its own thread instead of blocking the main poll loop — the
+# scan / install / deploy queues keep draining while a session is open.
+_REMOTE_THREADS: list[threading.Thread] = []
+
+
 def _drain_remote(config: Config, tokens: "TokenCache", worker_id: str) -> None:
-    """Run any pending remote terminal sessions (spec 24). Each session is relayed
-    to completion before the next claim; `run_remote_session` carries the claim
-    fence and never raises. Imported lazily (pulls in winrm) and to avoid a cycle."""
+    """Claim pending remote terminal sessions (spec 24) and relay each on its own
+    daemon thread, up to a concurrency cap, so an open terminal never pauses the
+    other queues. `run_remote_session` carries the claim fence and never raises."""
     from remote_session import run_remote_session
 
-    while True:
+    # Drop finished threads, then fill up to the cap.
+    _REMOTE_THREADS[:] = [t for t in _REMOTE_THREADS if t.is_alive()]
+    cap = config.remote_session_max_concurrent
+    while len(_REMOTE_THREADS) < cap:
         claim = _claim_remote(config, tokens.get(), worker_id)
         if claim is None:
             return
-        run_remote_session(config, tokens.get, worker_id, claim)
+        t = threading.Thread(
+            target=run_remote_session,
+            args=(config, tokens.get, worker_id, claim),
+            name=f"remote-{claim['id'][:8]}",
+            daemon=True,
+        )
+        t.start()
+        _REMOTE_THREADS.append(t)
 
 
 def _resolve_tz(config: Config) -> ZoneInfo | None:

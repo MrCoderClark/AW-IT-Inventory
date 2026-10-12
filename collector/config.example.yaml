@@ -115,6 +115,10 @@ remote_session_poll_interval: 3.0
 # An active session with no owner input for this long self-closes, so an abandoned
 # terminal never pins the worker open. 0 disables the idle cap.
 remote_session_idle_timeout: 300.0
+# Hard ceiling on a session's lifetime regardless of activity (closes when reached).
+# 0 disables. Each terminal relays on its own thread, up to the concurrency cap.
+remote_session_max_duration: 1800.0
+remote_session_max_concurrent: 3
 # Terminal prompt theme: "robbyrussell" (oh-my-zsh default: green arrow + cyan
 # ~-path) or "plain" (native "PS <path>>").
 remote_session_prompt_theme: robbyrussell

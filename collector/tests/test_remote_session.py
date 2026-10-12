@@ -194,6 +194,27 @@ def test_prompt_robbyrussell_abbreviates_home():
     assert remote_session._prompt("plain", "C:\\Temp", "C:\\Users\\me") == "PS C:\\Temp> "
 
 
+def test_max_duration_closes_session(monkeypatch):
+    posts = _patch_posts(monkeypatch)
+    session = _FakeSession(_PsResult(out=b""))
+    monkeypatch.setattr(remote_session, "_open_session", lambda c, ip: (session, "me"))
+    # First monotonic() seeds the start; the next jumps past the cap → close.
+    calls = {"n": 0}
+
+    def fake_mono():
+        calls["n"] += 1
+        return 0.0 if calls["n"] == 1 else 9999.0
+
+    monkeypatch.setattr(remote_session.time, "monotonic", fake_mono)
+    _patch_gets(monkeypatch, [_Resp(200, {"events": [], "status": "active"})])
+    cfg = Config(ingest_url="http://web", remote_session_max_duration=10.0)
+
+    remote_session.run_remote_session(cfg, lambda: "tok", "w1", CLAIM)
+
+    statuses = [p.get("status") for p in posts]
+    assert "active" in statuses and statuses[-1] == "closed"
+
+
 def test_idle_timeout_closes_session(monkeypatch):
     posts = _patch_posts(monkeypatch)
     session = _FakeSession(_PsResult(out=b""))
