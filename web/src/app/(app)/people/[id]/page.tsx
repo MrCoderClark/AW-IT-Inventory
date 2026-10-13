@@ -18,11 +18,13 @@ export const dynamic = "force-dynamic";
 export default async function Page({ params }: PageProps<"/people/[id]">) {
   const user = await requireUser();
 
-  if (!hasPermission(user, "asset:read")) {
+  // Matches the directory gate: the staff profile is asset:write (RBAC audit),
+  // so a viewer can't reach a person by URL either.
+  if (!hasPermission(user, "asset:write")) {
     return (
       <PagePlaceholder
         title="Person"
-        description="You don't have permission to view the directory. Ask an admin for the asset:read role."
+        description="You don't have permission to view the staff directory. Ask an admin for the asset:write role."
         icon={Lock}
       />
     );

@@ -14,12 +14,14 @@ export const dynamic = "force-dynamic";
 export default async function Page() {
   const user = await requireUser();
 
-  // Viewing is open to any asset:read user (spec 16, AC-10).
-  if (!hasPermission(user, "asset:read")) {
+  // The staff directory (contact details, employee IDs, per-person device lists)
+  // is restricted to users who manage inventory — asset:write (RBAC audit). A
+  // read-only viewer still sees device→person assignments on the asset pages.
+  if (!hasPermission(user, "asset:write")) {
     return (
       <PagePlaceholder
         title="People"
-        description="You don't have permission to view the directory. Ask an admin for the asset:read role."
+        description="You don't have permission to view the staff directory. Ask an admin for the asset:write role."
         icon={Lock}
       />
     );

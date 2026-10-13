@@ -32,12 +32,14 @@ function toItem(
 export default async function Page() {
   const user = await requireUser();
 
-  // Viewing is open to any asset:read user (spec 18, AC-5); managing needs write.
-  if (!hasPermission(user, "asset:read")) {
+  // The media library is restricted to users who manage inventory — asset:write
+  // (RBAC audit). Asset photos still show on the asset pages (served separately),
+  // so a read-only viewer loses only the library itself.
+  if (!hasPermission(user, "asset:write")) {
     return (
       <PagePlaceholder
         title="Media"
-        description="You don't have permission to view assets. Ask an admin for the asset:read role."
+        description="You don't have permission to view the media library. Ask an admin for the asset:write role."
         icon={Lock}
       />
     );

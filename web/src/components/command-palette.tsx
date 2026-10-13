@@ -19,8 +19,10 @@ import {
   NAV_ASSETS,
   NAV_MANAGE,
   TYPE_ICON,
+  filterNavByPermissions,
   type Asset,
 } from "@/lib/data";
+import { useUser } from "@/components/user-provider";
 
 export const OPEN_COMMAND_EVENT = "opus:open-command";
 
@@ -61,12 +63,19 @@ export function CommandPalette() {
     };
   }, [open, assets.length]);
 
+  const { permissions } = useUser();
+
   const go = (href: string) => {
     setOpen(false);
     router.push(href);
   };
 
-  const allNav = [...NAV_PRIMARY, ...NAV_ASSETS, ...NAV_MANAGE];
+  // Only destinations this user can actually open (same rule as the sidebar), so
+  // the palette never jumps to a page that would just deny them.
+  const allNav = filterNavByPermissions(
+    [...NAV_PRIMARY, ...NAV_ASSETS, ...NAV_MANAGE],
+    permissions,
+  );
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>

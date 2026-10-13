@@ -33,12 +33,13 @@ export const dynamic = "force-dynamic";
 export default async function Page() {
   const user = await requireUser();
 
-  // Viewing discovery settings needs scan:read; editing needs scan:write (AC-7).
-  if (!hasPermission(user, "scan:read")) {
+  // The Admin page is admin-only: viewing requires user:admin, matching its nav
+  // and ⌘K visibility (RBAC audit). Editing the settings still needs scan:write.
+  if (!hasPermission(user, "user:admin")) {
     return (
       <PagePlaceholder
         title="Admin"
-        description="You don't have permission to view admin settings. Ask an admin for the scan:read role."
+        description="You don't have permission to view admin settings. Ask an admin for the admin role."
         icon={Lock}
       />
     );

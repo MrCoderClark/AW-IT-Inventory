@@ -9,13 +9,13 @@ import {
   NAV_PRIMARY,
   NAV_ASSETS,
   NAV_MANAGE,
-  ADMIN_ONLY_NAV,
+  filterNavByPermissions,
   type LocationNode,
   type NavItem,
 } from "@/lib/data";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useHasPermission } from "@/components/user-provider";
+import { useUser } from "@/components/user-provider";
 
 function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   const Icon = item.icon;
@@ -269,10 +269,9 @@ function LocationsNav({
 
 export function AppSidebar({ locations = [] }: { locations?: LocationNode[] }) {
   const pathname = usePathname();
-  const canAdmin = useHasPermission("user:admin");
-  const manageItems = canAdmin
-    ? NAV_MANAGE
-    : NAV_MANAGE.filter((item) => !ADMIN_ONLY_NAV.has(item.href));
+  const { permissions } = useUser();
+  // Show only the Manage items this user can actually open (visibility == access).
+  const manageItems = filterNavByPermissions(NAV_MANAGE, permissions);
   return (
     <aside className="hidden w-60 shrink-0 flex-col border-r bg-sidebar md:flex">
       {/* Wordmark */}

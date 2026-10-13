@@ -44,11 +44,12 @@ export default async function Page({
   params: Promise<{ id: string }>;
 }) {
   const user = await requireUser();
-  if (!hasPermission(user, "asset:read")) {
+  // Matches the library gate: the media detail is asset:write (RBAC audit).
+  if (!hasPermission(user, "asset:write")) {
     return (
       <PagePlaceholder
         title="Media"
-        description="You don't have permission to view assets. Ask an admin for the asset:read role."
+        description="You don't have permission to view the media library. Ask an admin for the asset:write role."
         icon={Lock}
       />
     );

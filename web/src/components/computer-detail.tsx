@@ -736,7 +736,10 @@ export function ComputerDetail({
             </Panel>
           )}
           <Panel icon={<ActivityIcon />} title="Assignment History">
-            <AssignmentTimeline history={assignmentHistory} />
+            <AssignmentTimeline
+              history={assignmentHistory}
+              canViewPeople={canWrite}
+            />
           </Panel>
         </TabsPanel>
 

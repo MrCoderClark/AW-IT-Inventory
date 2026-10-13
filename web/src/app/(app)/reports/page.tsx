@@ -146,6 +146,11 @@ export default async function Page() {
     );
   }
 
+  // Link a holder to their profile only for users who can open the People
+  // directory (asset:write); a read-only viewer sees the name, not a dead link
+  // to a page they can't access (RBAC audit).
+  const canViewPeople = hasPermission(user, "asset:write");
+
   const [warranty, aging, assignments, software] = await Promise.all([
     getWarrantyReport(),
     getAgingReport(),
@@ -466,12 +471,16 @@ export default async function Page() {
                     assignments.topHolders.map((h) => (
                       <TableRow key={h.id} className="group">
                         <TableCell>
-                          <Link
-                            href={`/people/${h.id}`}
-                            className="font-medium hover:underline"
-                          >
-                            {h.name}
-                          </Link>
+                          {canViewPeople ? (
+                            <Link
+                              href={`/people/${h.id}`}
+                              className="font-medium hover:underline"
+                            >
+                              {h.name}
+                            </Link>
+                          ) : (
+                            <span className="font-medium">{h.name}</span>
+                          )}
                           {h.jobTitle && (
                             <div className="text-xs text-muted-foreground">
                               {h.jobTitle}

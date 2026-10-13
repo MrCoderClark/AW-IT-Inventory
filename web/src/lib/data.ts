@@ -404,6 +404,11 @@ export interface NavItem {
   label: string;
   href: string;
   icon: LucideIcon;
+  /** Permission required to reach this item's page. When set, the item is hidden
+     (in BOTH the sidebar and the ⌘K palette) from users who lack it, so a link is
+     never shown for a page the user can't open. Omit for the `asset:read` baseline
+     every signed-in user has. Must match the page's own `hasPermission` gate. */
+  perm?: string;
 }
 
 export const NAV_PRIMARY: NavItem[] = [
@@ -420,28 +425,28 @@ export const NAV_ASSETS: NavItem[] = [
 ];
 
 export const NAV_MANAGE: NavItem[] = [
-  { label: "People", href: "/people", icon: Users },
-  { label: "Software Library", href: "/software/library", icon: Boxes },
-  { label: "Media", href: "/media", icon: Images },
+  { label: "People", href: "/people", icon: Users, perm: "asset:write" },
+  { label: "Software Library", href: "/software/library", icon: Boxes, perm: "software:deploy" },
+  { label: "Media", href: "/media", icon: Images, perm: "asset:write" },
   { label: "Compliance", href: "/compliance", icon: ShieldCheck },
   { label: "Reports", href: "/reports", icon: FileText },
-  { label: "Scans", href: "/scans", icon: ScanLine },
-  { label: "Scan Jobs", href: "/scans/jobs", icon: ListChecks },
-  { label: "Notifications", href: "/notifications", icon: Bell },
-  { label: "Users", href: "/admin/users", icon: UserCog },
-  { label: "Roles", href: "/admin/roles", icon: Shield },
-  { label: "Admin", href: "/admin", icon: Settings },
+  { label: "Scans", href: "/scans", icon: ScanLine, perm: "scan:read" },
+  { label: "Scan Jobs", href: "/scans/jobs", icon: ListChecks, perm: "scan:read" },
+  { label: "Notifications", href: "/notifications", icon: Bell, perm: "user:admin" },
+  { label: "Users", href: "/admin/users", icon: UserCog, perm: "user:admin" },
+  { label: "Roles", href: "/admin/roles", icon: Shield, perm: "user:admin" },
+  { label: "Admin", href: "/admin", icon: Settings, perm: "user:admin" },
 ];
 
-/** Manage-section routes that are admin-only, hidden from the sidebar for users
-   without `user:admin` (spec 19 notifications; the Admin, Users and Roles
-   pages). */
-export const ADMIN_ONLY_NAV = new Set<string>([
-  "/admin",
-  "/admin/users",
-  "/admin/roles",
-  "/notifications",
-]);
+/** Keep only the nav items a user with `permissions` may actually open — the one
+   rule shared by the sidebar and the ⌘K palette, so link visibility always matches
+   page access. An item with no `perm` is visible to everyone signed in. */
+export function filterNavByPermissions(
+  items: NavItem[],
+  permissions: string[],
+): NavItem[] {
+  return items.filter((item) => !item.perm || permissions.includes(item.perm));
+}
 
 /* ---------------- KPIs ---------------- */
 
