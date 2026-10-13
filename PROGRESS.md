@@ -7,7 +7,20 @@ via a feature branch + PR.
 
 ---
 
-## 🚧 RBAC nav visibility audit (`feat/rbac-nav-visibility`)
+## 🚧 Collector: bound WinRM calls so a wedged host can't hang a scan (`fix/collect-subcall-timeout`)
+
+A host with a stuck Windows Update made the posture step's WUA COM query block
+forever; pywinrm polls a running command indefinitely, so the whole collect hung
+(and the hang wasn't caught — it's a block, not an exception). Now every WinRM
+PowerShell call (the main collect + each best-effort enrichment step) runs under a
+wall-clock cap (`winrm_timeout`, previously defined but unused): a timed-out call is
+abandoned and, since it poisons the shared connection, the remaining enrichment
+steps run on a fresh session. The Windows Update history query is additionally
+wrapped in a PowerShell job with a 10s cap, so a wedged Update service yields
+`updates = unknown` instead of losing the whole posture. New `_run_ps_timeout` helper
++ test; `winrm_timeout` documented. Diagnosed with `diag_winrm.py` + a step probe.
+
+## Shipped ✅ — RBAC nav visibility audit (merged `feat/rbac-nav-visibility`)
 
 Server enforcement was already solid everywhere; this closes the UI **visibility**
 gaps so a user never sees a link to a page they can't open. `NavItem` gains a `perm`

@@ -60,6 +60,9 @@ class Config(BaseModel):
     winrm_scheme: str = "http"
     concurrency: int = 64
     connect_timeout: float = 2.0
+    # Wall-clock cap (seconds) on each WinRM PowerShell call: the main collect and
+    # every best-effort enrichment step. A hung server-side query (e.g. a wedged
+    # Windows Update) is abandoned at this cap so it can never stall a scan.
     winrm_timeout: int = 25
     snmp_timeout: float = 2.0
     output_dir: str = "out"

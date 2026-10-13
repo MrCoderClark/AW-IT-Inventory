@@ -68,6 +68,9 @@ concurrency: 64
 # listener can be slower to accept than a bare TCP connect, and too short a timeout
 # makes a reachable Windows host classify as "unknown" and get skipped.
 connect_timeout: 2.0
+# Wall-clock cap (seconds) per WinRM PowerShell call (main collect + each
+# best-effort step). A hung query (e.g. a wedged Windows Update) is abandoned at
+# this cap so one bad host can't stall a scan.
 winrm_timeout: 25
 snmp_timeout: 2.0
 output_dir: out
