@@ -18,6 +18,7 @@ import {
   returnAssetTx,
 } from "@/db/assignments";
 import { locationLeafStatus } from "@/db/queries";
+import { dismissMonitor } from "@/db/monitors";
 import { getCurrentUser, hasPermission } from "@/lib/auth/session";
 import type { AuthUser } from "@/lib/auth/types";
 import { assetInputSchema, firstError } from "@/lib/asset-schema";
@@ -353,17 +354,30 @@ export async function updateAsset(
  * already gone returns a clean error.
  */
 export async function deleteAsset(tag: string): Promise<ActionResult> {
-  if (!(await requireWrite())) return FORBIDDEN;
+  const user = await requireWrite();
+  if (!user) return FORBIDDEN;
 
   const deleted = await db
     .delete(assets)
     .where(eq(assets.tag, tag))
-    .returning({ type: assets.type });
+    .returning({ type: assets.type, serial: assets.serial });
 
   if (!deleted.length)
     return { ok: false, error: "That asset no longer exists." };
 
+  // Deleting a Monitor with a serial dismisses that serial from the discovery
+  // list, so the next scan's auto-add (spec 25 follow-up) doesn't resurrect the
+  // monitor the admin just removed. Best-effort — never fail the delete.
+  if (deleted[0].type === "Monitor" && deleted[0].serial) {
+    try {
+      await dismissMonitor(deleted[0].serial, user?.email ?? null);
+    } catch (err) {
+      console.error(`[assets] dismiss-on-delete failed for ${tag}:`, err);
+    }
+  }
+
   revalidateFor(deleted[0].type as AssetType);
   revalidatePath("/scans"); // a matched machine reappears in the inbox
+  revalidatePath("/monitors");
   return { ok: true, message: `Deleted ${tag}.` };
 }

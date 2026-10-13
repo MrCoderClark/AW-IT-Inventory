@@ -497,9 +497,13 @@ export function AssetTable({
   people = [],
   locations = [],
   activeLocationId,
+  banner,
 }: {
   assets: Asset[];
   config: AssetTableConfig;
+  /** Optional content shown between the hero header and the table (e.g. the
+     Monitors "Discovered displays" list). */
+  banner?: React.ReactNode;
   /** Show the write controls (New asset) only for `asset:write` users. */
   canWrite?: boolean;
   /** Show the "Columns" picker only for `columns:write` admins (spec 11). */
@@ -973,6 +977,7 @@ export function AssetTable({
   return (
     <div className="mx-auto flex max-w-[1400px] flex-col gap-6">
       {heading}
+      {banner}
       {card}
       {dialog}
       {picker}

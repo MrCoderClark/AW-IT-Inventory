@@ -118,6 +118,16 @@ $ErrorActionPreference = 'SilentlyContinue'
 $dec = { param($a) if ($a) { (-join ($a | Where-Object { $_ -ne 0 } | ForEach-Object { [char]$_ })).Trim() } else { '' } }
 $params = @{}
 try { Get-CimInstance -Namespace root\wmi -Class WmiMonitorBasicDisplayParams -ErrorAction Stop | ForEach-Object { $params[$_.InstanceName] = $_ } } catch {}
+# Raw EDID block 0 per monitor (for native resolution/refresh), keyed by instance.
+$edids = @{}
+try {
+  Get-CimInstance -Namespace root\wmi -Class WmiMonitorDescriptorMethods -ErrorAction Stop | ForEach-Object {
+    try {
+      $r = Invoke-CimMethod -InputObject $_ -MethodName WmiGetMonitorRawEEdidV1Block -Arguments @{ BlockId = [uint16]0 } -ErrorAction Stop
+      if ($r -and $r.BlockContent) { $edids[$_.InstanceName] = @($r.BlockContent | ForEach-Object { [int]$_ }) }
+    } catch {}
+  }
+} catch {}
 $mons = @(Get-CimInstance -Namespace root\wmi -Class WmiMonitorID -ErrorAction SilentlyContinue | ForEach-Object {
   $diag = $null
   $p = $params[$_.InstanceName]
@@ -133,6 +143,7 @@ $mons = @(Get-CimInstance -Namespace root\wmi -Class WmiMonitorID -ErrorAction S
     year         = [int]$_.YearOfManufacture
     active       = [bool]$_.Active
     diagonal_in  = $diag
+    edid         = $edids[$_.InstanceName]
   }
 })
 @{ monitors = $mons } | ConvertTo-Json -Depth 4 -Compress
@@ -238,10 +249,41 @@ def _parse(data: dict) -> tuple[Hardware, Health, str | None, list[Software]]:
     return hardware, health, data.get("hostname"), software
 
 
+def _edid_native_mode(edid) -> tuple[str | None, int | None]:
+    """Native (resolution, refresh_hz) from the EDID preferred detailed-timing
+    descriptor — the first DTD at byte 54, which EDID requires to be the panel's
+    native/preferred timing. Returns (None, None) when the block is missing, too
+    short, or not a real timing (pixel clock 0). Pure, so it's unit-tested."""
+    if not isinstance(edid, (list, tuple)) or len(edid) < 72:
+        return None, None
+    try:
+        b = [int(x) & 0xFF for x in edid]
+    except (TypeError, ValueError):
+        return None, None
+    o = 54
+    pixclk = b[o] | (b[o + 1] << 8)  # in units of 10 kHz
+    if pixclk == 0:
+        return None, None
+    h_active = b[o + 2] | ((b[o + 4] & 0xF0) << 4)
+    h_blank = b[o + 3] | ((b[o + 4] & 0x0F) << 8)
+    v_active = b[o + 5] | ((b[o + 7] & 0xF0) << 4)
+    v_blank = b[o + 6] | ((b[o + 7] & 0x0F) << 8)
+    if h_active == 0 or v_active == 0:
+        return None, None
+    resolution = f"{h_active}x{v_active}"
+    h_total = h_active + h_blank
+    v_total = v_active + v_blank
+    refresh = None
+    if h_total > 0 and v_total > 0:
+        refresh = round((pixclk * 10000) / (h_total * v_total))
+    return resolution, refresh
+
+
 def _parse_monitors(data: dict) -> list[Monitor]:
     """Parse the PS_MONITORS JSON (spec 25) into displays. A single monitor comes
     back as an object (PowerShell collapses a 1-element array), so coerce to a list.
-    Blank EDID fields → None; year 0 (missing) → None."""
+    Blank EDID fields → None; year 0 (missing) → None. The raw EDID block (when the
+    host returned it) yields native resolution + refresh."""
     raw = data.get("monitors")
     if raw is None:
         return []
@@ -252,6 +294,7 @@ def _parse_monitors(data: dict) -> list[Monitor]:
             continue
         year = m.get("year")
         diag = m.get("diagonal_in")
+        resolution, refresh_hz = _edid_native_mode(m.get("edid"))
         mons.append(
             Monitor(
                 vendor_code=_clean(m.get("vendor_code")),
@@ -261,6 +304,8 @@ def _parse_monitors(data: dict) -> list[Monitor]:
                 year=int(year) if year else None,
                 active=bool(m.get("active", True)),
                 diagonal_in=float(diag) if diag else None,
+                resolution=resolution,
+                refresh_hz=refresh_hz,
             )
         )
     return mons

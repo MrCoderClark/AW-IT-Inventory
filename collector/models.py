@@ -99,6 +99,10 @@ class Monitor(BaseModel):
     year: int | None = None
     active: bool = True
     diagonal_in: float | None = None
+    # Native mode, parsed from the EDID preferred (first) detailed timing: the
+    # panel's real resolution and refresh. None when the raw EDID is unreadable.
+    resolution: str | None = None  # e.g. "1920x1080"
+    refresh_hz: int | None = None
 
 
 class PrinterInfo(BaseModel):

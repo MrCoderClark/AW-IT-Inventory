@@ -505,6 +505,8 @@ export function ComputerDetail({
                           m.manufacturer,
                           m.year ? `${m.year}` : null,
                           m.diagonalIn ? `${m.diagonalIn}"` : null,
+                          m.resolution,
+                          m.refreshHz ? `${m.refreshHz} Hz` : null,
                         ]
                           .filter(Boolean)
                           .join(" · ") || "—"}

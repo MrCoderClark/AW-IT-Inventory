@@ -1,7 +1,9 @@
 import { Lock, Monitor } from "lucide-react";
 
 import { AssetTable } from "@/components/asset-table";
+import { DiscoveredMonitors } from "@/components/discovered-monitors";
 import { PagePlaceholder } from "@/components/page-placeholder";
+import { getDiscoveredMonitors } from "@/db/monitors";
 import {
   getAssetsByType,
   getColumnConfig,
@@ -27,16 +29,27 @@ export default async function Page({ searchParams }: PageProps<"/monitors">) {
   const loc = typeof rawLoc === "string" ? rawLoc : undefined;
   const canWrite = hasPermission(user, "asset:write");
   const canConfigureColumns = hasPermission(user, "columns:write");
-  const [assets, people, locations, columnOrder] = await Promise.all([
+  const [assets, people, locations, columnOrder, discovered] = await Promise.all([
     getAssetsByType("Monitor", { locationId: loc }),
     canWrite ? getPeople() : Promise.resolve([]),
     getLocationOptions(),
     getColumnConfig("monitor"),
+    // Displays a scan read but that aren't Monitor assets yet (spec 25 follow-up).
+    getDiscoveredMonitors(),
   ]);
 
   return (
     <AssetTable
       assets={assets}
+      banner={
+        <DiscoveredMonitors
+          key="discovered-monitors"
+          monitors={discovered}
+          people={people}
+          locations={locations}
+          canWrite={canWrite}
+        />
+      }
       config={{
         type: "Monitor",
         view: "monitor",

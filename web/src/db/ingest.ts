@@ -5,7 +5,11 @@ import { and, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { upsertComplianceStatus, type PostedCompliance } from "./compliance";
 import { upsertPrinterCounter } from "./counters";
 import { db } from "./index";
-import { replaceConnectedMonitors, type PostedMonitor } from "./monitors";
+import {
+  autoCreateExternalMonitors,
+  replaceConnectedMonitors,
+  type PostedMonitor,
+} from "./monitors";
 import { createNotification } from "./notifications";
 import { replaceInstalledSoftware, type PostedSoftware } from "./software";
 import {
@@ -356,6 +360,19 @@ export async function ingestScan(payload: IngestPayload): Promise<IngestResult> 
         } catch (err) {
           console.error(
             `[ingest] monitor inventory failed for asset ${assetId}:`,
+            err,
+          );
+        }
+        // Auto-add external monitors as Monitor assets (spec 25 follow-up): a
+        // standalone display plugged into this computer becomes an inventory
+        // asset, inheriting its location. Built-in laptop panels and dismissed
+        // serials are skipped (they stay in the manual discovery list).
+        // Best-effort — must never fail the machine ingest.
+        try {
+          await autoCreateExternalMonitors(assetId, h.monitors, now);
+        } catch (err) {
+          console.error(
+            `[ingest] monitor auto-create failed for asset ${assetId}:`,
             err,
           );
         }
