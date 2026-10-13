@@ -17,6 +17,7 @@ from models import (
     Hardware,
     Health,
     LocalAdmin,
+    Monitor,
     NetworkAdapter,
     Software,
 )
@@ -106,6 +107,35 @@ $sysPct = $null; try { $ld = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID
     updates_pending       = $null
     system_drive_pct_used = $sysPct
 } | ConvertTo-Json -Depth 3 -Compress
+"""
+
+# Connected displays from EDID (spec 25) — its OWN small WinRM call (same length
+# budget reason as PS_POSTURE). Decodes each WmiMonitorID UInt16[] char array to a
+# string on the target and emits clean JSON; physical size → diagonal inches via
+# WmiMonitorBasicDisplayParams. Best-effort: a headless/virtual display yields none.
+PS_MONITORS = r"""
+$ErrorActionPreference = 'SilentlyContinue'
+$dec = { param($a) if ($a) { (-join ($a | Where-Object { $_ -ne 0 } | ForEach-Object { [char]$_ })).Trim() } else { '' } }
+$params = @{}
+try { Get-CimInstance -Namespace root\wmi -Class WmiMonitorBasicDisplayParams -ErrorAction Stop | ForEach-Object { $params[$_.InstanceName] = $_ } } catch {}
+$mons = @(Get-CimInstance -Namespace root\wmi -Class WmiMonitorID -ErrorAction SilentlyContinue | ForEach-Object {
+  $diag = $null
+  $p = $params[$_.InstanceName]
+  if ($p -and $p.MaxHorizontalImageSize -and $p.MaxVerticalImageSize) {
+    $h = [double]$p.MaxHorizontalImageSize; $v = [double]$p.MaxVerticalImageSize
+    $diag = [math]::Round([math]::Sqrt($h*$h + $v*$v) / 2.54, 1)
+  }
+  [ordered]@{
+    vendor_code  = (& $dec $_.ManufacturerName)
+    model        = (& $dec $_.UserFriendlyName)
+    serial       = (& $dec $_.SerialNumberID)
+    product_code = (& $dec $_.ProductCodeID)
+    year         = [int]$_.YearOfManufacture
+    active       = [bool]$_.Active
+    diagonal_in  = $diag
+  }
+})
+@{ monitors = $mons } | ConvertTo-Json -Depth 4 -Compress
 """
 
 # Local Administrators membership (spec 21 v2) — its OWN WinRM call so neither this
@@ -208,6 +238,34 @@ def _parse(data: dict) -> tuple[Hardware, Health, str | None, list[Software]]:
     return hardware, health, data.get("hostname"), software
 
 
+def _parse_monitors(data: dict) -> list[Monitor]:
+    """Parse the PS_MONITORS JSON (spec 25) into displays. A single monitor comes
+    back as an object (PowerShell collapses a 1-element array), so coerce to a list.
+    Blank EDID fields → None; year 0 (missing) → None."""
+    raw = data.get("monitors")
+    if raw is None:
+        return []
+    items = raw if isinstance(raw, list) else [raw]
+    mons: list[Monitor] = []
+    for m in items:
+        if not isinstance(m, dict):
+            continue
+        year = m.get("year")
+        diag = m.get("diagonal_in")
+        mons.append(
+            Monitor(
+                vendor_code=_clean(m.get("vendor_code")),
+                model=_clean(m.get("model")),
+                serial=_clean(m.get("serial")),
+                product_code=_clean(m.get("product_code")),
+                year=int(year) if year else None,
+                active=bool(m.get("active", True)),
+                diagonal_in=float(diag) if diag else None,
+            )
+        )
+    return mons
+
+
 def _parse_posture(data: dict) -> Compliance:
     """Parse the PS_POSTURE JSON (spec 21) into a Compliance; a null signal (the
     collector couldn't read it) stays None = "unknown"."""
@@ -293,6 +351,7 @@ def collect_windows(
         "credential_profile": None,
         "software": None,
         "compliance": None,
+        "monitors": None,
         "errors": [],
     }
     port = config.ports.winrm
@@ -366,6 +425,14 @@ def collect_windows(
                     adapters, sessions = _parse_endpoint(json.loads(eraw))
                     out["health"].network_adapters = adapters
                     out["health"].logged_on_users = sessions
+            except Exception:  # noqa: BLE001 — optional, never fatal
+                pass
+            # Connected displays (spec 25): a fifth small best-effort call.
+            try:
+                mr = session.run_ps(PS_MONITORS)
+                if mr.status_code == 0:
+                    mraw = (mr.std_out or b"").decode("utf-8", errors="ignore").strip() or "{}"
+                    out["monitors"] = _parse_monitors(json.loads(mraw))
             except Exception:  # noqa: BLE001 — optional, never fatal
                 pass
             return out

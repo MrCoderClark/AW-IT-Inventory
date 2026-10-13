@@ -18,6 +18,7 @@ import { listPrinterPackages } from "@/lib/printer-packages";
 import { listDeploymentsForAssetTag } from "@/db/software-deploy";
 import { listSoftwarePackages } from "@/db/software-packages";
 import { listRemoteSessionsForAsset } from "@/db/remote-sessions";
+import { getConnectedMonitors, getMonitorConnection } from "@/db/monitors";
 import { getPrinterActivity, getPrinterNetworkHealth } from "@/db/printers";
 import {
   getAssetAssigneeId,
@@ -99,6 +100,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
       deployPkgs,
       deployHistoryRows,
       remoteSessions,
+      monitors,
     ] = await Promise.all([
       getMachineSummary(id),
       canWrite ? getAssetAssigneeId(id) : Promise.resolve(null),
@@ -115,6 +117,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
       canDeploy ? listSoftwarePackages() : Promise.resolve([]),
       canDeploy ? listDeploymentsForAssetTag(id) : Promise.resolve([]),
       canRemote ? listRemoteSessionsForAsset(id) : Promise.resolve([]),
+      getConnectedMonitors(id),
     ]);
     // Client-safe package options (no file paths / hashes).
     const installPackages = packages.map((p) => ({
@@ -173,6 +176,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
         canInstall={canInstall}
         canRemote={canRemote}
         remoteSessions={remoteSessions}
+        monitors={monitors}
         canDeploy={canDeploy}
         installJobs={installJobs}
         installPackages={installPackages}
@@ -187,7 +191,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
 
   // Thin categories (monitor / phone / network): the shared tabbed detail (spec
   // 17.05). Monitors/phones carry assignment; network carries only its own fields.
-  const [assigneeId, people, locations, assetDetails, assignmentHistory] =
+  const [assigneeId, people, locations, assetDetails, assignmentHistory, connection] =
     await Promise.all([
       canWrite ? getAssetAssigneeId(id) : Promise.resolve(null),
       canWrite ? getPeople() : Promise.resolve([]),
@@ -195,6 +199,11 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
       getAssetDetails(id),
       // Assignment history (spec 16, AC-7); empty for never-assigned / network gear.
       getAssetAssignmentHistory(id),
+      // Monitor ↔ computer serial reconciliation (spec 25 phase 3); null for
+      // phones/network and for monitors no scan has reported.
+      asset.type === "Monitor"
+        ? getMonitorConnection(id)
+        : Promise.resolve(null),
     ]);
 
   return (
@@ -206,6 +215,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
       people={people}
       locations={locations}
       canWrite={canWrite}
+      connection={connection}
     />
   );
 }

@@ -86,6 +86,21 @@ class Compliance(BaseModel):
     local_admins: list[LocalAdmin] | None = None  # local Administrators members
 
 
+class Monitor(BaseModel):
+    """A display connected to a computer, decoded from its EDID (spec 25). Best-
+    effort — a headless, virtual, or serial-less ("Generic PnP Monitor") display may
+    yield no serial. The 3-letter PnP vendor code is mapped to a vendor name
+    web-side; the collector reports only what the EDID gave."""
+
+    vendor_code: str | None = None  # 3-letter PnP code, e.g. "DEL"
+    model: str | None = None
+    serial: str | None = None
+    product_code: str | None = None
+    year: int | None = None
+    active: bool = True
+    diagonal_in: float | None = None
+
+
 class PrinterInfo(BaseModel):
     description: str | None = None
     model: str | None = None
@@ -113,6 +128,9 @@ class HostResult(BaseModel):
     # Security posture (spec 21). None = not collected (non-Windows, or the whole
     # posture read failed); individual unreadable signals are None *within* it.
     compliance: Compliance | None = None
+    # Connected displays from EDID (spec 25). None = not collected (non-Windows, or
+    # the read failed); an empty list = read OK, no displays detected.
+    monitors: list[Monitor] | None = None
     errors: list[str] = Field(default_factory=list)
 
 
