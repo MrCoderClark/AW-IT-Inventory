@@ -12,7 +12,8 @@ type Context = { params: Promise<{ id: string }> };
 
 /**
  * A single media-library image (spec 18):
- *  - GET streams a variant (thumb|original|cutout) to any `asset:read` user (AC-7).
+ *  - GET streams a variant (thumb|original|cutout) — the media library is
+ *    `asset:write` (RBAC audit; asset photos are served via /api/assets/[tag]/image).
  *  - PATCH edits its metadata — name, alt text, notes (`asset:write`) (AC-5).
  *  - DELETE removes it, blocked while any asset uses it (`asset:write`) (AC-6).
  */
@@ -20,7 +21,7 @@ type Context = { params: Promise<{ id: string }> };
 export async function GET(req: Request, context: Context) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (!hasPermission(user, "asset:read"))
+  if (!hasPermission(user, "asset:write"))
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const { id } = await context.params;

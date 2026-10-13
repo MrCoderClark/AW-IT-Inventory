@@ -22,7 +22,9 @@ export const runtime = "nodejs";
 export async function GET(req: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (!hasPermission(user, "asset:read"))
+  // The media library is asset:write (RBAC audit); asset photos are served
+  // separately via /api/assets/[tag]/image to any asset:read user.
+  if (!hasPermission(user, "asset:write"))
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const url = new URL(req.url);

@@ -239,8 +239,17 @@ export function ActivityTable({ events }: { events: ActivityEvent[] }) {
   );
 }
 
-/** The device's custody history (spec 16, AC-7), newest first. */
-export function AssignmentTimeline({ history }: { history: AssignmentEvent[] }) {
+/** The device's custody history (spec 16, AC-7), newest first. The holder's name
+   links to their profile only when the viewer can open the People directory
+   (`asset:write`); a read-only viewer still sees the name, just not a link to a
+   page they can't access (RBAC audit). */
+export function AssignmentTimeline({
+  history,
+  canViewPeople = false,
+}: {
+  history: AssignmentEvent[];
+  canViewPeople?: boolean;
+}) {
   if (history.length === 0) {
     return (
       <p className="rounded-xl border border-dashed bg-card/50 p-5 text-sm text-muted-foreground">
@@ -259,9 +268,16 @@ export function AssignmentTimeline({ history }: { history: AssignmentEvent[] }) 
             )}
           />
           <p className="text-sm">
-            <Link href={`/people/${e.personId}`} className="font-medium hover:underline">
-              {e.personName}
-            </Link>
+            {canViewPeople ? (
+              <Link
+                href={`/people/${e.personId}`}
+                className="font-medium hover:underline"
+              >
+                {e.personName}
+              </Link>
+            ) : (
+              <span className="font-medium">{e.personName}</span>
+            )}
           </p>
           <p className="mt-0.5 text-xs text-muted-foreground">
             Assigned {fmtDateTime(e.assignedAt)} by {e.assignedBy}

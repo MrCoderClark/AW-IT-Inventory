@@ -7,6 +7,21 @@ via a feature branch + PR.
 
 ---
 
+## 🚧 RBAC nav visibility audit (`feat/rbac-nav-visibility`)
+
+Server enforcement was already solid everywhere; this closes the UI **visibility**
+gaps so a user never sees a link to a page they can't open. `NavItem` gains a `perm`
+and one `filterNavByPermissions` rule, applied in **both the sidebar and the ⌘K
+command palette** (the palette previously filtered nothing — it showed every admin
+destination to everyone). Perms: Software Library→`software:deploy`, Scans/Scan
+Jobs→`scan:read`, Notifications/Users/Roles/Admin→`user:admin`. `/admin` tightened
+from `scan:read` to `user:admin` (page + nav agree). People and Media restricted to
+`asset:write` (pages, nav, and their read APIs) — device→person assignments stay
+visible on the asset side, and person-profile links are de-linked for viewers in the
+Assignment history + Reports. Gotcha: a Django `is_superuser` implicitly holds every
+permission, so a "Viewer" who is also a superuser bypasses all role limits. Tests:
+`app-sidebar.test.tsx` + `command-palette.test.tsx`.
+
 ## 🚧 Compliance alert email (spec 21 v2, `feat/compliance-alert-email`)
 
 Delivers the compliance at-risk / recovered alerts to admins' inboxes, not just the
