@@ -7,6 +7,7 @@ profile worked (so a future run can go straight to it).
 from __future__ import annotations
 
 import json
+import threading
 
 import winrm
 
@@ -94,7 +95,8 @@ try { $avs = @(Get-CimInstance -Namespace root/SecurityCenter2 -Class AntiVirusP
 if (($null -eq $defRt) -and $mp) { if ($mp.AMServiceEnabled) { $avName = 'Windows Defender' }; $defRt = [bool]$mp.RealTimeProtectionEnabled }
 # Defender's signature age only applies when Defender is the active AV.
 if ($avName -and ($avName -notmatch 'Microsoft Defender|Windows Defender')) { $defAge = $null }
-$wuDays = $null; try { $s = (New-Object -ComObject Microsoft.Update.Session).CreateUpdateSearcher(); $n = $s.GetTotalHistoryCount(); if ($n -gt 0) { $h = $s.QueryHistory(0, [Math]::Min($n, 50)); $l = $h | Where-Object { $_.Operation -eq 1 -and $_.ResultCode -eq 2 } | Sort-Object Date -Descending | Select-Object -First 1; if ($l) { $wuDays = [int]((Get-Date) - $l.Date).TotalDays } } } catch {}
+# WUA history can hang on a wedged Update service; run it in a job with a 10s cap.
+$wuDays = $null; try { $wj = Start-Job { $s=(New-Object -ComObject Microsoft.Update.Session).CreateUpdateSearcher(); $n=$s.GetTotalHistoryCount(); if($n -gt 0){ $l=$s.QueryHistory(0,[Math]::Min($n,50)) | ?{$_.Operation -eq 1 -and $_.ResultCode -eq 2} | sort Date -Desc | select -First 1; if($l){[int]((Get-Date)-$l.Date).TotalDays} } }; if(Wait-Job $wj -Timeout 10){ $wuDays=Receive-Job $wj }; Remove-Job $wj -Force } catch {}
 $sysPct = $null; try { $ld = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$($env:SystemDrive)'" -ErrorAction Stop; if ($ld -and $ld.Size -gt 0) { $sysPct = [math]::Round((($ld.Size - $ld.FreeSpace) / $ld.Size) * 100, 1) } } catch {}
 [ordered]@{
     bitlocker             = $bl
@@ -202,6 +204,31 @@ def _clean(value) -> str | None:
         return None
     v = value.strip()
     return v or None
+
+
+def _run_ps_timeout(session, script: str, timeout: float):
+    """Run a PowerShell script over WinRM with a wall-clock cap, returning the
+    pywinrm Response, or None if it exceeded ``timeout`` or raised.
+
+    pywinrm polls a still-running server command indefinitely, so a hung query
+    (e.g. a wedged Windows Update COM call) would otherwise block the whole collect
+    forever. The call runs on a daemon thread we abandon on timeout; the caller then
+    swaps in a fresh session, because the abandoned request poisons the shared WinRM
+    connection for anything that follows on it."""
+    box: dict = {}
+
+    def _call():
+        try:
+            box["r"] = session.run_ps(script)
+        except BaseException as e:  # noqa: BLE001 — surfaced to the caller as None
+            box["e"] = e
+
+    t = threading.Thread(target=_call, daemon=True)
+    t.start()
+    t.join(timeout)
+    if t.is_alive():
+        return None  # timed out; thread + its request are abandoned
+    return box.get("r")  # None if run_ps raised
 
 
 def _parse(data: dict) -> tuple[Hardware, Health, str | None, list[Software]]:
@@ -422,7 +449,16 @@ def collect_windows(
                 transport=config.winrm_transport,
                 server_cert_validation="ignore",
             )
-            r = session.run_ps(PS_COLLECT)
+            # The main collect is wall-clock bounded too: a host whose primary
+            # query wedges fails this profile (and tries the next / reports) instead
+            # of hanging the whole scan.
+            r = _run_ps_timeout(session, PS_COLLECT, config.winrm_timeout)
+            if r is None:
+                profile_errors.append(
+                    f"[{prof.id}] user={user!r}: collect timed out "
+                    f"(> {config.winrm_timeout}s) or connection error"
+                )
+                continue
             if r.status_code != 0:
                 err = (r.std_err or b"")[:200].decode(errors="ignore").strip()
                 profile_errors.append(
@@ -438,21 +474,39 @@ def collect_windows(
                 credential_profile=prof.id,
                 software=software,
             )
-            # Security posture (spec 21): a second, small WinRM call on the same
-            # authenticated session. Best-effort — the hardware collect has already
-            # succeeded, so a posture failure (or an older host missing a cmdlet)
-            # leaves compliance=None and never turns a good collect into a failure.
+
+            # Enrichment calls (posture, local admins, endpoint, displays). Each is
+            # best-effort AND wall-clock bounded: a hung server-side query (e.g. a
+            # wedged Windows Update COM call) must never stall the collect. A
+            # timed-out call leaks its request on the shared connection, so after a
+            # timeout the rest run on a fresh session.
+            sub = {"session": session}
+
+            # Bind this profile's connection details as defaults so the closure
+            # captures them per-iteration, not by late reference to the loop var.
+            def _best_effort(script, _sub=sub, _ep=endpoint, _u=user, _pw=prof.password):
+                r2 = _run_ps_timeout(_sub["session"], script, config.winrm_timeout)
+                if r2 is None:
+                    _sub["session"] = winrm.Session(
+                        _ep,
+                        auth=(_u, _pw),
+                        transport=config.winrm_transport,
+                        server_cert_validation="ignore",
+                    )
+                return r2
+
+            # Security posture (spec 21). A failure / timeout leaves compliance=None.
             try:
-                pr = session.run_ps(PS_POSTURE)
-                if pr.status_code == 0:
+                pr = _best_effort(PS_POSTURE)
+                if pr is not None and pr.status_code == 0:
                     praw = (pr.std_out or b"").decode("utf-8", errors="ignore").strip() or "{}"
                     out["compliance"] = _parse_posture(json.loads(praw))
             except Exception:  # noqa: BLE001 — posture is optional, never fatal
                 pass
-            # Local administrators (spec 21 v2): a third small best-effort call.
+            # Local administrators (spec 21 v2).
             try:
-                ar = session.run_ps(PS_ADMINS)
-                if ar.status_code == 0:
+                ar = _best_effort(PS_ADMINS)
+                if ar is not None and ar.status_code == 0:
                     araw = (ar.std_out or b"").decode("utf-8", errors="ignore").strip() or "{}"
                     admins = _parse_admins(json.loads(araw))
                     if admins is not None:
@@ -461,21 +515,20 @@ def collect_windows(
                         out["compliance"].local_admins = admins
             except Exception:  # noqa: BLE001 — optional, never fatal
                 pass
-            # Endpoint detail (spec 21 v2): network adapters + sessions, merged
-            # into Health. A fourth small best-effort call.
+            # Endpoint detail (spec 21 v2): network adapters + sessions, merged into Health.
             try:
-                er = session.run_ps(PS_ENDPOINT)
-                if er.status_code == 0 and out["health"] is not None:
+                er = _best_effort(PS_ENDPOINT)
+                if er is not None and er.status_code == 0 and out["health"] is not None:
                     eraw = (er.std_out or b"").decode("utf-8", errors="ignore").strip() or "{}"
                     adapters, sessions = _parse_endpoint(json.loads(eraw))
                     out["health"].network_adapters = adapters
                     out["health"].logged_on_users = sessions
             except Exception:  # noqa: BLE001 — optional, never fatal
                 pass
-            # Connected displays (spec 25): a fifth small best-effort call.
+            # Connected displays (spec 25).
             try:
-                mr = session.run_ps(PS_MONITORS)
-                if mr.status_code == 0:
+                mr = _best_effort(PS_MONITORS)
+                if mr is not None and mr.status_code == 0:
                     mraw = (mr.std_out or b"").decode("utf-8", errors="ignore").strip() or "{}"
                     out["monitors"] = _parse_monitors(json.loads(mraw))
             except Exception:  # noqa: BLE001 — optional, never fatal
