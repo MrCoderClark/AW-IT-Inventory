@@ -3,8 +3,14 @@ import "server-only";
 import { eq } from "drizzle-orm";
 
 import { db } from "./index";
+import { createNotification } from "./notifications";
 import { assets, complianceStatus } from "./schema";
-import type { CompliancePosture, LocalAdmin } from "@/lib/compliance-score";
+import {
+  failingSecurityChecks,
+  scoreCompliance,
+  type CompliancePosture,
+  type LocalAdmin,
+} from "@/lib/compliance-score";
 
 /** Normalize the stored `localAdmins` jsonb, tolerating the pre-v2 shape (a plain
    string[]) alongside the current {name, isGroup}[] until rows are re-scanned. */
@@ -87,6 +93,113 @@ export async function upsertComplianceStatus(
     .insert(complianceStatus)
     .values(row)
     .onConflictDoUpdate({ target: complianceStatus.assetId, set });
+}
+
+/**
+ * Alert admins when a computer's security posture crosses a boundary (spec 21 v2):
+ * a transition into "at-risk" (any hard security check — BitLocker/AV/Secure
+ * Boot/TPM — failing) fires one notification, and the return to clean fires a
+ * recovery notice. Modeled on the printer-reachability alert (spec 12): the last
+ * notified state lives in `compliance_status.alertedState` and is advanced **only
+ * after a successful send**, so a failed notification is retried next scan and we
+ * never spam while a device stays at-risk (one alert per episode, one recovery).
+ *
+ * Call AFTER `upsertComplianceStatus` (which doesn't touch `alertedState`), keyed
+ * by the asset's uuid. Best-effort by the caller (ingest) — must never fail the
+ * machine ingest. A device that isn't assessed (posture unreadable) never alerts.
+ */
+export async function evaluateComplianceAlert(
+  assetId: string,
+  assessedAt: Date,
+): Promise<void> {
+  const [r] = await db
+    .select({
+      tag: assets.tag,
+      name: assets.name,
+      bitlocker: complianceStatus.bitlocker,
+      defenderRealtime: complianceStatus.defenderRealtime,
+      defenderSigAgeDays: complianceStatus.defenderSigAgeDays,
+      avProduct: complianceStatus.avProduct,
+      tpmReady: complianceStatus.tpmReady,
+      secureBoot: complianceStatus.secureBoot,
+      updatesLastDays: complianceStatus.updatesLastDays,
+      updatesPending: complianceStatus.updatesPending,
+      systemDrivePctUsed: complianceStatus.systemDrivePctUsed,
+      alertedState: complianceStatus.alertedState,
+    })
+    .from(complianceStatus)
+    .innerJoin(assets, eq(assets.id, complianceStatus.assetId))
+    .where(eq(complianceStatus.assetId, assetId))
+    .limit(1);
+  if (!r) return;
+
+  const posture: CompliancePosture = {
+    bitlocker: r.bitlocker,
+    defenderRealtime: r.defenderRealtime,
+    defenderSigAgeDays: r.defenderSigAgeDays,
+    avProduct: r.avProduct,
+    tpmReady: r.tpmReady,
+    secureBoot: r.secureBoot,
+    updatesLastDays: r.updatesLastDays,
+    updatesPending: r.updatesPending,
+    systemDrivePctUsed: r.systemDrivePctUsed,
+  };
+  const score = scoreCompliance(posture);
+  // A device we can't assess (all-unknown) doesn't get an alert state at all —
+  // leave the prior state untouched so a real reading later still transitions.
+  if (!score.assessed) return;
+
+  const failing = failingSecurityChecks(score);
+  const newState: "ok" | "at-risk" = failing.length ? "at-risk" : "ok";
+  const prev = r.alertedState ?? null;
+  if (prev === newState) return; // no boundary crossed
+
+  const href = `/assets/${r.tag}`;
+  const stamp = assessedAt.toISOString();
+
+  if (newState === "at-risk") {
+    const id = await createNotification({
+      type: "compliance-at-risk",
+      severity: "warning",
+      title: `${r.name} failed a security check`,
+      body: failing.map((c) => `${c.label}: ${c.detail}`).join(" · "),
+      href,
+      // Unique per scan, so a later episode isn't swallowed by idempotency; the
+      // transition gate already ensures we only call this once per onset.
+      dedupeKey: `compliance-at-risk-${assetId}-${stamp}`,
+      assetId,
+    });
+    // Advance only on a confirmed insert (null = send failed → retry next scan).
+    if (id) await setAlertedState(assetId, "at-risk");
+    return;
+  }
+
+  // Recovered. Only announce a recovery if we'd actually alerted (prev at-risk);
+  // a first-ever clean reading just records "ok" silently.
+  if (prev === "at-risk") {
+    const id = await createNotification({
+      type: "compliance-recovered",
+      severity: "info",
+      title: `${r.name} is back in compliance`,
+      body: "All hard security checks (BitLocker, antivirus, Secure Boot, TPM) pass.",
+      href,
+      dedupeKey: `compliance-recovered-${assetId}-${stamp}`,
+      assetId,
+    });
+    if (id) await setAlertedState(assetId, "ok");
+    return;
+  }
+  await setAlertedState(assetId, "ok");
+}
+
+async function setAlertedState(
+  assetId: string,
+  state: "ok" | "at-risk",
+): Promise<void> {
+  await db
+    .update(complianceStatus)
+    .set({ alertedState: state })
+    .where(eq(complianceStatus.assetId, assetId));
 }
 
 export interface FleetComplianceRow {

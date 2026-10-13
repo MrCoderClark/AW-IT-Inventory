@@ -215,6 +215,8 @@ export type NotificationType =
   | "printer-install-failed"
   | "software-deploy"
   | "software-deploy-failed"
+  | "compliance-at-risk"
+  | "compliance-recovered"
   | "scan-failed"
   | "device-discovered"
   | "warranty-expiring";

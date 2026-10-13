@@ -165,3 +165,33 @@ export function scoreCompliance(p: CompliancePosture): ComplianceScore {
     : null;
   return { assessed, score, checks, unknownCount };
 }
+
+/**
+ * The hard security checks that drive compliance alerting (spec 21 v2). A `fail`
+ * on any of these is a concrete, actionable security regression (encryption,
+ * anti-malware, boot integrity) — unlike the softer Updates/Disk `warn`s. Kept
+ * separate from the score weights so the alert rule can change independently.
+ */
+export const HARD_SECURITY_CHECKS: readonly CheckId[] = [
+  "bitlocker",
+  "antivirus",
+  "secureBoot",
+  "tpm",
+];
+
+/**
+ * The hard security checks currently failing on a scored posture, for the alert
+ * body. Empty when the device isn't assessed (we never alert on a device the
+ * collector couldn't read — that's "unknown", not "failing") or when all hard
+ * checks pass/warn/are unknown. `isAtRisk` is simply "any failing".
+ */
+export function failingSecurityChecks(s: ComplianceScore): ComplianceCheck[] {
+  if (!s.assessed) return [];
+  return s.checks.filter(
+    (c) => HARD_SECURITY_CHECKS.includes(c.id) && c.status === "fail",
+  );
+}
+
+export function isAtRisk(s: ComplianceScore): boolean {
+  return failingSecurityChecks(s).length > 0;
+}

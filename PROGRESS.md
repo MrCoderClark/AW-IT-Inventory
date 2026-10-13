@@ -7,7 +7,27 @@ via a feature branch + PR.
 
 ---
 
-## 🚧 Monitor discovery + auto-add (spec 25 follow-up, `feat/monitor-discovery`)
+## 🚧 Compliance alerting (spec 21 v2, `feat/compliance-alerting`)
+
+Makes compliance actionable: admins get notified when a computer's security posture
+regresses, not just when they open the dashboard. A device goes **at-risk** when any
+hard security check fails — **BitLocker / Antivirus / Secure Boot / TPM** (`fail`) —
+firing one `compliance-at-risk` notification that names the failed checks; the return
+to clean fires `compliance-recovered`.
+
+- State machine mirrors the printer-reachability alert (spec 12): the last notified
+  state lives in a new `compliance_status.alertedState` col and is advanced **only
+  after a successful send**, so one alert per episode, one recovery, retries on a
+  failed send, and never spam while a device stays at-risk.
+- Pure rule `failingSecurityChecks` / `isAtRisk` (`compliance-score.ts`); soft fails
+  (Updates/Disk `warn`) and unassessed devices never alert. `evaluateComplianceAlert`
+  (`db/compliance.ts`) fires at ingest after the posture upsert — best-effort, never
+  fails the scan. Delivered in-app (bell + `/notifications`, SSE), deep-linked to the
+  computer's Compliance tab; email via aw-auth is a later follow-up.
+- **Needs `db:push`** (the `alerted_state` column). Tests: compliance-score at-risk
+  rule + the transition state machine.
+
+## Shipped ✅ — Monitor discovery + auto-add (spec 25 follow-up, merged `feat/monitor-discovery`)
 
 Turns scanned displays into managed Monitor assets. On `/monitors`, a **Discovered
 displays** banner lists displays a scan read from a computer's EDID that aren't

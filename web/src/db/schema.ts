@@ -751,6 +751,10 @@ export const complianceStatus = pgTable("compliance_status", {
     { name: string; isGroup: boolean; enabled: boolean }[]
   >(),
   assessedAt: timestamp("assessed_at", { withTimezone: true }).notNull(),
+  // Alerting state (spec 21 v2): the last posture state we notified admins about,
+  // so we alert only on a transition and once per episode (like printer alerts).
+  // "ok" | "at-risk" | null (never evaluated). Advanced only after a successful send.
+  alertedState: text("alerted_state").$type<"ok" | "at-risk">(),
 });
 
 // ── Device assignment history (spec 16) ──────────────────────────────────────
@@ -822,6 +826,8 @@ export const notifications = pgTable(
         | "printer-install-failed"
         | "software-deploy"
         | "software-deploy-failed"
+        | "compliance-at-risk"
+        | "compliance-recovered"
         | "scan-failed"
         | "device-discovered"
         | "warranty-expiring"

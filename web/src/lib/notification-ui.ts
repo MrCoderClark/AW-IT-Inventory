@@ -5,6 +5,7 @@ import {
   Radar,
   ScanLine,
   ShieldAlert,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 
@@ -21,6 +22,8 @@ export const NOTIFICATION_ICON: Record<NotificationType, LucideIcon> = {
   "printer-install-failed": Printer,
   "software-deploy": Boxes,
   "software-deploy-failed": Boxes,
+  "compliance-at-risk": ShieldAlert,
+  "compliance-recovered": ShieldCheck,
   "scan-failed": ScanLine,
   "device-discovered": Radar,
   "warranty-expiring": ShieldAlert,
@@ -35,6 +38,8 @@ export const NOTIFICATION_TYPE_LABEL: Record<NotificationType, string> = {
   "printer-install-failed": "Printer install failed",
   "software-deploy": "Software deployed",
   "software-deploy-failed": "Software deploy failed",
+  "compliance-at-risk": "Compliance at risk",
+  "compliance-recovered": "Compliance recovered",
   "scan-failed": "Scan failed",
   "device-discovered": "Device discovered",
   "warranty-expiring": "Warranty",
