@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Activity as ActivityIcon,
@@ -11,6 +12,7 @@ import {
   Copy,
   FileText,
   Hash,
+  Link2 as LinkIcon,
   Loader2,
   MapPin,
   Monitor as MonitorIcon,
@@ -42,6 +44,7 @@ import {
   Panel,
   deriveActivity,
   fmtDate,
+  fmtDateTime,
 } from "@/components/detail-ui";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
@@ -102,6 +105,7 @@ export function ThinAssetDetail({
   people = [],
   locations = [],
   canWrite = false,
+  connection = null,
 }: {
   asset: Asset;
   details?: Record<string, unknown> | null;
@@ -110,6 +114,13 @@ export function ThinAssetDetail({
   people?: PersonOption[];
   locations?: LocationOption[];
   canWrite?: boolean;
+  // Monitor only (spec 25 phase 3): the computer whose last scan reported this
+  // monitor's serial as a connected display. Null = not matched to any scan.
+  connection?: {
+    computerTag: string;
+    computerName: string;
+    seenAt: string | Date;
+  } | null;
 }) {
   const router = useRouter();
   const [tab, setTab] = React.useState("overview");
@@ -294,6 +305,29 @@ export function ThinAssetDetail({
               <InfoField icon={<FileText />} label="Specification" value={asset.spec || "—"} mono />
             </div>
           </Panel>
+
+          {/* Connected computer (spec 25 phase 3): a Monitor matched by serial to a
+             scanned computer's displays — the reverse of the computer's Displays
+             card. Only shown when a scan actually reported this monitor. */}
+          {type === "Monitor" && connection && (
+            <Panel icon={<MonitorIcon />} title="Connected Computer">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <Link
+                  href={`/assets/${connection.computerTag}`}
+                  className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                >
+                  <LinkIcon className="size-4" />
+                  {connection.computerName}
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {connection.computerTag}
+                  </span>
+                </Link>
+                <span className="text-xs text-muted-foreground">
+                  as of {fmtDateTime(connection.seenAt)}
+                </span>
+              </div>
+            </Panel>
+          )}
 
           {/* Monitor/Phone show their spec-10 fields on Overview; Network shows them
              on its own Network tab instead. */}

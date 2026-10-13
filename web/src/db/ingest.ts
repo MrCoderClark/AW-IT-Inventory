@@ -5,6 +5,7 @@ import { and, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { upsertComplianceStatus, type PostedCompliance } from "./compliance";
 import { upsertPrinterCounter } from "./counters";
 import { db } from "./index";
+import { replaceConnectedMonitors, type PostedMonitor } from "./monitors";
 import { createNotification } from "./notifications";
 import { replaceInstalledSoftware, type PostedSoftware } from "./software";
 import {
@@ -54,6 +55,9 @@ export interface IngestHost {
   // Installed programs from a Windows collect (spec 15). null/absent = not
   // collected (leave stored software intact); an array = the current set.
   software?: PostedSoftware[] | null;
+  // Connected displays (spec 25). null/absent = not read (leave stored set intact);
+  // an array = the current set.
+  monitors?: PostedMonitor[] | null;
   // Security posture from a Windows collect (spec 21). null/absent = not
   // collected (leave the prior posture row intact).
   compliance?: PostedCompliance | null;
@@ -337,6 +341,21 @@ export async function ingestScan(payload: IngestPayload): Promise<IngestResult> 
         } catch (err) {
           console.error(
             `[ingest] compliance upsert failed for asset ${assetId}:`,
+            err,
+          );
+        }
+      }
+
+      // Connected displays (spec 25, AC-3): a matched Computer that reported a
+      // `monitors` array replaces its display set. `monitors == null`/absent means
+      // the collector didn't read it (non-Windows or a failure) → leave the prior
+      // set intact. Best-effort — a display write must never fail the machine ingest.
+      if (assetType === "Computer" && Array.isArray(h.monitors)) {
+        try {
+          await replaceConnectedMonitors(assetId, h.monitors, now);
+        } catch (err) {
+          console.error(
+            `[ingest] monitor inventory failed for asset ${assetId}:`,
             err,
           );
         }

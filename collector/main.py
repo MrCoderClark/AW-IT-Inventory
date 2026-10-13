@@ -115,6 +115,7 @@ def scan_targets(
                 health=res["health"],
                 software=res["software"],
                 compliance=res["compliance"],
+                monitors=res["monitors"],
                 errors=res["errors"],
             )
 

@@ -1150,6 +1150,33 @@ export const softwareDeployments = pgTable(
   ],
 );
 
+// Connected displays per Computer (spec 25). Current state, fully replaced per scan
+// (like installed_software); `serial` keys the read-time join to Monitor assets.
+export const connectedMonitors = pgTable(
+  "connected_monitors",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    manufacturer: text("manufacturer"), // vendor name, mapped from the PnP code
+    vendorCode: text("vendor_code"), // 3-letter PnP code, e.g. "DEL"
+    model: text("model"),
+    serial: text("serial"),
+    productCode: text("product_code"),
+    year: integer("year"),
+    active: boolean("active").notNull().default(true),
+    diagonalIn: doublePrecision("diagonal_in"),
+    seenAt: timestamp("seen_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("connected_monitors_asset_idx").on(t.assetId),
+    index("connected_monitors_serial_idx").on(t.serial),
+  ],
+);
+
 export type NotificationRow = typeof notifications.$inferSelect;
 export type NotificationReadRow = typeof notificationReads.$inferSelect;
 export type DashboardWidgetRow = typeof dashboardWidgets.$inferSelect;
@@ -1157,3 +1184,4 @@ export type RemoteSessionRow = typeof remoteSessions.$inferSelect;
 export type RemoteSessionEventRow = typeof remoteSessionEvents.$inferSelect;
 export type SoftwarePackageRow = typeof softwarePackages.$inferSelect;
 export type SoftwareDeploymentRow = typeof softwareDeployments.$inferSelect;
+export type ConnectedMonitorRow = typeof connectedMonitors.$inferSelect;

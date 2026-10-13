@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Activity as ActivityIcon,
@@ -15,9 +16,11 @@ import {
   Hash,
   HardDrive,
   Info,
+  Link2 as LinkIcon,
   Loader2,
   MapPin,
   MemoryStick,
+  Monitor,
   MonitorCog,
   Network,
   MoreHorizontal,
@@ -65,6 +68,7 @@ import {
   RemoteSessionHistory,
   type RemoteSessionHistoryItem,
 } from "@/components/remote-session-history";
+import type { ConnectedMonitorItem } from "@/db/monitors";
 import {
   SoftwareDeployPanel,
   type DeployHistoryItem,
@@ -138,6 +142,7 @@ export function ComputerDetail({
   canInstall = false,
   canRemote = false,
   remoteSessions = [],
+  monitors = [],
   canDeploy = false,
   installJobs = [],
   installPackages = [],
@@ -160,6 +165,7 @@ export function ComputerDetail({
   canInstall?: boolean;
   canRemote?: boolean;
   remoteSessions?: RemoteSessionHistoryItem[];
+  monitors?: ConnectedMonitorItem[];
   canDeploy?: boolean;
   installJobs?: InstallJobListItem[];
   installPackages?: PackageOption[];
@@ -473,6 +479,67 @@ export function ComputerDetail({
               </div>
             </Panel>
           )}
+
+          {/* -------- Connected displays (spec 25) -------- */}
+          <Panel icon={<Monitor />} title="Connected Displays">
+            {monitors.length > 0 ? (
+              <ul className="divide-y text-sm">
+                {monitors.map((m, i) => (
+                  <li
+                    key={`${m.serial ?? m.model}-${i}`}
+                    className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0"
+                  >
+                    <span className="min-w-0">
+                      <span className="flex items-center gap-2">
+                        <span className="truncate font-medium">
+                          {m.model || m.manufacturer || "Display"}
+                        </span>
+                        {!m.active && (
+                          <Badge variant="outline" className="text-[10px]">
+                            inactive
+                          </Badge>
+                        )}
+                      </span>
+                      <span className="block text-xs text-muted-foreground">
+                        {[
+                          m.manufacturer,
+                          m.year ? `${m.year}` : null,
+                          m.diagonalIn ? `${m.diagonalIn}"` : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ") || "—"}
+                      </span>
+                    </span>
+                    <span className="flex shrink-0 flex-col items-end gap-1">
+                      <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                        {m.serial || "—"}
+                      </span>
+                      {/* Serial reconciliation (phase 3): link a matched Monitor
+                         asset, or flag a scanned serial OPUS doesn't track. */}
+                      {m.matchedAssetTag ? (
+                        <Link
+                          href={`/assets/${m.matchedAssetTag}`}
+                          className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                        >
+                          <LinkIcon className="size-3" />
+                          {m.matchedAssetName || m.matchedAssetTag}
+                        </Link>
+                      ) : m.serial ? (
+                        <Badge variant="outline" className="text-[10px] font-normal">
+                          not in inventory
+                        </Badge>
+                      ) : null}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No displays detected. Monitors appear here after a Windows scan reads
+                their EDID (a headless or virtual display may report none).
+              </p>
+            )}
+          </Panel>
         </TabsPanel>
 
         {/* -------- Live scan -------- */}
