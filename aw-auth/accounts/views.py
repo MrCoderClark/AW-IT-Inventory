@@ -17,7 +17,11 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from rbac.models import Role
 
 from .models import ServiceAccount
-from .notifications import send_counter_report, send_printer_alert
+from .notifications import (
+    send_compliance_alert,
+    send_counter_report,
+    send_printer_alert,
+)
 from .permissions import HasAppPerm
 from .serializers import (
     AdminUserCreateSerializer,
@@ -391,6 +395,40 @@ class CounterReportView(APIView):
             )
 
         sent = send_counter_report(printers)
+        return Response({"ok": True, "sent": sent})
+
+
+class ComplianceAlertView(APIView):
+    """Email the admins when a computer's security posture crosses a boundary
+    (spec 21 v2): at-risk (a hard security check failed) or recovered.
+
+    Called by web (which detects the transition at ingest) with its `opus-web`
+    service account. Requires a service token carrying `notify:send`. aw-auth
+    resolves "the admins" from RBAC and sends through Resend; a send failure is
+    reported so web can log it (the in-app notification is the durable record).
+    """
+
+    authentication_classes: list = []  # machine caller; token verified by scope
+    permission_classes = [HasServiceScope]
+    required_scope = "notify:send"
+
+    @extend_schema(request=None, responses={200: None})
+    def post(self, request):
+        computer = request.data.get("computer") or {}
+        event = request.data.get("event")
+        checks = request.data.get("checks") or []
+        if not isinstance(computer, dict) or event not in ("at-risk", "recovered"):
+            return Response(
+                {"detail": "computer{name} and event in {at-risk,recovered} are required"},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        if not isinstance(checks, list):
+            return Response(
+                {"detail": "checks must be a list"},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+
+        sent = send_compliance_alert(computer, event, checks)
         return Response({"ok": True, "sent": sent})
 
 

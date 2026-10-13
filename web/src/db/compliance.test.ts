@@ -32,8 +32,9 @@ const H = vi.hoisted(() => {
   const notifyMock = vi.fn(
     async (_input: Record<string, unknown>) => "notif-id" as string | null,
   );
+  const emailMock = vi.fn(async (_p: Record<string, unknown>) => true);
 
-  return { state, selectMock, updateMock, notifyMock };
+  return { state, selectMock, updateMock, notifyMock, emailMock };
 });
 
 vi.mock("server-only", () => ({}));
@@ -41,6 +42,7 @@ vi.mock("@/db/index", () => ({
   db: { select: H.selectMock, update: H.updateMock },
 }));
 vi.mock("./notifications", () => ({ createNotification: H.notifyMock }));
+vi.mock("@/lib/notify", () => ({ sendComplianceAlertEmail: H.emailMock }));
 
 import { evaluateComplianceAlert } from "./compliance";
 
@@ -68,6 +70,7 @@ beforeEach(() => {
   H.state.row = null;
   H.state.updates = [];
   H.notifyMock.mockResolvedValue("notif-id");
+  H.emailMock.mockResolvedValue(true);
 });
 
 describe("evaluateComplianceAlert", () => {
@@ -83,6 +86,12 @@ describe("evaluateComplianceAlert", () => {
       href: "/assets/OPUS-COMP-1",
     });
     expect(H.state.updates).toEqual([{ alertedState: "at-risk" }]);
+    // Also emails the admins (best-effort, non-gating).
+    expect(H.emailMock).toHaveBeenCalledTimes(1);
+    expect(H.emailMock.mock.calls[0][0]).toMatchObject({
+      computer: { name: "Reception PC", tag: "OPUS-COMP-1" },
+      event: "at-risk",
+    });
   });
 
   it("stays quiet while it remains at-risk", async () => {
@@ -100,12 +109,16 @@ describe("evaluateComplianceAlert", () => {
       type: "compliance-recovered",
     });
     expect(H.state.updates).toEqual([{ alertedState: "ok" }]);
+    expect(H.emailMock).toHaveBeenCalledWith(
+      expect.objectContaining({ event: "recovered" }),
+    );
   });
 
   it("a first-ever clean read records ok silently (no notification)", async () => {
     H.state.row = cleanRow(null);
     await evaluateComplianceAlert("a1", NOW);
     expect(H.notifyMock).not.toHaveBeenCalled();
+    expect(H.emailMock).not.toHaveBeenCalled();
     expect(H.state.updates).toEqual([{ alertedState: "ok" }]);
   });
 
@@ -115,6 +128,7 @@ describe("evaluateComplianceAlert", () => {
     await evaluateComplianceAlert("a1", NOW);
     expect(H.notifyMock).toHaveBeenCalledTimes(1);
     expect(H.state.updates).toHaveLength(0); // state unchanged
+    expect(H.emailMock).not.toHaveBeenCalled(); // no email when in-app didn't land
   });
 
   it("never alerts on an unassessed device (all posture unknown)", async () => {

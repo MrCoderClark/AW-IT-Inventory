@@ -134,6 +134,39 @@ def send_printer_alert(printer: dict, event: str, since: str | None) -> bool:
     return _deliver(subject, body, label=f"printer-alert ({event})")
 
 
+def send_compliance_alert(computer: dict, event: str, checks: list[dict]) -> bool:
+    """Email every admin when a computer's security posture crosses a boundary
+    (spec 21 v2). ``event`` is "at-risk" (one or more hard security checks failing)
+    or "recovered" (back to clean). ``checks`` is the list of failed checks, each
+    ``{label, detail}``, used in the at-risk body. Returns True on a real send.
+
+    Called by web (which detects the transition at ingest) with its ``opus-web``
+    service account. Best-effort for the caller: a miss is logged and returned as
+    False, never raised.
+    """
+    name = computer.get("name") or "Unknown computer"
+    failed = [c for c in (checks or []) if isinstance(c, dict)]
+    if event == "at-risk":
+        subject = f"[OPUS] Compliance at risk: {name}"
+        lines = "\n".join(
+            f"  • {c.get('label') or 'Check'}: {c.get('detail') or 'failed'}"
+            for c in failed
+        ) or "  • One or more security checks failed."
+        body = (
+            f"OPUS flagged '{name}' as at risk — a hard security check failed on "
+            f"its latest scan:\n\n{lines}\n\n"
+            "Review the device's Compliance tab in OPUS. You'll get one more email "
+            "when it returns to compliance."
+        )
+    else:  # recovered
+        subject = f"[OPUS] Compliance recovered: {name}"
+        body = (
+            f"OPUS reports '{name}' is back in compliance — all hard security "
+            "checks (BitLocker, antivirus, Secure Boot, TPM) now pass."
+        )
+    return _deliver(subject, body, label=f"compliance-alert ({event})")
+
+
 def _fmt_total(total) -> str:
     return f"{total:,}" if isinstance(total, (int, float)) else "—"
 

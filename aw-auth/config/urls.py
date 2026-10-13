@@ -6,7 +6,11 @@ from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 from accounts.jwks import jwks, openid_configuration
-from accounts.views import CounterReportView, PrinterAlertView
+from accounts.views import (
+    ComplianceAlertView,
+    CounterReportView,
+    PrinterAlertView,
+)
 
 
 def healthz(_request):
@@ -32,6 +36,11 @@ urlpatterns = [
         "v1/notify/printer-counter-report",
         CounterReportView.as_view(),
         name="notify-printer-counter-report",
+    ),
+    path(
+        "v1/notify/compliance-alert",
+        ComplianceAlertView.as_view(),
+        name="notify-compliance-alert",
     ),
     path("v1/schema", SpectacularAPIView.as_view(), name="schema"),
     path("v1/docs", SpectacularSwaggerView.as_view(url_name="schema"), name="docs"),

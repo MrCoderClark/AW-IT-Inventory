@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 
 import { db } from "./index";
 import { createNotification } from "./notifications";
+import { sendComplianceAlertEmail } from "@/lib/notify";
 import { assets, complianceStatus } from "./schema";
 import {
   failingSecurityChecks,
@@ -170,7 +171,16 @@ export async function evaluateComplianceAlert(
       assetId,
     });
     // Advance only on a confirmed insert (null = send failed → retry next scan).
-    if (id) await setAlertedState(assetId, "at-risk");
+    if (id) {
+      await setAlertedState(assetId, "at-risk");
+      // Best-effort email, non-gating: the in-app alert above is the durable
+      // record and already gates re-firing, so a failed email just logs.
+      await sendComplianceAlertEmail({
+        computer: { name: r.name, tag: r.tag },
+        event: "at-risk",
+        checks: failing.map((c) => ({ label: c.label, detail: c.detail })),
+      });
+    }
     return;
   }
 
@@ -186,7 +196,14 @@ export async function evaluateComplianceAlert(
       dedupeKey: `compliance-recovered-${assetId}-${stamp}`,
       assetId,
     });
-    if (id) await setAlertedState(assetId, "ok");
+    if (id) {
+      await setAlertedState(assetId, "ok");
+      await sendComplianceAlertEmail({
+        computer: { name: r.name, tag: r.tag },
+        event: "recovered",
+        checks: [],
+      });
+    }
     return;
   }
   await setAlertedState(assetId, "ok");

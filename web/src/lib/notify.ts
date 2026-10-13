@@ -4,6 +4,17 @@ import { AUTH_API_URL } from "./auth/config";
 import type { CounterReportRow } from "@/db/counters";
 import type { AlertEvent } from "@/db/reachability";
 
+/** One failed check named in a compliance at-risk email. */
+export interface ComplianceAlertCheck {
+  label: string;
+  detail: string;
+}
+export interface ComplianceAlertPayload {
+  computer: { name: string; tag: string };
+  event: "at-risk" | "recovered";
+  checks: ComplianceAlertCheck[];
+}
+
 /**
  * Printer-alert notifications (spec 12, milestone 3). Web owns the reachability
  * history, so it detects the up/down transition and asks aw-auth to email the
@@ -161,6 +172,61 @@ export async function sendCounterReportEmail(
     return true;
   } catch (err) {
     console.error("[notify] printer-counter-report failed:", err);
+    return false;
+  }
+}
+
+/**
+ * Ask aw-auth to email the admins about one compliance transition (spec 21 v2):
+ * a computer going at-risk (a hard security check failed) or recovering. Web
+ * detects the transition at ingest; aw-auth resolves the admins and sends via
+ * Resend, the same `opus-web` service account (`notify:send`) as the printer
+ * alerts. Returns true only on a real send (keys on `sent`), but the caller treats
+ * this as best-effort and non-gating — the in-app notification is the durable
+ * record, so a failed email here is logged, not retried (which would re-fire the
+ * in-app alert).
+ */
+export async function sendComplianceAlertEmail(
+  payload: ComplianceAlertPayload,
+): Promise<boolean> {
+  const who = `${payload.computer.name} (${payload.event})`;
+  try {
+    const token = await getServiceToken();
+    if (!token) return false;
+
+    const res = await fetch(`${AUTH_API_URL}/v1/notify/compliance-alert`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        computer: payload.computer,
+        event: payload.event,
+        checks: payload.checks,
+      }),
+      cache: "no-store",
+    });
+    if (res.status === 401) {
+      cachedToken = null;
+    }
+    if (!res.ok) {
+      console.error(
+        `[notify] compliance-alert ${res.status} for ${who}: ` +
+          `${(await res.text()).slice(0, 200)}`,
+      );
+      return false;
+    }
+    const data = (await res.json().catch(() => null)) as { sent?: boolean } | null;
+    if (data?.sent !== true) {
+      console.error(
+        `[notify] aw-auth accepted but did not deliver the compliance alert for ${who}.`,
+      );
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error(`[notify] compliance-alert failed for ${who}:`, err);
     return false;
   }
 }

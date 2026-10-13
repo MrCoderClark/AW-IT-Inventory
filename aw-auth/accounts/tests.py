@@ -62,6 +62,56 @@ class PrinterAlertResendTest(TestCase):
         self.assertFalse(ok)
 
 
+class ComplianceAlertResendTest(TestCase):
+    """Compliance alert email via Resend (spec 21 v2)."""
+
+    def setUp(self):
+        os.environ["RESEND_API_KEY"] = "re_test_key"
+        os.environ["EMAIL_FROM"] = "OPUS <alerts@example.com>"
+
+    def tearDown(self):
+        os.environ.pop("RESEND_API_KEY", None)
+        os.environ.pop("EMAIL_FROM", None)
+
+    @patch.object(notifications, "resolve_admin_emails", return_value=["a@example.com"])
+    @patch("accounts.notifications.urllib.request.urlopen")
+    def test_at_risk_lists_failed_checks(self, mock_urlopen, _mock_admins):
+        import json
+
+        resp = MagicMock()
+        resp.status = 200
+        mock_urlopen.return_value.__enter__.return_value = resp
+
+        ok = notifications.send_compliance_alert(
+            {"name": "Reception PC"},
+            "at-risk",
+            [{"label": "BitLocker", "detail": "Not encrypted"}],
+        )
+
+        self.assertTrue(ok)
+        body = json.loads(mock_urlopen.call_args.args[0].data)
+        self.assertIn("Reception PC", body["subject"])
+        self.assertIn("at risk", body["subject"].lower())
+        self.assertIn("BitLocker", body["text"])
+        self.assertIn("Not encrypted", body["text"])
+
+    @patch.object(notifications, "resolve_admin_emails", return_value=["a@example.com"])
+    @patch("accounts.notifications.urllib.request.urlopen")
+    def test_recovered_subject(self, mock_urlopen, _mock_admins):
+        import json
+
+        resp = MagicMock()
+        resp.status = 200
+        mock_urlopen.return_value.__enter__.return_value = resp
+
+        ok = notifications.send_compliance_alert({"name": "Lab PC"}, "recovered", [])
+
+        self.assertTrue(ok)
+        body = json.loads(mock_urlopen.call_args.args[0].data)
+        self.assertIn("recovered", body["subject"].lower())
+        self.assertIn("Lab PC", body["subject"])
+
+
 class UserManagementTestBase(TestCase):
     """Seed the RBAC bits these tests need and build an admin + a plain user."""
 
