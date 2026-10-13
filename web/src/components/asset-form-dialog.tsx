@@ -84,9 +84,10 @@ export function AssetFormDialog({
   presetType?: AssetType;
   /** Edit mode: the immutable tag being edited. */
   editTag?: string;
-  /** Edit mode: the asset's current values, pre-filled into the form. */
+  /** Pre-filled shared values: the asset's current values in edit mode, or seed
+     values for a create (e.g. adding a discovered monitor — name/serial/model). */
   initial?: AssetFormValues;
-  /** Edit mode: the asset's current type-specific values, pre-filled. */
+  /** Pre-filled type-specific values, matching `initial` (edit or create seed). */
   initialDetails?: DetailsFormValues;
   onSuccess?: () => void;
 }) {
@@ -111,6 +112,12 @@ export function AssetFormDialog({
     if (mode === "edit" && initial) {
       setValues(initial);
       setDetails(initialDetails ?? emptyDetailsFor(initial.type as AssetType));
+    } else if (initial) {
+      // Create mode with seed values (e.g. a discovered monitor): start from the
+      // seed, letting its type win so the right type-specific fields render.
+      const t = (initial.type || presetType || "") as AssetType | "";
+      setValues({ ...EMPTY_ASSET_FORM, ...initial, type: t });
+      setDetails(initialDetails ?? (t ? emptyDetailsFor(t) : {}));
     } else {
       const t = presetType ?? "";
       setValues({ ...EMPTY_ASSET_FORM, type: t });

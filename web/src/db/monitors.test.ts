@@ -27,28 +27,64 @@ const H = vi.hoisted(() => {
   const tx = {
     delete: vi.fn(() => ({ where: () => Promise.resolve() })),
     insert: vi.fn(() => ({
-      values: (rows: unknown) => {
-        state.inserted.push(rows as unknown[]);
-        return Promise.resolve();
+      values: (row: unknown) => {
+        state.inserted.push(Array.isArray(row) ? row : [row]);
+        // Awaitable (for plain `.values(...)` inserts), and also offers the
+        // onConflictDoNothing().returning() chain the asset insert uses.
+        const p = Promise.resolve() as Promise<void> & {
+          onConflictDoNothing?: () => { returning: () => Promise<unknown[]> };
+        };
+        p.onConflictDoNothing = () => ({
+          returning: () =>
+            Promise.resolve([{ id: "new-id", tag: "OPUS-MON-NEW" }]),
+        });
+        return p;
       },
     })),
   };
   const transactionMock = vi.fn((cb: (t: unknown) => unknown) => cb(tx));
 
-  return { state, selectMock, selectDistinctOnMock, transactionMock, tx };
+  // Top-level db.insert/delete for the dismiss/restore helpers.
+  const insertMock = vi.fn(() => ({
+    values: (row: unknown) => {
+      state.inserted.push([row]);
+      return { onConflictDoNothing: () => Promise.resolve() };
+    },
+  }));
+  const deleteMock = vi.fn(() => ({ where: () => Promise.resolve() }));
+
+  return {
+    state,
+    selectMock,
+    selectDistinctOnMock,
+    transactionMock,
+    insertMock,
+    deleteMock,
+    tx,
+  };
 });
 
+const A = vi.hoisted(() => ({
+  assignMock: vi.fn(async () => ({ ok: true as const })),
+}));
+
 vi.mock("server-only", () => ({}));
+vi.mock("./assignments", () => ({ assignAssetTx: A.assignMock }));
 vi.mock("@/db/index", () => ({
   db: {
     select: H.selectMock,
     selectDistinctOn: H.selectDistinctOnMock,
     transaction: H.transactionMock,
+    insert: H.insertMock,
+    delete: H.deleteMock,
   },
 }));
 
 import {
+  autoCreateExternalMonitors,
+  dismissMonitor,
   getConnectedMonitors,
+  getDiscoveredMonitors,
   getMonitorConnection,
   replaceConnectedMonitors,
 } from "./monitors";
@@ -107,6 +143,8 @@ describe("getConnectedMonitors", () => {
           year: 2017,
           active: true,
           diagonalIn: 21.5,
+          resolution: "1920x1080",
+          refreshHz: 60,
           matchedAssetTag: null, // scanned serial OPUS doesn't track
           matchedAssetName: null,
         },
@@ -118,6 +156,8 @@ describe("getConnectedMonitors", () => {
           year: 2017,
           active: true,
           diagonalIn: 21.5,
+          resolution: "1920x1080",
+          refreshHz: 60,
           matchedAssetTag: "OPUS-MON-1",
           matchedAssetName: "Reception Monitor",
         },
@@ -133,6 +173,8 @@ describe("getConnectedMonitors", () => {
         year: 2017,
         active: true,
         diagonalIn: 21.5,
+        resolution: "1920x1080",
+        refreshHz: 60,
         matchedAssetTag: "OPUS-MON-1",
         matchedAssetName: "Reception Monitor",
       },
@@ -143,6 +185,8 @@ describe("getConnectedMonitors", () => {
         year: 2017,
         active: true,
         diagonalIn: 21.5,
+        resolution: "1920x1080",
+        refreshHz: 60,
         matchedAssetTag: null,
         matchedAssetName: null,
       },
@@ -168,5 +212,161 @@ describe("getMonitorConnection", () => {
     H.state.selects = [[]];
     const out = await getMonitorConnection("OPUS-MON-9");
     expect(out).toBeNull();
+  });
+});
+
+describe("getDiscoveredMonitors", () => {
+  it("returns unmatched displays newest-first", async () => {
+    const older = new Date("2026-10-10T09:00:00Z");
+    const newer = new Date("2026-10-12T09:00:00Z");
+    // The store sorts by seenAt desc after the DISTINCT-ON serial sort, so feed
+    // them out of order to prove the sort.
+    H.state.selects = [
+      [
+        {
+          serial: "AAA",
+          manufacturer: "Dell",
+          vendorCode: "DEL",
+          model: "DELL P2217H",
+          productCode: "A0D8",
+          year: 2017,
+          diagonalIn: 21.5,
+          computerTag: "PC-1",
+          computerName: "Reception PC",
+          seenAt: older,
+        },
+        {
+          serial: "BBB",
+          manufacturer: "LG",
+          vendorCode: "GSM",
+          model: "LG 27UL500",
+          productCode: "0001",
+          year: 2020,
+          diagonalIn: 27,
+          computerTag: "PC-2",
+          computerName: "Lab PC",
+          seenAt: newer,
+        },
+      ],
+    ];
+    const out = await getDiscoveredMonitors();
+    expect(out.map((m) => m.serial)).toEqual(["BBB", "AAA"]);
+    expect(out[0]).toMatchObject({
+      serial: "BBB",
+      manufacturer: "LG",
+      computerName: "Lab PC",
+    });
+  });
+});
+
+describe("dismissMonitor", () => {
+  it("inserts the trimmed serial (idempotent)", async () => {
+    await dismissMonitor("  XYZ  ", "admin@corp.com");
+    expect(H.insertMock).toHaveBeenCalled();
+    expect(H.state.inserted[0][0]).toMatchObject({
+      serial: "XYZ",
+      dismissedBy: "admin@corp.com",
+    });
+  });
+
+  it("no-ops on a blank serial", async () => {
+    await dismissMonitor("   ", null);
+    expect(H.insertMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("autoCreateExternalMonitors", () => {
+  const extern = {
+    vendor_code: "DEL",
+    model: "DELL P2217H",
+    serial: "EXT1",
+    diagonal_in: 21.5,
+    resolution: "1920x1080",
+    refresh_hz: 60,
+  };
+
+  it("creates an external monitor inheriting the computer's location", async () => {
+    H.state.selects = [
+      [{ locationId: "loc-1" }], // computer location
+      [], // no existing Monitor asset with this serial
+      [], // not dismissed
+    ];
+    const n = await autoCreateExternalMonitors("pc-1", [extern], new Date());
+    expect(n).toBe(1);
+    expect(H.transactionMock).toHaveBeenCalled();
+    // First insert is the asset row.
+    expect(H.state.inserted[0][0]).toMatchObject({
+      type: "Monitor",
+      serial: "EXT1",
+      vendor: "Dell",
+      status: "deployed",
+      locationId: "loc-1",
+    });
+    // Second insert is the monitor_details row with the EDID-derived fields.
+    expect(H.state.inserted[1][0]).toMatchObject({
+      sizeInches: "21.5",
+      resolution: "1920x1080",
+      refreshHz: 60,
+    });
+  });
+
+  it("inherits the computer's assignee through the custody engine", async () => {
+    H.state.selects = [
+      [{ locationId: "loc-1", assigneeId: "person-9" }], // computer
+      [], // no existing asset
+      [], // not dismissed
+    ];
+    const n = await autoCreateExternalMonitors("pc-1", [extern], new Date());
+    expect(n).toBe(1);
+    expect(A.assignMock).toHaveBeenCalledWith(
+      expect.anything(),
+      "new-id",
+      "person-9",
+      "scan (auto)",
+      expect.any(Date),
+    );
+  });
+
+  it("leaves the monitor Available when the computer has no assignee", async () => {
+    H.state.selects = [
+      [{ locationId: "loc-1", assigneeId: null }], // unassigned computer
+      [],
+      [],
+    ];
+    const n = await autoCreateExternalMonitors("pc-1", [extern], new Date());
+    expect(n).toBe(1);
+    expect(A.assignMock).not.toHaveBeenCalled();
+  });
+
+  it("skips built-in panels entirely (no location lookup, no insert)", async () => {
+    const n = await autoCreateExternalMonitors(
+      "pc-1",
+      [{ vendor_code: "AUO", serial: "PANEL1", model: "Internal" }],
+      new Date(),
+    );
+    expect(n).toBe(0);
+    expect(H.transactionMock).not.toHaveBeenCalled();
+    expect(H.selectMock).not.toHaveBeenCalled();
+  });
+
+  it("skips a serial that is already a Monitor asset", async () => {
+    H.state.selects = [
+      [{ locationId: null }], // computer location
+      [{ id: "existing-monitor" }], // already in inventory
+    ];
+    const n = await autoCreateExternalMonitors("pc-1", [extern], new Date());
+    expect(n).toBe(0);
+    expect(H.transactionMock).not.toHaveBeenCalled();
+  });
+
+  it("skips a dismissed serial", async () => {
+    H.state.selects = [
+      [{ locationId: null }], // computer location
+      [], // no existing asset
+      [{ serial: "EXT1" }], // dismissed
+    ];
+    const n = await autoCreateExternalMonitors("pc-1", [extern], new Date());
+    expect(n).toBe(0);
+    expect(H.transactionMock).not.toHaveBeenCalled();
   });
 });

@@ -1167,6 +1167,8 @@ export const connectedMonitors = pgTable(
     year: integer("year"),
     active: boolean("active").notNull().default(true),
     diagonalIn: doublePrecision("diagonal_in"),
+    resolution: text("resolution"), // native, e.g. "1920x1080" (from EDID)
+    refreshHz: integer("refresh_hz"), // native refresh, from EDID
     seenAt: timestamp("seen_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -1177,6 +1179,19 @@ export const connectedMonitors = pgTable(
   ],
 );
 
+// Displays a scan reported that an admin has waved off the Monitors discovery
+// list (spec 25 follow-up). Keyed by the EDID serial so the dismissal survives
+// re-scans (connected_monitors is wiped and rewritten each scan). An entry here
+// hides that serial from "Discovered displays"; adding the monitor to inventory
+// (an asset with that serial) also drops it from the list, by the asset match.
+export const dismissedMonitors = pgTable("dismissed_monitors", {
+  serial: text("serial").primaryKey(),
+  dismissedAt: timestamp("dismissed_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  dismissedBy: text("dismissed_by"), // the admin's email, for the audit trail
+});
+
 export type NotificationRow = typeof notifications.$inferSelect;
 export type NotificationReadRow = typeof notificationReads.$inferSelect;
 export type DashboardWidgetRow = typeof dashboardWidgets.$inferSelect;
@@ -1185,3 +1200,4 @@ export type RemoteSessionEventRow = typeof remoteSessionEvents.$inferSelect;
 export type SoftwarePackageRow = typeof softwarePackages.$inferSelect;
 export type SoftwareDeploymentRow = typeof softwareDeployments.$inferSelect;
 export type ConnectedMonitorRow = typeof connectedMonitors.$inferSelect;
+export type DismissedMonitorRow = typeof dismissedMonitors.$inferSelect;

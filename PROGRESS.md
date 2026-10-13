@@ -7,6 +7,52 @@ via a feature branch + PR.
 
 ---
 
+## 🚧 Monitor discovery + auto-add (spec 25 follow-up, `feat/monitor-discovery`)
+
+Turns scanned displays into managed Monitor assets. On `/monitors`, a **Discovered
+displays** banner lists displays a scan read from a computer's EDID that aren't
+inventoried yet, each with **Add to inventory** (opens New Monitor pre-filled) and
+**Dismiss** (hides built-in laptop panels, docks, duplicates; survives re-scans via
+a new `dismissed_monitors` table).
+
+- **Auto-add external monitors at ingest**: a scanned display becomes a Monitor
+  asset when its vendor is a **recognized brand** (`isExternalMonitor`: in
+  `PNP_VENDORS`, not a built-in-panel maker) with a serial — inheriting the
+  computer's **location and assignee** (through the custody engine, not a raw
+  write). Idempotent by serial; built-in panels / unknown vendors / dismissed
+  serials are skipped. Deleting a Monitor dismisses its serial (no re-resurrection).
+- **Native resolution + refresh** parsed from the raw EDID preferred detailed-timing
+  descriptor (collector `WmiMonitorDescriptorMethods` → `_edid_native_mode`), stored
+  on `connected_monitors` (new `resolution`/`refresh_hz` cols) and the created
+  monitor's `monitor_details`; shown on the Displays card. Verified live (Dell P2217H
+  → 1920x1080 @ 60). Panel type / ports / curved aren't in EDID → stay manual.
+- `AssetFormDialog` now pre-fills in create mode; `AssetTable` gained a `banner` slot.
+  **Needs `db:push`** (dismissed_monitors + the two connected_monitors columns).
+
+## Shipped ✅ — Connected monitors (spec 25, merged)
+
+Each Windows scan reads attached displays' EDID (vendor/model/serial/year/size) into
+a `connected_monitors` table (replaced per scan). A **Connected Displays** card on
+the computer detail page lists them; a serial reconciliation links each to its
+Monitor asset (or flags "not in inventory"), and the Monitor's page shows the
+**Connected Computer** in reverse. PnP vendor codes → names (`pnp-vendors.ts`).
+
+## Shipped ✅ — Software deployment (spec 23, merged)
+
+Push software to managed computers as ordered, multi-step packages (script / MSI /
+EXE install, with companion files + a `%DIR%` token for response files). Installers
+live in an S3-compatible store (SeaweedFS); the collector's `deploy:agent` runs the
+steps via a cmd batch wrapper (exact arg quoting, reliable wait). Per-step captured
+output, finish notification, continue-on-failure toggle, retention prune, package
+create/edit UI. Reuses the atomic-claim/fenced-status worker machinery.
+
+## Shipped ✅ — Remote actions: interactive terminal (spec 24, merged)
+
+An interactive remote PowerShell terminal to a managed computer from the UI (a REPL
+relay over WinRM, not a PTY), needing `remote:agent` on the collector. Threaded
+input↔output relay, max-duration cap, robbyrussell-style prompt with persistent cwd,
+pwsh colored output (CLIXML noise stripped), session-history panel + transcript view.
+
 ## Shipped ✅ — Compliance & device health (spec 21, merged)
 
 Security-posture collection, a per-device health score, and a fleet dashboard
