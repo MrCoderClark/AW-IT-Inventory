@@ -7,7 +7,18 @@ via a feature branch + PR.
 
 ---
 
-## 🚧 Compliance alerting (spec 21 v2, `feat/compliance-alerting`)
+## 🚧 Compliance alert email (spec 21 v2, `feat/compliance-alert-email`)
+
+Delivers the compliance at-risk / recovered alerts to admins' inboxes, not just the
+in-app bell. aw-auth gains `send_compliance_alert()` + a `ComplianceAlertView`
+(scope `notify:send`) at `v1/notify/compliance-alert`, reusing the Resend sender and
+live RBAC admin resolution (same path as printer alerts). web's `notify.ts` gains
+`sendComplianceAlertEmail()` (via the `opus-web` service account, keys on `sent`);
+`evaluateComplianceAlert` emails on each transition **best-effort and non-gating** —
+the in-app notification still drives `alertedState`, so a failed email just logs and
+never re-fires the in-app alert. No DB migration (delivery only).
+
+## Shipped ✅ — Compliance alerting (spec 21 v2, merged `feat/compliance-alerting`)
 
 Makes compliance actionable: admins get notified when a computer's security posture
 regresses, not just when they open the dashboard. A device goes **at-risk** when any
