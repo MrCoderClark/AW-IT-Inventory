@@ -2,7 +2,11 @@ import "server-only";
 
 import { and, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 
-import { upsertComplianceStatus, type PostedCompliance } from "./compliance";
+import {
+  evaluateComplianceAlert,
+  upsertComplianceStatus,
+  type PostedCompliance,
+} from "./compliance";
 import { upsertPrinterCounter } from "./counters";
 import { db } from "./index";
 import {
@@ -345,6 +349,16 @@ export async function ingestScan(payload: IngestPayload): Promise<IngestResult> 
         } catch (err) {
           console.error(
             `[ingest] compliance upsert failed for asset ${assetId}:`,
+            err,
+          );
+        }
+        // Alert admins on a posture boundary (spec 21 v2): at-risk ⇄ clean, once
+        // per episode. Best-effort — must never fail the machine ingest.
+        try {
+          await evaluateComplianceAlert(assetId, now);
+        } catch (err) {
+          console.error(
+            `[ingest] compliance alert failed for asset ${assetId}:`,
             err,
           );
         }

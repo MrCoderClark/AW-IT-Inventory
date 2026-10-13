@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 
 import {
+  failingSecurityChecks,
+  isAtRisk,
   scoreCompliance,
   type CompliancePosture,
 } from "./compliance-score";
@@ -78,5 +80,51 @@ describe("scoreCompliance", () => {
 
   it("real-time protection off is a hard fail regardless of signatures", () => {
     expect(statusOf({ ...GREEN, defenderRealtime: false }, "antivirus")).toBe("fail");
+  });
+});
+
+describe("failingSecurityChecks / isAtRisk", () => {
+  it("a clean device is not at risk", () => {
+    const r = scoreCompliance(GREEN);
+    expect(failingSecurityChecks(r)).toHaveLength(0);
+    expect(isAtRisk(r)).toBe(false);
+  });
+
+  it("flags hard security fails (BitLocker off, AV off)", () => {
+    const r = scoreCompliance({
+      ...GREEN,
+      bitlocker: "off",
+      defenderRealtime: false,
+    });
+    expect(isAtRisk(r)).toBe(true);
+    expect(failingSecurityChecks(r).map((c) => c.id).sort()).toEqual([
+      "antivirus",
+      "bitlocker",
+    ]);
+  });
+
+  it("ignores soft fails (updates/disk) — not a security alert", () => {
+    const r = scoreCompliance({
+      ...GREEN,
+      updatesLastDays: 40, // fail, but soft
+      systemDrivePctUsed: 99, // fail, but soft
+    });
+    expect(isAtRisk(r)).toBe(false);
+    expect(failingSecurityChecks(r)).toHaveLength(0);
+  });
+
+  it("never at risk when not assessed (all unknown)", () => {
+    const blank = scoreCompliance({
+      bitlocker: null,
+      defenderRealtime: null,
+      defenderSigAgeDays: null,
+      avProduct: null,
+      tpmReady: null,
+      secureBoot: null,
+      updatesLastDays: null,
+      updatesPending: null,
+      systemDrivePctUsed: null,
+    });
+    expect(isAtRisk(blank)).toBe(false);
   });
 });
