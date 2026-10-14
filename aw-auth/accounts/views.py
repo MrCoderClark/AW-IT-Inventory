@@ -28,7 +28,7 @@ from .serializers import (
     AdminUserCreateSerializer,
     AdminUserSerializer,
     AdminUserUpdateSerializer,
-    OpusTokenObtainPairSerializer,
+    H2TecsTokenObtainPairSerializer,
     PasswordChangeSerializer,
     ProfileUpdateSerializer,
     RegisterSerializer,
@@ -72,7 +72,7 @@ class RegisterView(generics.CreateAPIView):
 class LoginView(TokenObtainPairView):
     """Email + password -> access + refresh tokens (with RBAC claims)."""
 
-    serializer_class = OpusTokenObtainPairSerializer
+    serializer_class = H2TecsTokenObtainPairSerializer
 
 
 class MeView(generics.RetrieveUpdateAPIView):
@@ -349,7 +349,7 @@ class PrinterAlertView(APIView):
     """Email the admins when a printer goes down or recovers (spec 12, AC-7).
 
     Called by web (which holds the reachability history and detects the
-    transition) with its `opus-web` service account. Requires a service token
+    transition) with its `h2tecs-web` service account. Requires a service token
     carrying `notify:send`. aw-auth resolves "the admins" from RBAC and sends
     through Resend. A send failure is reported so web can retry on the next check.
     """
@@ -377,7 +377,7 @@ class CounterReportView(APIView):
     """Email the admins the daily printer page-counter report (spec 14, AC-4).
 
     Called by web (which holds the counter history and assembles the rows) with
-    its `opus-web` service account. Requires a service token carrying
+    its `h2tecs-web` service account. Requires a service token carrying
     `notify:send`. aw-auth resolves "the admins" from RBAC and sends through
     Resend. A send failure is reported so the caller can surface it.
     """
@@ -403,7 +403,7 @@ class ComplianceAlertView(APIView):
     """Email the admins when a computer's security posture crosses a boundary
     (spec 21 v2): at-risk (a hard security check failed) or recovered.
 
-    Called by web (which detects the transition at ingest) with its `opus-web`
+    Called by web (which detects the transition at ingest) with its `h2tecs-web`
     service account. Requires a service token carrying `notify:send`. aw-auth
     resolves "the admins" from RBAC and sends through Resend; a send failure is
     reported so web can log it (the in-app notification is the durable record).
@@ -437,7 +437,7 @@ class ReportDeliveryView(APIView):
     """Email a scheduled custom report to its recipients (spec 26 phase 2).
 
     Called by web (which runs the report and builds the preview table + the full
-    attachment) with its `opus-web` service account. Requires a service token
+    attachment) with its `h2tecs-web` service account. Requires a service token
     carrying `notify:send`. Unlike the other notify endpoints, which resolve "the
     admins", this sends to the explicit recipient list the schedule carries. A
     send failure is reported so web can retry on the next delivery sweep.

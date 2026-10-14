@@ -50,17 +50,17 @@ def _subject_and_body(printer: dict, event: str, since: str | None) -> tuple[str
     name = printer.get("name") or "Unknown printer"
     ip = printer.get("ip") or "?"
     if event == "down":
-        subject = f"[OPUS] Printer DOWN: {name} ({ip})"
+        subject = f"[H2Tecs] Printer DOWN: {name} ({ip})"
         since_line = f"\nUnreachable since: {since}" if since else ""
         body = (
-            f"OPUS could not reach the printer '{name}' at {ip} on two "
+            f"H2Tecs could not reach the printer '{name}' at {ip} on two "
             f"consecutive checks, so it has been marked DOWN.{since_line}\n\n"
             "You'll get one more email when it comes back online."
         )
     else:  # recovery
-        subject = f"[OPUS] Printer recovered: {name} ({ip})"
+        subject = f"[H2Tecs] Printer recovered: {name} ({ip})"
         body = (
-            f"OPUS can reach the printer '{name}' at {ip} again — it has "
+            f"H2Tecs can reach the printer '{name}' at {ip} again — it has "
             "recovered and is back online."
         )
     return subject, body
@@ -118,7 +118,7 @@ def _deliver(
             # Cloudflare (in front of api.resend.com) blocks urllib's default
             # "Python-urllib/x.y" agent with a 403 "error code: 1010", so set an
             # explicit User-Agent. Without this the request never reaches Resend.
-            "User-Agent": "opus-aw-auth/1.0",
+            "User-Agent": "h2tecs-aw-auth/1.0",
         },
         method="POST",
     )
@@ -153,28 +153,28 @@ def send_compliance_alert(computer: dict, event: str, checks: list[dict]) -> boo
     or "recovered" (back to clean). ``checks`` is the list of failed checks, each
     ``{label, detail}``, used in the at-risk body. Returns True on a real send.
 
-    Called by web (which detects the transition at ingest) with its ``opus-web``
+    Called by web (which detects the transition at ingest) with its ``h2tecs-web``
     service account. Best-effort for the caller: a miss is logged and returned as
     False, never raised.
     """
     name = computer.get("name") or "Unknown computer"
     failed = [c for c in (checks or []) if isinstance(c, dict)]
     if event == "at-risk":
-        subject = f"[OPUS] Compliance at risk: {name}"
+        subject = f"[H2Tecs] Compliance at risk: {name}"
         lines = "\n".join(
             f"  • {c.get('label') or 'Check'}: {c.get('detail') or 'failed'}"
             for c in failed
         ) or "  • One or more security checks failed."
         body = (
-            f"OPUS flagged '{name}' as at risk — a hard security check failed on "
+            f"H2Tecs flagged '{name}' as at risk — a hard security check failed on "
             f"its latest scan:\n\n{lines}\n\n"
-            "Review the device's Compliance tab in OPUS. You'll get one more email "
+            "Review the device's Compliance tab in H2Tecs. You'll get one more email "
             "when it returns to compliance."
         )
     else:  # recovered
-        subject = f"[OPUS] Compliance recovered: {name}"
+        subject = f"[H2Tecs] Compliance recovered: {name}"
         body = (
-            f"OPUS reports '{name}' is back in compliance — all hard security "
+            f"H2Tecs reports '{name}' is back in compliance — all hard security "
             "checks (BitLocker, antivirus, Secure Boot, TPM) now pass."
         )
     return _deliver(subject, body, label=f"compliance-alert ({event})")
@@ -250,7 +250,7 @@ def _counter_report_html(rows: list[dict], report_date: str) -> str:
         'box-shadow:0 1px 3px rgba(0,0,0,.08);width:100%;">'
         # Header
         '<tr><td style="padding:24px 24px 8px;">'
-        '<div style="font-size:18px;font-weight:700;color:#111827;">OPUS · Printer Page-Counter Report</div>'
+        '<div style="font-size:18px;font-weight:700;color:#111827;">H2Tecs · Printer Page-Counter Report</div>'
         f'<div style="font-size:13px;color:#6b7280;margin-top:2px;">{e(report_date)}</div>'
         "</td></tr>"
         # Table
@@ -337,7 +337,7 @@ def _report_html(
         "overflow:hidden;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;"
         'box-shadow:0 1px 3px rgba(0,0,0,.08);width:100%;">'
         '<tr><td style="padding:24px 24px 8px;">'
-        f'<div style="font-size:18px;font-weight:700;color:#111827;">OPUS · {e(report_name)}</div>'
+        f'<div style="font-size:18px;font-weight:700;color:#111827;">H2Tecs · {e(report_name)}</div>'
         f"{desc}"
         "</td></tr>"
         '<tr><td style="padding:16px 24px 8px;overflow-x:auto;">'
@@ -348,8 +348,8 @@ def _report_html(
         "</table></td></tr>"
         f"{truncated}"
         '<tr><td style="padding:16px 24px 24px;font-size:12px;color:#9ca3af;line-height:1.5;">'
-        "This is a scheduled OPUS report, run live at send time. Manage its schedule "
-        "on the report's page in OPUS."
+        "This is a scheduled H2Tecs report, run live at send time. Manage its schedule "
+        "on the report's page in H2Tecs."
         "</td></tr>"
         "</table></div>"
     )
@@ -376,7 +376,7 @@ def send_report(
     shown = int(table.get("shown") or len(rows))
     total = int(table.get("total") or len(rows))
 
-    subject = f"[OPUS] Report: {name} ({total:,} row{'s' if total != 1 else ''})"
+    subject = f"[H2Tecs] Report: {name} ({total:,} row{'s' if total != 1 else ''})"
 
     labels = [str(c.get("label") or "") for c in columns]
     text_lines = ["\t".join(labels)] + [
@@ -384,7 +384,7 @@ def send_report(
     ]
     if total > shown:
         text_lines.append(f"\n… showing {shown} of {total} rows; full report attached.")
-    text = f"OPUS report: {name}\n\n" + "\n".join(text_lines)
+    text = f"H2Tecs report: {name}\n\n" + "\n".join(text_lines)
 
     html = _report_html(name, description, columns, rows, shown, total)
 
@@ -419,19 +419,19 @@ def send_counter_report(printers: list[dict]) -> bool:
     count = len(rows)
     report_date = datetime.date.today().strftime("%A, %B %d, %Y")
     subject = (
-        f"[OPUS] Printer page-counter report — {count} "
+        f"[H2Tecs] Printer page-counter report — {count} "
         f"printer{'s' if count != 1 else ''} ({datetime.date.today():%b %d})"
     )
 
     if rows:
         text = (
-            f"OPUS Printer Page-Counter Report — {report_date}\n\n"
+            f"H2Tecs Printer Page-Counter Report — {report_date}\n\n"
             + "\n".join(_fmt_counter_line(p) for p in rows)
             + "\n\nTotals are read over SNMP on the daily collect; the change is "
             "that day's pages, day over day."
         )
     else:
-        text = f"OPUS Printer Page-Counter Report — {report_date}\n\nNo managed printers to report on yet."
+        text = f"H2Tecs Printer Page-Counter Report — {report_date}\n\nNo managed printers to report on yet."
 
     html = _counter_report_html(rows, report_date)
     return _deliver(subject, text, label="printer-counter-report", html=html)

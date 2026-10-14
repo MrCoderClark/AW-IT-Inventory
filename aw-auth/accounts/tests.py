@@ -27,7 +27,7 @@ class PrinterAlertResendTest(TestCase):
 
     def setUp(self):
         os.environ["RESEND_API_KEY"] = "re_test_key"
-        os.environ["EMAIL_FROM"] = "OPUS <alerts@example.com>"
+        os.environ["EMAIL_FROM"] = "H2Tecs <alerts@example.com>"
 
     def tearDown(self):
         os.environ.pop("RESEND_API_KEY", None)
@@ -47,7 +47,7 @@ class PrinterAlertResendTest(TestCase):
         self.assertTrue(ok)
         req = mock_urlopen.call_args.args[0]
         # urllib normalizes header names to Capitalized form ("User-agent").
-        self.assertEqual(req.get_header("User-agent"), "opus-aw-auth/1.0")
+        self.assertEqual(req.get_header("User-agent"), "h2tecs-aw-auth/1.0")
 
     @patch.object(notifications, "resolve_admin_emails", return_value=["a@example.com"])
     @patch("accounts.notifications.urllib.request.urlopen")
@@ -67,7 +67,7 @@ class ComplianceAlertResendTest(TestCase):
 
     def setUp(self):
         os.environ["RESEND_API_KEY"] = "re_test_key"
-        os.environ["EMAIL_FROM"] = "OPUS <alerts@example.com>"
+        os.environ["EMAIL_FROM"] = "H2Tecs <alerts@example.com>"
 
     def tearDown(self):
         os.environ.pop("RESEND_API_KEY", None)
@@ -122,7 +122,7 @@ class ReportDeliveryResendTest(TestCase):
 
     def setUp(self):
         os.environ["RESEND_API_KEY"] = "re_test_key"
-        os.environ["EMAIL_FROM"] = "OPUS <reports@example.com>"
+        os.environ["EMAIL_FROM"] = "H2Tecs <reports@example.com>"
 
     def tearDown(self):
         os.environ.pop("RESEND_API_KEY", None)

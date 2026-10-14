@@ -4,7 +4,7 @@
  * and input validation. No DB, no server imports — the saved-report dialog renders
  * from this and the server stores/evaluates it (`src/db/report-schedules.ts`).
  *
- * Times are wall-clock in the server's local zone (OPUS is on-prem, one timezone),
+ * Times are wall-clock in the server's local zone (H2Tecs is on-prem, one timezone),
  * so `computeNextRun` works in local time via the Date accessors.
  */
 

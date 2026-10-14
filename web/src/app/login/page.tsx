@@ -22,7 +22,7 @@ export default async function LoginPage(props: PageProps<"/login">) {
           </span>
           <span className="leading-none">
             <span className="block text-2xl font-extrabold tracking-tight">
-              OPUS
+              H2Tecs
             </span>
             <span className="mt-1 block text-[9px] font-semibold uppercase tracking-[0.28em] text-muted-foreground">
               IT Inventory
@@ -33,7 +33,7 @@ export default async function LoginPage(props: PageProps<"/login">) {
         <div className="rounded-2xl border bg-card p-6 shadow-sm">
           <h1 className="text-lg font-semibold">Sign in</h1>
           <p className="mb-5 mt-1 text-sm text-muted-foreground">
-            Access the OPUS asset console.
+            Access the H2Tecs asset console.
           </p>
           <LoginForm next={next} />
           <p className="mt-4 text-center text-xs text-muted-foreground">

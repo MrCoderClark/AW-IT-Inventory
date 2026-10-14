@@ -30,8 +30,8 @@ describe("sendPrinterAlert (spec 12)", () => {
   beforeEach(() => {
     // Reset the module-level token cache between cases.
     vi.resetModules();
-    process.env.OPUS_WEB_CLIENT_ID = "cid";
-    process.env.OPUS_WEB_CLIENT_SECRET = "sec";
+    process.env.H2TECS_WEB_CLIENT_ID = "cid";
+    process.env.H2TECS_WEB_CLIENT_SECRET = "sec";
     // The failure/skip paths log on purpose; keep the test output clean.
     vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.spyOn(console, "error").mockImplementation(() => {});
@@ -62,9 +62,9 @@ describe("sendPrinterAlert (spec 12)", () => {
     expect(await sendPrinterAlert(EVENT)).toBe(false);
   });
 
-  it("skips the call and returns false when opus-web creds are unset", async () => {
-    delete process.env.OPUS_WEB_CLIENT_ID;
-    delete process.env.OPUS_WEB_CLIENT_SECRET;
+  it("skips the call and returns false when h2tecs-web creds are unset", async () => {
+    delete process.env.H2TECS_WEB_CLIENT_ID;
+    delete process.env.H2TECS_WEB_CLIENT_SECRET;
     const spy = vi.fn();
     vi.stubGlobal("fetch", spy);
     const { sendPrinterAlert } = await import("./notify");

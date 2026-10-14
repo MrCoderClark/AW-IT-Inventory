@@ -1,5 +1,5 @@
 """
-Django settings for the OPUS aw-auth identity service.
+Django settings for the H2Tecs aw-auth identity service.
 
 Standalone, portable auth service (see docs/specs/02-auth-service-spec.md).
 Config is env-driven; dev falls back to SQLite so it runs with no extra infra.
@@ -148,8 +148,8 @@ SIMPLE_JWT = {
 }
 
 SPECTACULAR_SETTINGS = {
-    "TITLE": "OPUS aw-auth API",
-    "DESCRIPTION": "Standalone identity service for OPUS and future apps.",
+    "TITLE": "H2Tecs aw-auth API",
+    "DESCRIPTION": "Standalone identity service for H2Tecs and future apps.",
     "VERSION": "0.1.0",
     "SERVE_INCLUDE_SCHEMA": False,
 }

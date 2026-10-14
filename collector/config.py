@@ -70,8 +70,8 @@ class Config(BaseModel):
     # Ingest (used with `scan --ingest`). Secrets come from env.
     auth_url: str = "http://127.0.0.1:8000"
     ingest_url: str = "http://localhost:3000"
-    client_id_env: str = "OPUS_CLIENT_ID"
-    client_secret_env: str = "OPUS_CLIENT_SECRET"
+    client_id_env: str = "H2TECS_CLIENT_ID"
+    client_secret_env: str = "H2TECS_CLIENT_SECRET"
 
     # Discovery type toggles (spec 13): the automatic `scan` sweep pulls these
     # from the web app first and skips an off type. The last good result is
@@ -94,13 +94,13 @@ class Config(BaseModel):
     printer_install_poll_interval: float = 5.0
     # Temp dir on the TARGET computer where the driver bundle is staged + unpacked
     # (cleaned up after each job).
-    install_temp_dir: str = r"C:\Windows\Temp\opus-print"
+    install_temp_dir: str = r"C:\Windows\Temp\h2tecs-print"
     # Software deployment (spec 23). The worker polls the deploy queue on this
     # cadence when no scan job is waiting; a queued deployment starts within it.
     software_deploy_poll_interval: float = 5.0
     # Temp dir on the TARGET computer where installer files are staged + run
     # (cleaned up after each deployment).
-    software_deploy_temp_dir: str = r"C:\Windows\Temp\opus-deploy"
+    software_deploy_temp_dir: str = r"C:\Windows\Temp\h2tecs-deploy"
     # Retention for finished (succeeded/failed/canceled) deployment rows; the
     # worker's daily prune deletes ones older than this.
     deploy_retention_days: int = 90

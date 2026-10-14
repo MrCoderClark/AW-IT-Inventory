@@ -137,7 +137,7 @@ def test_companion_files_transferred_and_dir_token_substituted(monkeypatch):
     # Both the installer and its companion are staged on the target.
     assert "app.exe" in put_names and "app.iss" in put_names
     # %DIR% is replaced with the on-target temp dir before the installer runs.
-    assert "%DIR%" not in captured["args"] and "opus-deploy" in captured["args"]
+    assert "%DIR%" not in captured["args"] and "h2tecs-deploy" in captured["args"]
     assert status == "succeeded"
 
 

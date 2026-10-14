@@ -97,7 +97,7 @@ export function PrinterInstallPanel({
       j.action === "list" &&
       (j.status === "pending" || j.status === "claimed" || j.status === "running"),
   );
-  // Printers OPUS installed here (by name), to badge the live list.
+  // Printers H2Tecs installed here (by name), to badge the live list.
   const opusNames = new Set(
     jobs
       .filter((j) => j.action === "install" && j.printerName)
@@ -187,7 +187,7 @@ export function PrinterInstallPanel({
                     {p.isDefault && <Badge variant="outline">Default</Badge>}
                     {p.shared && <Badge variant="secondary">Shared</Badge>}
                     {opusNames.has(p.name) && (
-                      <Badge variant="secondary">Added by OPUS</Badge>
+                      <Badge variant="secondary">Added by H2Tecs</Badge>
                     )}
                   </p>
                   <p className="truncate text-xs text-muted-foreground">

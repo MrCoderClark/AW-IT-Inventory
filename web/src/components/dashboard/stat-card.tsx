@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 /**
  * A dashboard KPI tile (spec: dashboard redesign). A colored icon tile, a label,
  * a big number, and a factual meta line (e.g. share of the fleet). Unlike the
- * mock's "↑4% vs last 30 days", OPUS keeps no historical snapshots, so the meta
+ * mock's "↑4% vs last 30 days", H2Tecs keeps no historical snapshots, so the meta
  * is a real computed figure, never a fabricated trend.
  */
 export function StatCard({

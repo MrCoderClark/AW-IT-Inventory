@@ -1,6 +1,6 @@
-# OPUS — IT Inventory Documentation
+# H2Tecs — IT Inventory Documentation
 
-**OPUS** is an on-premise, enterprise-grade IT asset management system for computers,
+**H2Tecs** is an on-premise, enterprise-grade IT asset management system for computers,
 monitors, printers, phones and related IT items — built to maintain 100+ machines.
 (Repo/working dir: `aw-inventory`.)
 
@@ -25,13 +25,13 @@ monitors, printers, phones and related IT items — built to maintain 100+ machi
 ## Design
 | Doc | Topic |
 |---|---|
-| [Design/design-system.md](Design/design-system.md) | OPUS visual language — dark-first enterprise dashboard, teal accent, tokens, components |
+| [Design/design-system.md](Design/design-system.md) | H2Tecs visual language — dark-first enterprise dashboard, teal accent, tokens, components |
 | [Design/opus-dashboard.html](Design/opus-dashboard.html) | Interactive dashboard mockup (also published as an Artifact) |
 | [Design/mock2.jpg](Design/mock2.jpg) | Chosen reference mock (direction) |
 | [Design/mock.png](Design/mock.png) | Earlier reference mock (superseded) |
 
 ## Locked decisions (2026-08-21)
-- **Name:** **OPUS** (IT Inventory).
+- **Name:** **H2Tecs** (IT Inventory).
 - **Design direction:** modern **dark-first enterprise dashboard**, teal accent, per
   `Design/mock2.jpg` — sidebar + top bar, KPI cards, asset table, charts.
 - **Hosting:** self-hosted / on-prem (Docker), data stays on the network.

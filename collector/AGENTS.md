@@ -2,7 +2,7 @@
 
 ## Overview
 
-The OPUS fleet scanner: an agentless, outbound-only Python service (uv-managed,
+The H2Tecs fleet scanner: an agentless, outbound-only Python service (uv-managed,
 Python 3.12). It discovers hosts on the configured subnets by TCP probe, collects
 Windows machines over WinRM and printers over SNMP, and posts normalized results
 to the web app's ingest API. It never accepts an inbound connection. Two commands:

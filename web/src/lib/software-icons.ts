@@ -1,5 +1,5 @@
 /**
- * Bundled brand icons for tracked software titles (spec 22). OPUS runs on-prem, so
+ * Bundled brand icons for tracked software titles (spec 22). H2Tecs runs on-prem, so
  * icons are static files under `public/software-icons/` — never fetched from an
  * external CDN at runtime. A title with no entry falls back to a generic glyph in
  * the UI, so this is purely cosmetic and always optional.

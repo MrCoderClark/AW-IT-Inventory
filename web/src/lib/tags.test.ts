@@ -33,13 +33,13 @@ describe("TAG_PREFIX", () => {
 describe("generateTag (AC-8)", () => {
   it("uses the prefix that matches the type", () => {
     for (const type of ASSET_TYPES) {
-      expect(generateTag(type).startsWith(`OPUS-${TAG_PREFIX[type]}-`)).toBe(true);
+      expect(generateTag(type).startsWith(`H2TECS-${TAG_PREFIX[type]}-`)).toBe(true);
     }
   });
 
-  it("produces the OPUS-<PREFIX>-<suffix> shape with an uppercase base36 suffix", () => {
+  it("produces the H2TECS-<PREFIX>-<suffix> shape with an uppercase base36 suffix", () => {
     const tag = generateTag("Monitor");
-    expect(tag).toMatch(/^OPUS-MON-[A-Z0-9]{1,5}$/);
+    expect(tag).toMatch(/^H2TECS-MON-[A-Z0-9]{1,5}$/);
   });
 
   it("keeps the suffix uppercase", () => {
@@ -52,7 +52,7 @@ describe("generateTag (AC-8)", () => {
     const first = generateTag("Phone");
     const second = generateTag("Phone");
     expect(first).toBe(second);
-    expect(first.startsWith("OPUS-PHN-")).toBe(true);
+    expect(first.startsWith("H2TECS-PHN-")).toBe(true);
   });
 
   it("generates differing tags across calls with real randomness", () => {

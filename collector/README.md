@@ -1,4 +1,4 @@
-# OPUS collector
+# H2Tecs collector
 
 Agentless fleet scanner. Discovers hosts on the configured subnets, resolves
 per-host credentials, collects hardware/health over **WinRM** and printers over
@@ -52,7 +52,7 @@ uv run python main.py scan --target 192.168.72.172 --ingest
 Setup (once):
 1. In aw-auth, create a service account and copy its credentials:
    `uv run python manage.py create_service_account collector --scopes ingest:write asset:read`
-2. Put them in the collector's `.env`: `OPUS_CLIENT_ID` / `OPUS_CLIENT_SECRET`.
+2. Put them in the collector's `.env`: `H2TECS_CLIENT_ID` / `H2TECS_CLIENT_SECRET`.
 3. Set `auth_url` (aw-auth) and `ingest_url` (web app) in `config.yaml`.
 
 The collector fetches a short-lived service token (client-credentials) and POSTs

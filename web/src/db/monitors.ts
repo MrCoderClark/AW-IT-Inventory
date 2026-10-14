@@ -79,7 +79,7 @@ export type ConnectedMonitorItem = {
   resolution: string | null;
   refreshHz: number | null;
   // Serial reconciliation (phase 3): if this display's serial matches a Monitor
-  // asset in inventory, its tag + name; null when the serial is unknown to OPUS.
+  // asset in inventory, its tag + name; null when the serial is unknown to H2Tecs.
   matchedAssetTag: string | null;
   matchedAssetName: string | null;
 };
@@ -88,7 +88,7 @@ export type ConnectedMonitorItem = {
  * The displays connected to a computer (by its human tag), for the detail card.
  * Each display's serial is reconciled against Monitor assets (phase 3): a
  * case-insensitive serial match links the display to its tracked asset, so the
- * card can both cross-link and flag a display OPUS doesn't have on record. The
+ * card can both cross-link and flag a display H2Tecs doesn't have on record. The
  * match is a left join, so a display with no serial or no matching asset simply
  * comes back unmatched. (A Monitor asset serial is unique in practice; if two
  * ever collide the first by tag wins — see the DISTINCT ON below.)
