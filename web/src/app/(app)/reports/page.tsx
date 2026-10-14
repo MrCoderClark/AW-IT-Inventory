@@ -630,6 +630,7 @@ export default async function Page() {
                   description: r.description,
                   source: r.source,
                   updatedAt: r.updatedAt,
+                  category: r.category,
                   schedule: sched
                     ? { label: describeSchedule(sched), enabled: sched.enabled }
                     : null,

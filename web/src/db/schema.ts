@@ -1215,6 +1215,7 @@ export const reportDefinitions = pgTable("report_definitions", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   description: text("description"),
+  category: text("category"), // optional folder/grouping (spec 26 phase 2 extra)
   source: text("source").notNull(), // a REPORT_SOURCES id
   spec: jsonb("spec")
     .$type<import("@/lib/report-spec").ReportSpec>()

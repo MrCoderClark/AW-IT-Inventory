@@ -55,6 +55,26 @@ describe("CustomReportsList", () => {
     ).toBeInTheDocument();
   });
 
+  it("groups reports by folder, with uncategorized last", () => {
+    render(
+      <CustomReportsList
+        reports={[
+          { ...reports[0], id: "a", name: "Alpha", category: "Hardware" },
+          { ...reports[0], id: "b", name: "Beta", category: null },
+          { ...reports[0], id: "c", name: "Gamma", category: "Compliance" },
+        ]}
+        canWrite={false}
+      />,
+    );
+    const headings = screen
+      .getAllByRole("heading", { level: 2 })
+      .map((h) => h.textContent);
+    // Real folders alphabetical, Uncategorized last.
+    expect(headings[0]).toContain("Compliance");
+    expect(headings[1]).toContain("Hardware");
+    expect(headings[2]).toContain("Uncategorized");
+  });
+
   it("renders an empty state with a New report CTA when there are none", () => {
     render(<CustomReportsList reports={[]} canWrite />);
     expect(screen.getByText(/No saved reports yet/i)).toBeInTheDocument();
