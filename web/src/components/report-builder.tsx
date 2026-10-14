@@ -19,6 +19,7 @@ import {
   runReportAction,
   saveReportAction,
 } from "@/app/(app)/reports/report-actions";
+import { ReportExportMenu } from "@/components/report-export-menu";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -622,14 +623,22 @@ export function ReportBuilder({
 
         <Card className="gap-0 overflow-hidden p-0">
           <div className="flex items-center justify-between gap-2 border-b px-4 py-3">
-            <h2 className="font-heading text-sm font-semibold">Preview</h2>
-            <span className="flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
-              {running && <Loader2 className="size-3.5 animate-spin" />}
-              {result &&
-                (result.totalRows > result.rows.length
-                  ? `Showing ${result.rows.length} of ${result.totalRows.toLocaleString()} rows`
-                  : `${result.totalRows.toLocaleString()} row${result.totalRows === 1 ? "" : "s"}`)}
-            </span>
+            <div className="flex items-center gap-3">
+              <h2 className="font-heading text-sm font-semibold">Preview</h2>
+              <span className="flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
+                {running && <Loader2 className="size-3.5 animate-spin" />}
+                {result &&
+                  (result.totalRows > result.rows.length
+                    ? `Showing ${result.rows.length} of ${result.totalRows.toLocaleString()} rows`
+                    : `${result.totalRows.toLocaleString()} row${result.totalRows === 1 ? "" : "s"}`)}
+              </span>
+            </div>
+            <ReportExportMenu
+              source={source}
+              spec={spec}
+              name={name}
+              disabled={!hasOutput}
+            />
           </div>
 
           <PreviewBody

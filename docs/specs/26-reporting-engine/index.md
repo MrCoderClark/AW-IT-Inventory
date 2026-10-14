@@ -73,12 +73,17 @@ filters → group/sort → live preview → save). A saved report opens at
   `src/app/(app)/reports/report-actions.ts` (`runReportAction` / `saveReportAction`
   / `deleteReportAction`, each gated + `validateSpec`'d); component
   `src/components/report-builder.tsx`; a "New custom report" button on `/reports`.
-- **1c exports — 🔜 NEXT** (CSV/Excel/PDF, client-side from the loaded result set).
-- **1d saved-reports hub — 🔜** (`/reports` restructure + `/reports/custom/[id]`;
+- **1c exports — ✅ DONE** (client-side CSV/Excel/PDF from the loaded result set).
+  `src/lib/report-export.ts` (pure `reportToCsv` + `exportCsv`/`exportExcel`/
+  `exportPdf`, the office libs **dynamically imported** so they chunk-split and
+  load only on first export); `src/components/report-export-menu.tsx` (an Export
+  dropdown that re-runs the full spec via `runReportAction` — not the capped
+  preview — then downloads). Deps: `exceljs`, `jspdf@3`, `jspdf-autotable@5`.
+- **1d saved-reports hub — 🔜 NEXT** (`/reports` restructure + `/reports/custom/[id]`;
   the builder's Save already redirects to `/reports/custom/[id]`, which 1d adds).
 
 Resume: `npm run db:push` + aw-auth `seed_rbac` (+ admin re-login for `report:write`),
-then build 1c. Engine entry points: `runReportBySpec(spec)` and the CRUD in
+then build 1d. Engine entry points: `runReportBySpec(spec)` and the CRUD in
 `src/db/report-engine.ts`; catalog in `src/lib/report-sources.ts`.
 
 ## Phase 2 (later)
