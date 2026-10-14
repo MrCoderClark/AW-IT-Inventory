@@ -127,5 +127,16 @@ schedules are **data in web**, the worker just fires a periodic trigger).
 tests pass. Deploy: `db:push` (report_schedules) + the worker picks up the new
 config knob; `RESEND_API_KEY`/`EMAIL_FROM` already drive the existing alert emails.
 
-Later Phase 2 extras (each its own effort, not started): report folders/categories,
-SQL push-down for scale, charts in reports.
+### Phase 2 extras
+
+- **Charts in reports — ✅ DONE** (branch `feat/spec-26-report-charts`). Optional
+  `chart {type: bar|donut, categoryField, valueField}` on `ReportSpec` (result-column
+  ids). Pure core `src/lib/report-chart.ts` (`chartableColumns` / `canRenderChart` /
+  `buildChartData` — sums per category, top-5 of the fixed `--chart-N` ramp + a
+  neutral "Other", never cycles hues; unit-tested). Rendered by
+  `src/components/report-chart.tsx` via the existing in-house BarChart/DonutChart
+  (which already follow the dataviz mark specs) in the builder preview + the saved
+  page, above the table. `validateSpec` cleans the chart; builder has a Chart section
+  (type + category + numeric value, options from the live result). On-screen only —
+  not embedded in the CSV/Excel/PDF/email exports. 743 web tests pass.
+- Still not started: report **folders/categories**, **SQL push-down** for scale.

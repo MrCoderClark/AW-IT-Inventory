@@ -91,6 +91,18 @@ export interface ReportSort {
   dir: "asc" | "desc";
 }
 
+export type ChartType = "bar" | "donut";
+
+/** An optional chart over the report's result (spec 26 phase 2). `categoryField`
+   and `valueField` are RESULT-column ids (for a grouped report that's a group key
+   plus `_count` or an aggregate id; otherwise a selected column plus a numeric
+   one). Rendered on top of the table, never instead of it. */
+export interface ReportChart {
+  type: ChartType;
+  categoryField: string;
+  valueField: string;
+}
+
 export interface ReportSpec {
   source: string;
   columns: string[];
@@ -99,6 +111,7 @@ export interface ReportSpec {
   aggregates?: ReportAggregate[];
   sort?: ReportSort[];
   limit?: number | null;
+  chart?: ReportChart | null;
 }
 
 export type CellValue = string | number | boolean | null;

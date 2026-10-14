@@ -4,6 +4,7 @@ import { ArrowLeft, CalendarClock, Lock, Pencil, Sparkles } from "lucide-react";
 
 import { HeroHeader } from "@/components/hero-header";
 import { PagePlaceholder } from "@/components/page-placeholder";
+import { ReportChartView } from "@/components/report-chart";
 import { ReportExportMenu } from "@/components/report-export-menu";
 import { ReportResultTable } from "@/components/report-result-table";
 import { ScheduleDialog } from "@/components/schedule-dialog";
@@ -136,7 +137,14 @@ export default async function Page({
             that no longer exists — edit it to fix.
           </p>
         ) : result && result.rows.length > 0 ? (
-          <ReportResultTable result={result} className="max-h-[75vh]" />
+          <>
+            {report.spec.chart && (
+              <div className="border-b px-4 py-5">
+                <ReportChartView result={result} chart={report.spec.chart} />
+              </div>
+            )}
+            <ReportResultTable result={result} className="max-h-[75vh]" />
+          </>
         ) : (
           <p className="px-4 py-16 text-center text-sm text-muted-foreground">
             No rows match this report.

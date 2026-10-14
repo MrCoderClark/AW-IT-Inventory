@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, desc, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 import { db } from "./index";
 import { getLocationPathMap, getPrinterCounterMap } from "./queries";
@@ -410,6 +410,21 @@ export function validateSpec(
   const src = REPORT_SOURCES[source];
   if (!src) return { ok: false, error: "Unknown data source." };
   const known = new Set(src.fields.map((f) => f.id));
+  // Keep a chart only when its shape is valid; its fields are RESULT-column ids
+  // (which may be `_count` / aggregate ids, not source fields), so they aren't
+  // checked against `known` here — the render path is defensive (`canRenderChart`)
+  // and simply draws nothing if a field no longer resolves.
+  const c = spec.chart;
+  const chart =
+    c &&
+    (c.type === "bar" || c.type === "donut") &&
+    typeof c.categoryField === "string" &&
+    c.categoryField &&
+    typeof c.valueField === "string" &&
+    c.valueField
+      ? { type: c.type, categoryField: c.categoryField, valueField: c.valueField }
+      : null;
+
   const cleaned: ReportSpec = {
     source,
     columns: (spec.columns ?? []).filter((c) => known.has(c)),
@@ -418,6 +433,7 @@ export function validateSpec(
     aggregates: (spec.aggregates ?? []).filter((a) => known.has(a.field)),
     sort: (spec.sort ?? []).filter((s) => known.has(s.field) || s.field === "_count"),
     limit: spec.limit ?? null,
+    chart,
   };
   if (cleaned.columns.length === 0 && (cleaned.groupBy?.length ?? 0) === 0) {
     return { ok: false, error: "Pick at least one column (or a grouping)." };
