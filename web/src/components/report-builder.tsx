@@ -79,6 +79,7 @@ export interface ReportBuilderInitial {
   id: string;
   name: string;
   description: string | null;
+  category: string | null;
   source: string;
   spec: ReportSpec;
 }
@@ -94,9 +95,12 @@ export interface ReportBuilderInitial {
 export function ReportBuilder({
   initial,
   canWrite,
+  categories = [],
 }: {
   initial?: ReportBuilderInitial;
   canWrite: boolean;
+  /** Existing folder names, for the folder field's suggestions. */
+  categories?: string[];
 }) {
   const router = useRouter();
 
@@ -131,6 +135,7 @@ export function ReportBuilder({
   const [description, setDescription] = React.useState(
     initial?.description ?? "",
   );
+  const [category, setCategory] = React.useState(initial?.category ?? "");
 
   const [result, setResult] = React.useState<ReportResult | null>(null);
   const [running, setRunning] = React.useState(false);
@@ -274,6 +279,7 @@ export function ReportBuilder({
         id: initial?.id,
         name,
         description,
+        category,
         source,
         spec,
       });
@@ -726,6 +732,26 @@ export function ReportBuilder({
             placeholder="Optional description — what this report answers."
             rows={2}
           />
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-muted-foreground">
+              Folder <span className="font-normal">(optional)</span>
+            </span>
+            <Input
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              placeholder="e.g. Hardware, Compliance, Finance"
+              list="report-folders"
+              maxLength={60}
+              className="sm:max-w-xs"
+            />
+            {categories.length > 0 && (
+              <datalist id="report-folders">
+                {categories.map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
+            )}
+          </label>
           {!canWrite && (
             <p className="text-xs text-muted-foreground">
               You can run and preview reports; saving needs the{" "}

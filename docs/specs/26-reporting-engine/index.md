@@ -139,4 +139,17 @@ config knob; `RESEND_API_KEY`/`EMAIL_FROM` already drive the existing alert emai
   page, above the table. `validateSpec` cleans the chart; builder has a Chart section
   (type + category + numeric value, options from the live result). On-screen only —
   not embedded in the CSV/Excel/PDF/email exports. 743 web tests pass.
-- Still not started: report **folders/categories**, **SQL push-down** for scale.
+- **Folders/categories — ✅ DONE** (branch `feat/spec-26-report-extras`). Nullable
+  `report_definitions.category` (needs `db:push`); builder Folder field with a
+  datalist of existing folders; the hub groups the Custom reports grid by folder
+  ("Uncategorized" last). Threaded through `SavedReport`/create/update/action +
+  `listReportCategories()`.
+- **SQL push-down (minimal, safe) — ✅ DONE** (same branch). `src/db/report-pushdown.ts`
+  translates the subset of a spec's filters that map to a source's **direct columns**
+  into a conservative `WHERE` (enum/number/bool/empty exactly; text only when ASCII,
+  where Postgres `ILIKE` ≡ JS `toLowerCase`). Each source maps its direct columns and
+  ANDs the pushed `WHERE`. `runReport` still re-applies every filter/group/sort/limit
+  in memory, so push-down only trims rows loaded — never changes results. Dates,
+  negations, computed fields and `LIMIT` are never pushed. `isPushable` unit-tested.
+
+**Spec 26 fully built out** (Phase 1 + Phase 2 incl. all extras). 752 web tests pass.

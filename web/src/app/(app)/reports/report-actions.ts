@@ -63,6 +63,7 @@ export async function saveReportAction(input: {
   id?: string | null;
   name: unknown;
   description?: unknown;
+  category?: unknown;
   source: unknown;
   spec: unknown;
 }): Promise<SaveReportResult> {
@@ -84,6 +85,10 @@ export async function saveReportAction(input: {
     typeof input.description === "string" && input.description.trim()
       ? input.description.trim()
       : null;
+  const category =
+    typeof input.category === "string" && input.category.trim()
+      ? input.category.trim().slice(0, 60)
+      : null;
 
   const check = validateSpec(input.source, input.spec as ReportSpec);
   if (!check.ok) return { ok: false, error: check.error };
@@ -94,6 +99,7 @@ export async function saveReportAction(input: {
     const updated = await updateReport(input.id, {
       name,
       description,
+      category,
       source: input.source,
       spec: check.spec,
     });
@@ -106,6 +112,7 @@ export async function saveReportAction(input: {
   const created = await createReport({
     name,
     description,
+    category,
     source: input.source,
     spec: check.spec,
     createdBy: user?.email ?? null,

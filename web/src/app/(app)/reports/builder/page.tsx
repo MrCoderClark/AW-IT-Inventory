@@ -6,7 +6,7 @@ import { HeroHeader } from "@/components/hero-header";
 import { PagePlaceholder } from "@/components/page-placeholder";
 import { ReportBuilder } from "@/components/report-builder";
 import { Button } from "@/components/ui/button";
-import { getReport } from "@/db/report-engine";
+import { getReport, listReportCategories } from "@/db/report-engine";
 import { hasPermission, requireUser } from "@/lib/auth/session";
 
 // The builder runs reports live from the fleet — never serve a stale snapshot.
@@ -30,7 +30,10 @@ export default async function Page({
   }
 
   const { id } = await searchParams;
-  const existing = id ? await getReport(id) : null;
+  const [existing, categories] = await Promise.all([
+    id ? getReport(id) : Promise.resolve(null),
+    listReportCategories(),
+  ]);
   if (id && !existing) notFound();
 
   const canWrite = hasPermission(user, "report:write");
@@ -54,12 +57,14 @@ export default async function Page({
 
       <ReportBuilder
         canWrite={canWrite}
+        categories={categories}
         initial={
           existing
             ? {
                 id: existing.id,
                 name: existing.name,
                 description: existing.description,
+                category: existing.category,
                 source: existing.source,
                 spec: existing.spec,
               }
