@@ -261,6 +261,33 @@ def run_warranty_sweep(config: Config, token: str) -> None:
         console.print(f"  [yellow]warranty sweep failed:[/yellow] {e}")
 
 
+def run_report_delivery(config: Config, token: str) -> None:
+    """Trigger scheduled custom-report delivery (spec 26 phase 2).
+
+    Web holds the schedules and decides which are due (nextRunAt <= now), runs each
+    report, and emails it via aw-auth; the worker just fires this periodically. The
+    poll granularity is ``report_delivery_interval_minutes``. Outbound-only like the
+    rest of the worker."""
+    try:
+        resp = httpx.post(
+            f"{config.ingest_url}/api/scan/reports/deliver",
+            json={},
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=120,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        # Stay quiet when nothing was due (the common case), so the console isn't
+        # spammed every interval; only speak up when a report was actually sent.
+        if data.get("delivered") or data.get("failed"):
+            console.print(
+                f"[dim]report delivery: {data.get('delivered', 0)} sent · "
+                f"{data.get('failed', 0)} failed (of {data.get('due', 0)} due).[/dim]"
+            )
+    except Exception as e:  # noqa: BLE001 — a delivery failure must never kill the scheduler
+        console.print(f"  [yellow]report delivery failed:[/yellow] {e}")
+
+
 def run_retention_prune(config: Config, token: str) -> None:
     """Prune reachability history older than the retention window (AC-10)."""
     try:

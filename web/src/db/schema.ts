@@ -1229,3 +1229,49 @@ export const reportDefinitions = pgTable("report_definitions", {
     .notNull(),
 });
 export type ReportDefinitionRow = typeof reportDefinitions.$inferSelect;
+
+export const reportCadence = pgEnum("report_cadence", [
+  "daily",
+  "weekly",
+  "monthly",
+]);
+
+// A delivery schedule for a saved report (spec 26 phase 2): email the report to
+// recipients on a cadence. One schedule per report (unique reportId). Schedules
+// are DATA here, not collector config — the worker fires a periodic trigger and
+// web decides which are due (nextRunAt <= now), runs the report, emails it, then
+// advances lastRunAt/nextRunAt (the spec 19 warranty-sweep model). Times are
+// wall-clock in the server's local zone.
+export const reportSchedules = pgTable(
+  "report_schedules",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    reportId: uuid("report_id")
+      .notNull()
+      .references(() => reportDefinitions.id, { onDelete: "cascade" }),
+    cadence: reportCadence("cadence").notNull(),
+    hour: integer("hour").notNull(), // 0–23
+    minute: integer("minute").notNull(), // 0–59
+    weekday: integer("weekday"), // 0–6 (0 = Sunday), for weekly
+    dayOfMonth: integer("day_of_month"), // 1–31 (clamped), for monthly
+    recipients: jsonb("recipients").$type<string[]>().notNull(),
+    format: text("format").notNull().default("csv"), // attachment: csv | xlsx
+    enabled: boolean("enabled").notNull().default(true),
+    lastRunAt: timestamp("last_run_at", { withTimezone: true }),
+    nextRunAt: timestamp("next_run_at", { withTimezone: true }).notNull(),
+    createdBy: text("created_by"), // the author's email (no FK; admins live in aw-auth)
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    // One schedule per report.
+    uniqueIndex("report_schedules_report_uq").on(t.reportId),
+    // Serves the delivery sweep (enabled schedules that are due).
+    index("report_schedules_next_run_idx").on(t.nextRunAt),
+  ],
+);
+export type ReportScheduleRow = typeof reportSchedules.$inferSelect;

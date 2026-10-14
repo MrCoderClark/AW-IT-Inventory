@@ -10,6 +10,7 @@ from accounts.views import (
     ComplianceAlertView,
     CounterReportView,
     PrinterAlertView,
+    ReportDeliveryView,
 )
 
 
@@ -41,6 +42,11 @@ urlpatterns = [
         "v1/notify/compliance-alert",
         ComplianceAlertView.as_view(),
         name="notify-compliance-alert",
+    ),
+    path(
+        "v1/notify/report",
+        ReportDeliveryView.as_view(),
+        name="notify-report",
     ),
     path("v1/schema", SpectacularAPIView.as_view(), name="schema"),
     path("v1/docs", SpectacularSwaggerView.as_view(url_name="schema"), name="docs"),

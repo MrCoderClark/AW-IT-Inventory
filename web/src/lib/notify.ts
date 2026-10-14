@@ -1,6 +1,7 @@
 import "server-only";
 
 import { AUTH_API_URL } from "./auth/config";
+import type { EmailTable, ReportAttachment } from "./report-attachment";
 import type { CounterReportRow } from "@/db/counters";
 import type { AlertEvent } from "@/db/reachability";
 
@@ -13,6 +14,16 @@ export interface ComplianceAlertPayload {
   computer: { name: string; tag: string };
   event: "at-risk" | "recovered";
   checks: ComplianceAlertCheck[];
+}
+
+/** A scheduled report delivery (spec 26 phase 2): the report metadata, a capped
+   preview table for the email body, the full data as an attachment, and the
+   explicit recipient addresses. */
+export interface ReportEmailPayload {
+  report: { name: string; description: string | null };
+  table: EmailTable;
+  recipients: string[];
+  attachment: ReportAttachment;
 }
 
 /**
@@ -172,6 +183,54 @@ export async function sendCounterReportEmail(
     return true;
   } catch (err) {
     console.error("[notify] printer-counter-report failed:", err);
+    return false;
+  }
+}
+
+/**
+ * Ask aw-auth to email a scheduled report to its recipients (spec 26 phase 2).
+ * Web runs the report and builds the preview table + attachment; aw-auth renders
+ * the HTML email and sends via Resend to the explicit recipient list (unlike the
+ * other notify calls, which resolve the admins). Same `opus-web` service account
+ * (`notify:send`) and `sent`-keyed success contract. Returns true only on a real
+ * delivery, so the caller can leave a failed send pending to retry.
+ */
+export async function sendReportEmail(
+  payload: ReportEmailPayload,
+): Promise<boolean> {
+  const who = payload.report.name;
+  try {
+    const token = await getServiceToken();
+    if (!token) return false;
+
+    const res = await fetch(`${AUTH_API_URL}/v1/notify/report`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+      cache: "no-store",
+    });
+    if (res.status === 401) {
+      cachedToken = null;
+    }
+    if (!res.ok) {
+      console.error(
+        `[notify] report "${who}" ${res.status}: ${(await res.text()).slice(0, 200)}`,
+      );
+      return false;
+    }
+    const data = (await res.json().catch(() => null)) as { sent?: boolean } | null;
+    if (data?.sent !== true) {
+      console.error(
+        `[notify] aw-auth accepted but did not deliver the report "${who}".`,
+      );
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error(`[notify] report delivery failed for "${who}":`, err);
     return false;
   }
 }

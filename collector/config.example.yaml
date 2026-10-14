@@ -162,3 +162,8 @@ counter_report_time: "08:05"
 # the warranty-expiry notification sweep. Web computes and dedupes, so running
 # daily never spams. Empty list ([]) turns it off.
 notification_sweep_times: ["07:30"]
+
+# Scheduled report delivery (spec 26 phase 2): how often (minutes) to poll web for
+# custom reports due to be emailed. Web holds the schedules and decides due-ness,
+# so this is just the check cadence (and the delivery granularity). 0 turns it off.
+report_delivery_interval_minutes: 15

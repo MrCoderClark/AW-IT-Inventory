@@ -21,6 +21,7 @@ from .notifications import (
     send_compliance_alert,
     send_counter_report,
     send_printer_alert,
+    send_report,
 )
 from .permissions import HasAppPerm
 from .serializers import (
@@ -429,6 +430,54 @@ class ComplianceAlertView(APIView):
             )
 
         sent = send_compliance_alert(computer, event, checks)
+        return Response({"ok": True, "sent": sent})
+
+
+class ReportDeliveryView(APIView):
+    """Email a scheduled custom report to its recipients (spec 26 phase 2).
+
+    Called by web (which runs the report and builds the preview table + the full
+    attachment) with its `opus-web` service account. Requires a service token
+    carrying `notify:send`. Unlike the other notify endpoints, which resolve "the
+    admins", this sends to the explicit recipient list the schedule carries. A
+    send failure is reported so web can retry on the next delivery sweep.
+    """
+
+    authentication_classes: list = []  # machine caller; token verified by scope
+    permission_classes = [HasServiceScope]
+    required_scope = "notify:send"
+
+    @extend_schema(request=None, responses={200: None})
+    def post(self, request):
+        report = request.data.get("report") or {}
+        table = request.data.get("table") or {}
+        recipients = request.data.get("recipients")
+        attachment = request.data.get("attachment")
+
+        if not isinstance(report, dict) or not report.get("name"):
+            return Response(
+                {"detail": "report{name} is required"},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        if not isinstance(table, dict):
+            return Response(
+                {"detail": "table{columns,rows} is required"},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        if not isinstance(recipients, list) or not all(
+            isinstance(r, str) and r for r in recipients
+        ):
+            return Response(
+                {"detail": "recipients[] of email strings is required"},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        if not recipients:
+            return Response(
+                {"detail": "recipients[] must not be empty"},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+
+        sent = send_report(report, table, recipients, attachment)
         return Response({"ok": True, "sent": sent})
 
 

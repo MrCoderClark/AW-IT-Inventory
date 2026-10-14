@@ -9,16 +9,27 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
  * dropped). `validateSpec` itself is exercised through these.
  */
 
-const { getUserMock, hasPermMock, runMock, createMock, updateMock, getMock, deleteMock } =
-  vi.hoisted(() => ({
-    getUserMock: vi.fn(),
-    hasPermMock: vi.fn(),
-    runMock: vi.fn(),
-    createMock: vi.fn(),
-    updateMock: vi.fn(),
-    getMock: vi.fn(),
-    deleteMock: vi.fn(),
-  }));
+const {
+  getUserMock,
+  hasPermMock,
+  runMock,
+  createMock,
+  updateMock,
+  getMock,
+  deleteMock,
+  upsertSchedMock,
+  deleteSchedMock,
+} = vi.hoisted(() => ({
+  getUserMock: vi.fn(),
+  hasPermMock: vi.fn(),
+  runMock: vi.fn(),
+  createMock: vi.fn(),
+  updateMock: vi.fn(),
+  getMock: vi.fn(),
+  deleteMock: vi.fn(),
+  upsertSchedMock: vi.fn(),
+  deleteSchedMock: vi.fn(),
+}));
 
 vi.mock("@/lib/auth/session", () => ({
   getCurrentUser: getUserMock,
@@ -46,11 +57,17 @@ vi.mock("@/db/report-engine", async () => {
     deleteReport: deleteMock,
   };
 });
+vi.mock("@/db/report-schedules", () => ({
+  upsertSchedule: upsertSchedMock,
+  deleteSchedule: deleteSchedMock,
+}));
 
 import {
   deleteReportAction,
+  deleteScheduleAction,
   runReportAction,
   saveReportAction,
+  saveScheduleAction,
 } from "./report-actions";
 
 beforeEach(() => vi.clearAllMocks());
@@ -146,6 +163,89 @@ describe("saveReportAction — report:write gate", () => {
     expect(res).toMatchObject({ ok: true, id: "r1" });
     expect(updateMock).toHaveBeenCalledOnce();
     expect(createMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("saveScheduleAction — report:write gate + validation", () => {
+  const schedule = {
+    cadence: "daily",
+    hour: 9,
+    minute: 0,
+    recipients: ["ops@co.com"],
+    format: "csv",
+  };
+
+  it("refuses a caller without report:write and never writes", async () => {
+    getUserMock.mockResolvedValue({ id: "u1", email: "a@b.c" });
+    hasPermMock.mockReturnValue(false);
+
+    const res = await saveScheduleAction({ reportId: "r1", schedule });
+
+    expect(res.ok).toBe(false);
+    expect(upsertSchedMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses when the report doesn't exist", async () => {
+    getUserMock.mockResolvedValue({ id: "u1", email: "a@b.c" });
+    hasPermMock.mockReturnValue(true);
+    getMock.mockResolvedValue(null);
+
+    const res = await saveScheduleAction({ reportId: "gone", schedule });
+
+    expect(res.ok).toBe(false);
+    expect(upsertSchedMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects an invalid schedule (no recipients) before writing", async () => {
+    getUserMock.mockResolvedValue({ id: "u1", email: "a@b.c" });
+    hasPermMock.mockReturnValue(true);
+    getMock.mockResolvedValue({ id: "r1" });
+
+    const res = await saveScheduleAction({
+      reportId: "r1",
+      schedule: { ...schedule, recipients: [] },
+    });
+
+    expect(res.ok).toBe(false);
+    expect(upsertSchedMock).not.toHaveBeenCalled();
+  });
+
+  it("upserts a valid schedule for a writer", async () => {
+    getUserMock.mockResolvedValue({ id: "u1", email: "a@b.c" });
+    hasPermMock.mockReturnValue(true);
+    getMock.mockResolvedValue({ id: "r1" });
+    upsertSchedMock.mockResolvedValue({ enabled: true });
+
+    const res = await saveScheduleAction({ reportId: "r1", enabled: true, schedule });
+
+    expect(res.ok).toBe(true);
+    expect(upsertSchedMock).toHaveBeenCalledOnce();
+    const [reportIdArg, inputArg] = upsertSchedMock.mock.calls[0];
+    expect(reportIdArg).toBe("r1");
+    expect(inputArg.recipients).toEqual(["ops@co.com"]);
+  });
+});
+
+describe("deleteScheduleAction — report:write gate", () => {
+  it("refuses without report:write", async () => {
+    getUserMock.mockResolvedValue({ id: "u1" });
+    hasPermMock.mockReturnValue(false);
+
+    const res = await deleteScheduleAction("r1");
+
+    expect(res.ok).toBe(false);
+    expect(deleteSchedMock).not.toHaveBeenCalled();
+  });
+
+  it("removes the schedule for a writer", async () => {
+    getUserMock.mockResolvedValue({ id: "u1" });
+    hasPermMock.mockReturnValue(true);
+    deleteSchedMock.mockResolvedValue(true);
+
+    const res = await deleteScheduleAction("r1");
+
+    expect(res.ok).toBe(true);
+    expect(deleteSchedMock).toHaveBeenCalledWith("r1");
   });
 });
 

@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  CalendarClock,
   Loader2,
   MoreHorizontal,
   Pencil,
@@ -40,6 +41,8 @@ export interface CustomReportCard {
   description: string | null;
   source: string;
   updatedAt: string;
+  /** A delivery-schedule summary (spec 26 phase 2), or null when unscheduled. */
+  schedule?: { label: string; enabled: boolean } | null;
 }
 
 /**
@@ -148,8 +151,20 @@ export function CustomReportsList({
                 )}
               </div>
               <div className="flex items-center justify-between gap-2 border-t px-4 py-2.5">
-                <Badge variant="secondary">{sourceLabel}</Badge>
-                <span className="text-xs text-muted-foreground">
+                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                  <Badge variant="secondary">{sourceLabel}</Badge>
+                  {r.schedule && (
+                    <Badge
+                      variant="outline"
+                      className="gap-1 text-muted-foreground"
+                      title={r.schedule.label}
+                    >
+                      <CalendarClock className="size-3" />
+                      {r.schedule.enabled ? "Scheduled" : "Paused"}
+                    </Badge>
+                  )}
+                </div>
+                <span className="shrink-0 text-xs text-muted-foreground">
                   Updated {formatDate(r.updatedAt)}
                 </span>
               </div>

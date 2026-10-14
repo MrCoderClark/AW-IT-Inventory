@@ -66,14 +66,25 @@ def _subject_and_body(printer: dict, event: str, since: str | None) -> tuple[str
     return subject, body
 
 
-def _deliver(subject: str, body: str, *, label: str, html: str | None = None) -> bool:
-    """Send one email to every admin through Resend. Returns True on a real send.
+def _deliver(
+    subject: str,
+    body: str,
+    *,
+    label: str,
+    html: str | None = None,
+    recipients: list[str] | None = None,
+    attachments: list[dict] | None = None,
+) -> bool:
+    """Send one email through Resend. Returns True on a real send.
 
     No recipients, or no Resend API key configured: logs and returns False (the
     caller treats it as a non-fatal, retryable miss). Shared by the printer down/
-    recovery alert (spec 12) and the daily counter report (spec 14). ``body`` is the
-    plain-text part; ``html`` is an optional HTML part (clients that render it show
-    that, others fall back to the text).
+    recovery alert (spec 12), the daily counter report (spec 14) and scheduled
+    report delivery (spec 26 phase 2). ``recipients`` defaults to the admins
+    (resolved from RBAC) when not given; a report delivery passes an explicit
+    list. ``body`` is the plain-text part; ``html`` is an optional HTML part;
+    ``attachments`` is an optional list of Resend ``{filename, content}`` (content
+    base64) parts.
     """
     api_key = os.environ.get("RESEND_API_KEY", "")
     email_from = os.environ.get("EMAIL_FROM", "")
@@ -81,19 +92,21 @@ def _deliver(subject: str, body: str, *, label: str, html: str | None = None) ->
         logger.warning("%s not sent: RESEND_API_KEY / EMAIL_FROM not configured.", label)
         return False
 
-    recipients = resolve_admin_emails()
-    if not recipients:
-        logger.warning("%s not sent: no active Owner/Admin with an email.", label)
+    to = resolve_admin_emails() if recipients is None else recipients
+    if not to:
+        logger.warning("%s not sent: no recipients.", label)
         return False
 
     message: dict = {
         "from": email_from,
-        "to": recipients,
+        "to": to,
         "subject": subject,
         "text": body,
     }
     if html:
         message["html"] = html
+    if attachments:
+        message["attachments"] = attachments
     payload = json.dumps(message).encode("utf-8")
     req = urllib.request.Request(
         RESEND_ENDPOINT,
@@ -112,7 +125,7 @@ def _deliver(subject: str, body: str, *, label: str, html: str | None = None) ->
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
             if 200 <= resp.status < 300:
-                logger.info("%s sent to %d admin(s).", label, len(recipients))
+                logger.info("%s sent to %d recipient(s).", label, len(to))
                 return True
             logger.error("%s Resend returned HTTP %s", label, resp.status)
             return False
@@ -257,6 +270,140 @@ def _counter_report_html(rows: list[dict], report_date: str) -> str:
         "value than before, and “no reading” a printer not reached that day."
         "</td></tr>"
         "</table></div>"
+    )
+
+
+def _report_html(
+    report_name: str,
+    description: str,
+    columns: list[dict],
+    rows: list[list],
+    shown: int,
+    total: int,
+) -> str:
+    """An email-safe HTML table for a scheduled report (inline styles, like the
+    counter report). ``columns`` is ``[{label, align}]``; ``rows`` are
+    display-ready strings. Caps are the caller's; a footer notes any truncation."""
+    e = html_lib.escape
+
+    def th(align: str) -> str:
+        ta = "right" if align == "right" else "left"
+        return (
+            f'style="text-align:{ta};padding:10px 12px;font-size:12px;'
+            "text-transform:uppercase;letter-spacing:.04em;color:#e5e7eb;"
+            'background:#1f2937;border-bottom:1px solid #111827;white-space:nowrap;"'
+        )
+
+    head = "".join(
+        f"<th {th(c.get('align') or 'left')}>{e(str(c.get('label') or ''))}</th>"
+        for c in columns
+    )
+
+    body_rows = []
+    for i, row in enumerate(rows):
+        bg = "#ffffff" if i % 2 == 0 else "#f9fafb"
+        cells = []
+        for j, cell in enumerate(row):
+            align = (columns[j].get("align") if j < len(columns) else "left") or "left"
+            ta = "text-align:right;font-variant-numeric:tabular-nums;" if align == "right" else ""
+            td = (
+                f'style="padding:9px 12px;font-size:13px;color:#111827;'
+                f'border-bottom:1px solid #e5e7eb;background:{bg};{ta}"'
+            )
+            cells.append(f"<td {td}>{e(str(cell))}</td>")
+        body_rows.append("<tr>" + "".join(cells) + "</tr>")
+    rows_html = "".join(body_rows) or (
+        f'<tr><td colspan="{max(1, len(columns))}" '
+        'style="padding:16px;font-size:14px;color:#6b7280;">No rows matched this report.</td></tr>'
+    )
+
+    truncated = (
+        f'<tr><td style="padding:8px 24px 0;font-size:12px;color:#9ca3af;">'
+        f"Showing the first {shown:,} of {total:,} rows — the full report is attached."
+        "</td></tr>"
+        if total > shown
+        else ""
+    )
+    desc = (
+        f'<div style="font-size:13px;color:#6b7280;margin-top:2px;">{e(description)}</div>'
+        if description
+        else ""
+    )
+
+    return (
+        '<div style="margin:0;padding:24px;background:#f3f4f6;">'
+        '<table role="presentation" cellpadding="0" cellspacing="0" '
+        'style="max-width:860px;margin:0 auto;background:#ffffff;border-radius:12px;'
+        "overflow:hidden;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;"
+        'box-shadow:0 1px 3px rgba(0,0,0,.08);width:100%;">'
+        '<tr><td style="padding:24px 24px 8px;">'
+        f'<div style="font-size:18px;font-weight:700;color:#111827;">OPUS · {e(report_name)}</div>'
+        f"{desc}"
+        "</td></tr>"
+        '<tr><td style="padding:16px 24px 8px;overflow-x:auto;">'
+        '<table role="presentation" cellpadding="0" cellspacing="0" '
+        'style="width:100%;border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">'
+        f"<thead><tr>{head}</tr></thead>"
+        f"<tbody>{rows_html}</tbody>"
+        "</table></td></tr>"
+        f"{truncated}"
+        '<tr><td style="padding:16px 24px 24px;font-size:12px;color:#9ca3af;line-height:1.5;">'
+        "This is a scheduled OPUS report, run live at send time. Manage its schedule "
+        "on the report's page in OPUS."
+        "</td></tr>"
+        "</table></div>"
+    )
+
+
+def send_report(
+    report: dict,
+    table: dict,
+    recipients: list[str],
+    attachment: dict | None,
+) -> bool:
+    """Email a scheduled custom report to its recipients (spec 26 phase 2).
+
+    Web runs the report and posts ``report{name,description}``, a capped ``table``
+    ({columns:[{label,align}], rows:[[...]], shown, total}) for the HTML body, the
+    explicit ``recipients`` list, and the full data as ``attachment`` ({filename,
+    content(base64), contentType}). Renders an HTML table (plus a plain-text
+    fallback) and sends via Resend. No recipients / no Resend key: logs, False.
+    """
+    name = report.get("name") or "Report"
+    description = report.get("description") or ""
+    columns = [c for c in (table.get("columns") or []) if isinstance(c, dict)]
+    rows = [r for r in (table.get("rows") or []) if isinstance(r, list)]
+    shown = int(table.get("shown") or len(rows))
+    total = int(table.get("total") or len(rows))
+
+    subject = f"[OPUS] Report: {name} ({total:,} row{'s' if total != 1 else ''})"
+
+    labels = [str(c.get("label") or "") for c in columns]
+    text_lines = ["\t".join(labels)] + [
+        "\t".join(str(cell) for cell in row) for row in rows
+    ]
+    if total > shown:
+        text_lines.append(f"\n… showing {shown} of {total} rows; full report attached.")
+    text = f"OPUS report: {name}\n\n" + "\n".join(text_lines)
+
+    html = _report_html(name, description, columns, rows, shown, total)
+
+    attachments = None
+    if isinstance(attachment, dict) and attachment.get("content"):
+        attachments = [
+            {
+                "filename": attachment.get("filename") or "report.csv",
+                "content": attachment["content"],
+            }
+        ]
+
+    return _deliver(
+        subject,
+        text,
+        label=f"report ({name})",
+        html=html,
+        recipients=recipients,
+        attachments=attachments,
     )
 
 

@@ -27,6 +27,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { listReports } from "@/db/report-engine";
+import { getSchedulesByReport } from "@/db/report-schedules";
+import { describeSchedule } from "@/lib/report-schedule";
 import {
   getAgingReport,
   getAssignmentSummary,
@@ -169,6 +171,11 @@ export default async function Page() {
       getSoftwareInventory(),
       canBuild ? listReports() : Promise.resolve([]),
     ]);
+
+  const scheduleByReport =
+    canBuild && savedReports.length > 0
+      ? await getSchedulesByReport(savedReports.map((r) => r.id))
+      : {};
 
   const trackedTitles = software.length;
   const totalInstalls = software.reduce((sum, r) => sum + r.machineCount, 0);
@@ -615,13 +622,19 @@ export default async function Page() {
         {canBuild && (
           <TabsPanel value="custom" className="flex flex-col gap-4">
             <CustomReportsList
-              reports={savedReports.map((r) => ({
-                id: r.id,
-                name: r.name,
-                description: r.description,
-                source: r.source,
-                updatedAt: r.updatedAt,
-              }))}
+              reports={savedReports.map((r) => {
+                const sched = scheduleByReport[r.id];
+                return {
+                  id: r.id,
+                  name: r.name,
+                  description: r.description,
+                  source: r.source,
+                  updatedAt: r.updatedAt,
+                  schedule: sched
+                    ? { label: describeSchedule(sched), enabled: sched.enabled }
+                    : null,
+                };
+              })}
               canWrite={canWriteReports}
             />
           </TabsPanel>

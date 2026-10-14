@@ -92,8 +92,40 @@ Deploy prerequisites (once): `npm run db:push` (report_definitions) + aw-auth
 (exceljs / jspdf / jspdf-autotable). Engine entry points: `runReportBySpec(spec)` and the
 CRUD in `src/db/report-engine.ts`; catalog in `src/lib/report-sources.ts`.
 
-## Phase 2 (later)
+## Phase 2 — scheduled delivery (on branch `feat/spec-26-reporting-phase2`)
 
-Scheduled delivery (a saved report emailed to recipients on a cadence, reusing the
-aw-auth notify path + the worker scheduler), report folders/categories, SQL
-push-down for scale, charts in reports.
+The headline feature: a saved report emailed to recipients on a cadence, reusing
+the aw-auth notify path + the worker scheduler (the spec 19 warranty-sweep model —
+schedules are **data in web**, the worker just fires a periodic trigger).
+
+- **2a schedule model + UI — ✅ DONE.** `report_schedules` table (one per report:
+  cadence daily/weekly/monthly + time, weekday/day-of-month, recipients, format
+  csv|xlsx, enabled, lastRunAt/nextRunAt). Pure core `src/lib/report-schedule.ts`
+  (`computeNextRun` / `describeSchedule` / `validateScheduleInput`, unit-tested);
+  server data `src/db/report-schedules.ts` (upsert/get/delete + `listDueSchedules`
+  / `advanceSchedule` ready for 2b); actions `saveScheduleAction` /
+  `deleteScheduleAction` (`report:write`); `src/components/schedule-dialog.tsx` on
+  the saved-report page + schedule badges on the hub. **Needs `db:push`.**
+- **2b delivery engine + email — ✅ DONE.** Web `deliverDueReports()`
+  (`src/db/report-delivery.ts`) + `POST /api/scan/reports/deliver` (service
+  `scan:dequeue`, `runtime=nodejs` for exceljs): finds due schedules, runs each,
+  builds a capped preview table + full CSV/Excel attachment
+  (`src/lib/report-attachment.ts`), emails via `sendReportEmail()` (`notify.ts`) →
+  **new aw-auth `/v1/notify/report`** (`ReportDeliveryView` + `send_report` +
+  `_report_html`; `_deliver` generalized to take explicit recipients + Resend
+  attachments), then `advanceSchedule`. Advance rules: sent → advance; transient
+  send failure → leave pending (retry); report that throws → advance anyway.
+  Keyed on `sent`. Tests: web `report-delivery.test.ts`, aw-auth
+  `ReportDeliveryResendTest`.
+- **2c worker cadence — ✅ DONE.** `run_report_delivery` in collector
+  `reachability.py` (POSTs the 2b endpoint, outbound-only, errors swallowed) + an
+  `IntervalTrigger` job in `worker.py` `_build_scheduler` on
+  `report_delivery_interval_minutes` (config, default 15; 0 = off), added to the
+  schedule summary line + `config.example.yaml`. Test `test_report_delivery.py`.
+
+**Scheduled delivery COMPLETE** (2a+2b+2c). 739 web + 24 aw-auth + 54 collector
+tests pass. Deploy: `db:push` (report_schedules) + the worker picks up the new
+config knob; `RESEND_API_KEY`/`EMAIL_FROM` already drive the existing alert emails.
+
+Later Phase 2 extras (each its own effort, not started): report folders/categories,
+SQL push-down for scale, charts in reports.
