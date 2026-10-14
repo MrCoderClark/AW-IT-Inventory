@@ -7,7 +7,30 @@ via a feature branch + PR.
 
 ---
 
-## 🚧 Collector: bound WinRM calls so a wedged host can't hang a scan (`fix/collect-subcall-timeout`)
+## 🚧 Reporting engine (spec 26, `feat/spec-26-reporting`)
+
+A custom **report builder** over live data, replacing the four hardcoded `/reports`
+aggregates. Spec: `docs/specs/26-reporting-engine/`. Safe by design — the builder
+only composes from a whitelisted field catalog, never user SQL; at fleet scale v1
+filters/groups/sorts in memory. **Phase 1 scope:** 6 data sources, on-demand run +
+live preview, CSV/Excel/PDF export, saved report definitions. Scheduling/email is
+phase 2.
+
+- **Slice 1a — engine ✅ (done, uncommitted on the branch):** `src/lib/report-spec.ts`
+  (pure `runReport`: type-aware filters, group+aggregates, sort, limit; 12 tests),
+  `src/lib/report-sources.ts` (field catalog for assets / computers+compliance /
+  assignments / people / software / printers), `src/db/report-engine.ts` (the 6
+  denormalized source queries + `runReportBySpec` + saved-report CRUD + `validateSpec`),
+  `report_definitions` table, and `report:write` in the aw-auth RBAC seed (Owner/Admin).
+  700 web tests pass. **Needs `npm run db:push` + `seed_rbac` (+ admin re-login).**
+- **Slice 1b — builder UI 🔜:** `/reports/builder` (source → columns → filters →
+  group/sort → live preview). *Next up.*
+- **Slice 1c — exports 🔜:** client-side CSV / Excel (`exceljs`) / PDF (`jspdf` +
+  `jspdf-autotable`), lazy-loaded.
+- **Slice 1d — saved reports hub 🔜:** save/list/edit/delete; `/reports` becomes
+  Standard reports + Custom reports + New report.
+
+## Shipped ✅ — Collector: bound WinRM calls so a wedged host can't hang a scan (merged `fix/collect-subcall-timeout`)
 
 A host with a stuck Windows Update made the posture step's WUA COM query block
 forever; pywinrm polls a running command indefinitely, so the whole collect hung

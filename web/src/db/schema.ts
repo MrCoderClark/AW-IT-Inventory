@@ -1207,3 +1207,25 @@ export type SoftwarePackageRow = typeof softwarePackages.$inferSelect;
 export type SoftwareDeploymentRow = typeof softwareDeployments.$inferSelect;
 export type ConnectedMonitorRow = typeof connectedMonitors.$inferSelect;
 export type DismissedMonitorRow = typeof dismissedMonitors.$inferSelect;
+
+// Saved custom-report definitions (spec 26). A report is a data source + a spec
+// (columns/filters/groupBy/aggregates/sort/limit) stored as jsonb and re-run on
+// demand — no user SQL, the engine composes from a whitelisted field catalog.
+export const reportDefinitions = pgTable("report_definitions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  description: text("description"),
+  source: text("source").notNull(), // a REPORT_SOURCES id
+  spec: jsonb("spec")
+    .$type<import("@/lib/report-spec").ReportSpec>()
+    .notNull(),
+  createdBy: text("created_by"), // the author's email (no FK; admins live in aw-auth)
+  shared: boolean("shared").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+export type ReportDefinitionRow = typeof reportDefinitions.$inferSelect;
