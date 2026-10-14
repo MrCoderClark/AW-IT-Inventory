@@ -6,12 +6,14 @@ import {
   PackageOpen,
   ShieldCheck,
   Users,
+  Wand2,
 } from "lucide-react";
 
 import { HeroHeader } from "@/components/hero-header";
 import { PagePlaceholder } from "@/components/page-placeholder";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsList, TabsPanel, TabsTab } from "@/components/ui/tabs";
 import {
@@ -151,6 +153,9 @@ export default async function Page() {
   // to a page they can't access (RBAC audit).
   const canViewPeople = hasPermission(user, "asset:write");
 
+  // The custom report builder (spec 26) is open to any report:read viewer.
+  const canBuild = hasPermission(user, "report:read");
+
   const [warranty, aging, assignments, software] = await Promise.all([
     getWarrantyReport(),
     getAgingReport(),
@@ -167,6 +172,13 @@ export default async function Page() {
         title="Reports"
         subtitle="Warranty, asset aging, assignments and software across the fleet — live from the inventory."
         icon={<FileText />}
+        actions={
+          canBuild ? (
+            <Button nativeButton={false} render={<Link href="/reports/builder" />}>
+              <Wand2 /> New custom report
+            </Button>
+          ) : undefined
+        }
       />
 
       <Tabs defaultValue="warranty">

@@ -66,13 +66,19 @@ filters → group/sort → live preview → save). A saved report opens at
 
 ## Build order / status
 
-- **1a engine — ✅ DONE** (field catalog + 6 source queries + `runReport` + `report_definitions` + db module + tests + `report:write`). On branch `feat/spec-26-reporting`, uncommitted.
-- **1b builder UI — 🔜 NEXT** (`/reports/builder`).
-- **1c exports — 🔜** (CSV/Excel/PDF, client-side).
-- **1d saved-reports hub — 🔜** (`/reports` restructure).
+- **1a engine — ✅ DONE** (field catalog + 6 source queries + `runReport` + `report_definitions` + db module + tests + `report:write`). On branch `feat/spec-26-reporting`, committed `890d96f`.
+- **1b builder UI — ✅ DONE** (`/reports/builder`: source → columns → type-aware
+  filters → group/aggregate → sort/limit → debounced live preview; create+edit;
+  `report:read` to run, `report:write` to save). Server actions
+  `src/app/(app)/reports/report-actions.ts` (`runReportAction` / `saveReportAction`
+  / `deleteReportAction`, each gated + `validateSpec`'d); component
+  `src/components/report-builder.tsx`; a "New custom report" button on `/reports`.
+- **1c exports — 🔜 NEXT** (CSV/Excel/PDF, client-side from the loaded result set).
+- **1d saved-reports hub — 🔜** (`/reports` restructure + `/reports/custom/[id]`;
+  the builder's Save already redirects to `/reports/custom/[id]`, which 1d adds).
 
 Resume: `npm run db:push` + aw-auth `seed_rbac` (+ admin re-login for `report:write`),
-then build 1b. Engine entry points: `runReportBySpec(spec)` and the CRUD in
+then build 1c. Engine entry points: `runReportBySpec(spec)` and the CRUD in
 `src/db/report-engine.ts`; catalog in `src/lib/report-sources.ts`.
 
 ## Phase 2 (later)
