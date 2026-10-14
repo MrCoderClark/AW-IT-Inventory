@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   ArrowDown,
   ArrowUp,
+  ChartColumnBig,
   Layers,
   Loader2,
   Plus,
@@ -19,6 +20,7 @@ import {
   runReportAction,
   saveReportAction,
 } from "@/app/(app)/reports/report-actions";
+import { ReportChartView } from "@/components/report-chart";
 import { ReportExportMenu } from "@/components/report-export-menu";
 import { ReportResultTable } from "@/components/report-result-table";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +35,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { canRenderChart, chartableColumns } from "@/lib/report-chart";
 import {
   fieldMap,
   REPORT_SOURCES,
@@ -42,9 +45,11 @@ import {
   OPERATOR_LABELS,
   OPERATORS_BY_TYPE,
   type AggregateFn,
+  type ChartType,
   type FieldType,
   type Operator,
   type ReportAggregate,
+  type ReportChart,
   type ReportFilter,
   type ReportResult,
   type ReportSort,
@@ -112,6 +117,15 @@ export function ReportBuilder({
   const [limit, setLimit] = React.useState<string>(
     initial?.spec.limit ? String(initial.spec.limit) : "",
   );
+  const [chartType, setChartType] = React.useState<"none" | ChartType>(
+    initial?.spec.chart?.type ?? "none",
+  );
+  const [chartCategory, setChartCategory] = React.useState(
+    initial?.spec.chart?.categoryField ?? "",
+  );
+  const [chartValue, setChartValue] = React.useState(
+    initial?.spec.chart?.valueField ?? "",
+  );
 
   const [name, setName] = React.useState(initial?.name ?? "");
   const [description, setDescription] = React.useState(
@@ -134,6 +148,14 @@ export function ReportBuilder({
 
   /* The spec assembled from the controls — the single source of truth both the
      preview and Save send to the server. */
+  const chart = React.useMemo<ReportChart | null>(
+    () =>
+      chartType === "none" || !chartCategory || !chartValue
+        ? null
+        : { type: chartType, categoryField: chartCategory, valueField: chartValue },
+    [chartType, chartCategory, chartValue],
+  );
+
   const spec = React.useMemo<ReportSpec>(() => {
     const n = Number(limit);
     return {
@@ -144,8 +166,9 @@ export function ReportBuilder({
       aggregates,
       sort,
       limit: Number.isFinite(n) && n > 0 ? n : null,
+      chart,
     };
-  }, [source, columns, filters, groupBy, aggregates, sort, limit]);
+  }, [source, columns, filters, groupBy, aggregates, sort, limit, chart]);
 
   const hasOutput = columns.length > 0 || groupBy.length > 0;
 
@@ -188,6 +211,9 @@ export function ReportBuilder({
     setGroupBy([]);
     setAggregates([]);
     setSort([]);
+    setChartType("none");
+    setChartCategory("");
+    setChartValue("");
   }
 
   function toggleColumn(id: string) {
@@ -263,6 +289,24 @@ export function ReportBuilder({
 
   const unusedColumnFields = src.fields.filter((f) => !columns.includes(f.id));
   const unusedFilterFields = src.fields;
+
+  // Chart field options come from the current preview result (post group/aggregate).
+  const chartCols = result
+    ? chartableColumns(result)
+    : { categories: [], values: [] };
+
+  function pickChartType(next: "none" | ChartType) {
+    setChartType(next);
+    if (next !== "none" && result) {
+      const cols = chartableColumns(result);
+      if (!chartCategory || !cols.categories.some((c) => c.id === chartCategory)) {
+        setChartCategory(cols.categories[0]?.id ?? "");
+      }
+      if (!chartValue || !cols.values.some((c) => c.id === chartValue)) {
+        setChartValue(cols.values[0]?.id ?? "");
+      }
+    }
+  }
 
   return (
     <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
@@ -584,6 +628,74 @@ export function ReportBuilder({
             />
           </label>
         </Card>
+
+        {/* Chart */}
+        <Card className="gap-3 p-4">
+          <SectionTitle icon={ChartColumnBig}>Chart</SectionTitle>
+          <p className="text-xs text-muted-foreground">
+            An optional chart over the result — most useful with a grouping. Shown
+            above the table.
+          </p>
+          <div className="flex flex-wrap items-end gap-2">
+            <Select value={chartType} onValueChange={(v) => v && pickChartType(v as "none" | ChartType)}>
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No chart</SelectItem>
+                <SelectItem value="bar">Bar</SelectItem>
+                <SelectItem value="donut">Donut</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {chartType !== "none" &&
+            (chartCols.values.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                This report has no numeric column to chart. Add a grouping (for a
+                count) or a number column.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <label className="flex items-center gap-2 text-sm">
+                  <span className="w-20 text-muted-foreground">Category</span>
+                  <Select
+                    value={chartCategory || null}
+                    onValueChange={(v) => v && setChartCategory(v)}
+                  >
+                    <SelectTrigger className="flex-1">
+                      <SelectValue placeholder="column" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {chartCols.categories.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <span className="w-20 text-muted-foreground">Value</span>
+                  <Select
+                    value={chartValue || null}
+                    onValueChange={(v) => v && setChartValue(v)}
+                  >
+                    <SelectTrigger className="flex-1">
+                      <SelectValue placeholder="number column" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {chartCols.values.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </label>
+              </div>
+            ))}
+        </Card>
       </div>
 
       {/* ------------------- Preview + save ------------------- */}
@@ -641,6 +753,12 @@ export function ReportBuilder({
               disabled={!hasOutput}
             />
           </div>
+
+          {chart && result && canRenderChart(result, chart) && (
+            <div className="border-b px-4 py-4">
+              <ReportChartView result={result} chart={chart} />
+            </div>
+          )}
 
           <PreviewBody
             hasOutput={hasOutput}
