@@ -30,7 +30,7 @@ export interface ReportEmailPayload {
  * Printer-alert notifications (spec 12, milestone 3). Web owns the reachability
  * history, so it detects the up/down transition and asks aw-auth to email the
  * admins (aw-auth owns identity + the Resend credentials). This is the only
- * web -> aw-auth call in the app; it authenticates with the dedicated `opus-web`
+ * web -> aw-auth call in the app; it authenticates with the dedicated `h2tecs-web`
  * service account (client-credentials, `notify:send` scope, AC-7, AC-9).
  *
  * Every send here is best-effort: a failure is logged and swallowed so a Resend
@@ -39,8 +39,8 @@ export interface ReportEmailPayload {
  * check retries it.
  */
 
-const CLIENT_ID_ENV = "OPUS_WEB_CLIENT_ID";
-const CLIENT_SECRET_ENV = "OPUS_WEB_CLIENT_SECRET";
+const CLIENT_ID_ENV = "H2TECS_WEB_CLIENT_ID";
+const CLIENT_SECRET_ENV = "H2TECS_WEB_CLIENT_SECRET";
 
 let cachedToken: { value: string; exp: number } | null = null;
 
@@ -56,14 +56,14 @@ function jwtExp(token: string): number | null {
   }
 }
 
-/** Fetch (and cache) a client-credentials access token for `opus-web`. */
+/** Fetch (and cache) a client-credentials access token for `h2tecs-web`. */
 async function getServiceToken(): Promise<string | null> {
   const clientId = process.env[CLIENT_ID_ENV];
   const clientSecret = process.env[CLIENT_SECRET_ENV];
   if (!clientId || !clientSecret) {
     console.warn(
       `[notify] ${CLIENT_ID_ENV}/${CLIENT_SECRET_ENV} not set — skipping printer alert. ` +
-        "Create the opus-web service account (scope notify:send) and set both in web/.env.",
+        "Create the h2tecs-web service account (scope notify:send) and set both in web/.env.",
     );
     return null;
   }
@@ -143,7 +143,7 @@ export async function sendPrinterAlert(event: AlertEvent): Promise<boolean> {
  * Ask aw-auth to email the admins the daily printer page-counter report (spec 14,
  * AC-4, AC-7). Web assembles the per-printer rows (it holds the counter history)
  * and posts them; aw-auth resolves the admins and sends via Resend, the same
- * `opus-web` service account (`notify:send`) and Resend path as the down alerts.
+ * `h2tecs-web` service account (`notify:send`) and Resend path as the down alerts.
  * Returns true only when aw-auth actually delivered (keys on `sent`, not the
  * status code), so a failed send is reported rather than silently dropped.
  */
@@ -191,7 +191,7 @@ export async function sendCounterReportEmail(
  * Ask aw-auth to email a scheduled report to its recipients (spec 26 phase 2).
  * Web runs the report and builds the preview table + attachment; aw-auth renders
  * the HTML email and sends via Resend to the explicit recipient list (unlike the
- * other notify calls, which resolve the admins). Same `opus-web` service account
+ * other notify calls, which resolve the admins). Same `h2tecs-web` service account
  * (`notify:send`) and `sent`-keyed success contract. Returns true only on a real
  * delivery, so the caller can leave a failed send pending to retry.
  */
@@ -239,7 +239,7 @@ export async function sendReportEmail(
  * Ask aw-auth to email the admins about one compliance transition (spec 21 v2):
  * a computer going at-risk (a hard security check failed) or recovering. Web
  * detects the transition at ingest; aw-auth resolves the admins and sends via
- * Resend, the same `opus-web` service account (`notify:send`) as the printer
+ * Resend, the same `h2tecs-web` service account (`notify:send`) as the printer
  * alerts. Returns true only on a real send (keys on `sent`), but the caller treats
  * this as best-effort and non-gating — the in-app notification is the durable
  * record, so a failed email here is logged, not retried (which would re-fire the

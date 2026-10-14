@@ -84,7 +84,7 @@ function ProfileCard({ initialName }: { initialName: string }) {
     <Card>
       <CardHeader>
         <CardTitle>Profile</CardTitle>
-        <CardDescription>Your display name across OPUS.</CardDescription>
+        <CardDescription>Your display name across H2Tecs.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <label className="flex flex-col gap-1.5">

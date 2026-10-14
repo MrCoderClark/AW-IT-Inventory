@@ -165,7 +165,7 @@ def _run_install(
         cmdline = f'"{path}" {silent_args}'.strip()
 
     remote_dir = path.rsplit("\\", 1)[0]
-    bat_path = f"{remote_dir}\\opus_run.cmd"
+    bat_path = f"{remote_dir}\\h2tecs_run.cmd"
     bat = f"@echo off\r\n{cmdline}\r\n"
     w = _ps(session, f"[IO.File]::WriteAllText({_psstr(bat_path)}, {_psstr(bat)})")
     if w["exitCode"] != 0:

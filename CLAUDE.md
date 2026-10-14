@@ -1,10 +1,10 @@
-# CLAUDE.md — OPUS IT Inventory
+# CLAUDE.md — H2Tecs IT Inventory
 
 Project context for AI agents working in this repo. Read this first.
 
 ## What this is
 
-**OPUS** — an on-premise, enterprise IT asset management system for computers,
+**H2Tecs** — an on-premise, enterprise IT asset management system for computers,
 monitors, printers, phones and related IT items (built to manage 100+ machines).
 Three deployables + Postgres, all self-hosted.
 
@@ -14,8 +14,8 @@ Three deployables + Postgres, all self-hosted.
 
 | Service | Dir | Stack | Responsibility |
 |---|---|---|---|
-| **web** | `web/` | Next.js 16 (App Router) + Tailwind v4 + shadcn/ui + Drizzle | The OPUS UI **and** its API (route handlers). Owns `aw_it_inventory` DB. Exposes `/api/ingest/scan`. |
-| **aw-auth** | `aw-auth/` | Django 6 + DRF + SimpleJWT (uv) | Standalone, portable identity provider: RBAC, RS256/JWKS, MFA-ready, service accounts. Owns `aw_auth` DB. |
+| **web** | `web/` | Next.js 16 (App Router) + Tailwind v4 + shadcn/ui + Drizzle | The H2Tecs UI **and** its API (route handlers). Owns `aw_it_inventory_web` DB. Exposes `/api/ingest/scan`. |
+| **aw-auth** | `aw-auth/` | Django 6 + DRF + SimpleJWT (uv) | Standalone, portable identity provider: RBAC, RS256/JWKS, MFA-ready, service accounts. Owns `aw_it_inventory_auth` DB. |
 | **collector** | `collector/` | Python 3.12 (uv) | Agentless scanner: discovers subnets, WinRM (Windows) + SNMP (printers), posts to the ingest API. |
 
 **Data flow:** `collector scan --ingest` → aw-auth client-credentials token → web
@@ -29,8 +29,8 @@ Users → cookies (httpOnly, server-to-server only). Machines → service accoun
 
 ## Databases (on-prem Postgres @ 192.168.70.10)
 
-- `aw_auth` — Django-managed (aw-auth). Connection in `aw-auth/.env` `DATABASE_URL`.
-- `aw_it_inventory` — Drizzle-managed (web). Connection in `web/.env` `DATABASE_URL`.
+- `aw_it_inventory_auth` — Django-managed (aw-auth). Connection in `aw-auth/.env` `DATABASE_URL`.
+- `aw_it_inventory_web` — Drizzle-managed (web). Connection in `web/.env` `DATABASE_URL`.
 
 > ⚠️ **Keep them separate.** `drizzle-kit push` DROPS any table not in its schema —
 > pointing web at the auth/shared DB will try to delete the Django tables.
@@ -52,7 +52,7 @@ Start them in this order (web and the worker both need aw-auth up first):
 # 1. aw-auth — identity provider (in aw-auth/, uv-managed) → http://127.0.0.1:8000
 uv run python manage.py runserver
 
-# 2. web — OPUS UI + API (in web/) → http://localhost:3000
+# 2. web — H2Tecs UI + API (in web/) → http://localhost:3000
 npm run dev
 
 # 3. collector worker — scan-job queue, printer/computer schedules, AND background

@@ -1,6 +1,6 @@
 /**
  * A small vertical bar chart for categorical counts (e.g. assets by type), styled
- * to the OPUS design system. Pure/server-safe. Follows the dataviz mark specs:
+ * to the H2Tecs design system. Pure/server-safe. Follows the dataviz mark specs:
  * thin bars with 4px-rounded data-ends anchored to the baseline, recessive
  * gridlines, a direct value label above each bar (so no legend/hover is needed for
  * a handful of bars), and each bar carries a native title for hover/accessibility.

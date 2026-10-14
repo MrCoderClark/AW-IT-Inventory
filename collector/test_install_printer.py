@@ -107,7 +107,7 @@ def test_base64_chunks_stay_under_the_command_line_limit():
     steps = install_printer._transfer_zip(
         FakeSession(),
         payload,
-        r"C:\Windows\Temp\opus-print\job",
+        r"C:\Windows\Temp\h2tecs-print\job",
         install_printer._CHUNK,
     )
 

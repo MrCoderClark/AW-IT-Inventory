@@ -22,7 +22,7 @@ import type {
  * Printer detail read helpers (spec 17.03). Pure reads over the existing spec 12
  * reachability tables and spec 14 counter history: no new telemetry, no writes.
  * The Network Health card and the derived activity feed are reshaped from data
- * OPUS already stores. All server-only. Looked up by the human tag (the URL key).
+ * H2Tecs already stores. All server-only. Looked up by the human tag (the URL key).
  */
 
 /** Resolve a printer tag to its internal id, or null when the tag is not a

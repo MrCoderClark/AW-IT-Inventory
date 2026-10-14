@@ -1,4 +1,4 @@
-"""OPUS collector — agentless fleet scanner (standalone / dry-run).
+"""H2Tecs collector — agentless fleet scanner (standalone / dry-run).
 
 Discovers hosts on the configured subnets, resolves credentials, collects
 hardware/health over WinRM and printers over SNMP, and writes a JSON report.
@@ -247,7 +247,7 @@ def run_scan(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="collector", description="OPUS fleet scanner")
+    parser = argparse.ArgumentParser(prog="collector", description="H2Tecs fleet scanner")
     sub = parser.add_subparsers(dest="command")
     scan = sub.add_parser("scan", help="Discover and scan the fleet (dry-run)")
     scan.add_argument("--config", default="config.yaml")

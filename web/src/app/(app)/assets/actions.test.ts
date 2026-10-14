@@ -115,7 +115,7 @@ describe("createAsset (AC-2, AC-6, AC-8)", () => {
     const payload = (h.chain.values as ReturnType<typeof vi.fn>).mock
       .calls[0][0] as { tag: string; type: string };
     expect(payload.type).toBe("Monitor");
-    expect(payload.tag).toMatch(/^OPUS-MON-[A-Z0-9]{1,5}$/);
+    expect(payload.tag).toMatch(/^H2TECS-MON-[A-Z0-9]{1,5}$/);
   });
 
   it("retries tag generation on a unique-constraint clash", async () => {

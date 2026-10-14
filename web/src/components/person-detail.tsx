@@ -209,14 +209,14 @@ export function PersonDetail({
         <Field label="Office location" value={person.officeLocation} />
       </div>
 
-      {/* OPUS access (admins only). A person and a login are the same human when
+      {/* H2Tecs access (admins only). A person and a login are the same human when
           their emails match; this shows whether this person can sign in. */}
       {canManageUsers && (
         <div className="rounded-xl border bg-card p-5">
           <div className="mb-3 flex items-center gap-2">
             <ShieldCheck className="size-4 text-muted-foreground" />
             <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              OPUS access
+              H2Tecs access
             </p>
           </div>
           {account ? (
@@ -250,7 +250,7 @@ export function PersonDetail({
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm text-muted-foreground">
                 {person.email
-                  ? "This person has no OPUS login."
+                  ? "This person has no H2Tecs login."
                   : "Add an email to this person before creating a login."}
               </p>
               <Button

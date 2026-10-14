@@ -43,7 +43,7 @@ export default async function Page({ params }: PageProps<"/people/[id]">) {
       canWrite ? getLocationOptions() : Promise.resolve([]),
     ]);
 
-  // Admins see whether this person has an OPUS login (linked by email) and can
+  // Admins see whether this person has an H2Tecs login (linked by email) and can
   // create one. Resolved from aw-auth with the admin's own token.
   const canManageUsers = hasPermission(user, "user:admin");
   let account: LinkedAccount | null = null;

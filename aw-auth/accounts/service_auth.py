@@ -2,7 +2,7 @@
 
 aw-auth normally *issues* service tokens for other apps to verify via JWKS. The
 notify endpoint is the one place aw-auth must *accept* one: web calls it with its
-`opus-web` service account to send a printer alert (spec 12). We verify the token
+`h2tecs-web` service account to send a printer alert (spec 12). We verify the token
 locally with the same signing key we minted it with (RS256 in prod, HS256 in dev
 fallback), confirm it is a service token, and check the required scope.
 """

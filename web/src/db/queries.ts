@@ -799,7 +799,7 @@ export async function getRecentAssets(limit = 8): Promise<RecentAsset[]> {
 }
 
 /** The locations holding the most devices, for the dashboard "Assets by Location"
-   card (replaces the mock's geo map — OPUS has no device coordinates). */
+   card (replaces the mock's geo map — H2Tecs has no device coordinates). */
 export async function getAssetsByLocation(limit = 6): Promise<LocationCount[]> {
   const [counts, pathById] = await Promise.all([
     locationDeviceCounts(),

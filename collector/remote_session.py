@@ -58,7 +58,7 @@ _CLIXML_STRING_RE = re.compile(r"<S[^>]*>(.*?)</S>", re.DOTALL)
 # make at least the working directory sticky: before each line we Set-Location back
 # to the tracked cwd, and after it we echo the (possibly changed) location on a line
 # led by this control-char marker so it can never collide with real output.
-_CWD_MARKER = "\x1e__OPUS_CWD__"
+_CWD_MARKER = "\x1e__H2TECS_CWD__"
 
 TokenFn = Callable[[], str]
 

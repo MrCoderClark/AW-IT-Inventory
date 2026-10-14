@@ -517,7 +517,7 @@ export function ComputerDetail({
                         {m.serial || "—"}
                       </span>
                       {/* Serial reconciliation (phase 3): link a matched Monitor
-                         asset, or flag a scanned serial OPUS doesn't track. */}
+                         asset, or flag a scanned serial H2Tecs doesn't track. */}
                       {m.matchedAssetTag ? (
                         <Link
                           href={`/assets/${m.matchedAssetTag}`}

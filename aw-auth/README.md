@@ -1,6 +1,6 @@
 # aw-auth
 
-Standalone identity service for OPUS (and future apps). Django 6 + DRF + SimpleJWT.
+Standalone identity service for H2Tecs (and future apps). Django 6 + DRF + SimpleJWT.
 Full design: [`../docs/specs/02-auth-service-spec.md`](../docs/specs/02-auth-service-spec.md).
 
 ## Phase 0 (this build)
@@ -79,12 +79,12 @@ uv run granian --interface wsgi config.wsgi:application \
 # register
 curl -X POST http://127.0.0.1:8000/v1/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"email":"tech@opus.local","full_name":"Tech","password":"Sup3rStr0ng!"}'
+  -d '{"email":"tech@h2tecs.local","full_name":"Tech","password":"Sup3rStr0ng!"}'
 
 # login -> access + refresh
 curl -X POST http://127.0.0.1:8000/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"tech@opus.local","password":"Sup3rStr0ng!"}'
+  -d '{"email":"tech@h2tecs.local","password":"Sup3rStr0ng!"}'
 
 # me (use the access token)
 curl http://127.0.0.1:8000/v1/auth/me -H "Authorization: Bearer <ACCESS>"

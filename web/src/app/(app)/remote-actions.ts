@@ -8,7 +8,7 @@ import type { ActionResult } from "@/lib/data";
 
 /**
  * Remote Actions server actions (spec 24). Both gate on `remote:shell` — the most
- * restricted permission in OPUS, since a session is arbitrary remote code
+ * restricted permission in H2Tecs, since a session is arbitrary remote code
  * execution. Ending is additionally owner-checked in the db layer (AC-5). The
  * relay itself (input/output/stream) is the API routes, not actions.
  */

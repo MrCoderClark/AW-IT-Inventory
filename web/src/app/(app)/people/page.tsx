@@ -36,7 +36,7 @@ export default async function Page() {
     canWrite ? getLocationOptions() : Promise.resolve([]),
   ]);
 
-  // Admins get a "Login" badge on people who have an OPUS account (by email).
+  // Admins get a "Login" badge on people who have an H2Tecs account (by email).
   let loginEmails: string[] = [];
   if (canManageUsers) {
     const { access } = await readTokens();

@@ -50,7 +50,7 @@ export function UsersTable({
     <>
       <HeroHeader
         title="Users"
-        subtitle="Create accounts, assign roles and manage access to OPUS."
+        subtitle="Create accounts, assign roles and manage access to H2Tecs."
         icon={<Users className="size-6" />}
         actions={
           <Button onClick={() => setDialogOpen(true)}>

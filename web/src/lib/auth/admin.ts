@@ -77,7 +77,7 @@ export function getUser(access: string, id: string) {
 
 /**
  * The login account whose email matches `email` (case-insensitive), or null.
- * aw-auth has no by-email endpoint; the user set is tiny (OPUS operators), so we
+ * aw-auth has no by-email endpoint; the user set is tiny (H2Tecs operators), so we
  * list and filter. Used to link a People record to its login by email.
  */
 export async function getUserByEmail(

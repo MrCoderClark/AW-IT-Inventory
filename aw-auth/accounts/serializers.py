@@ -205,7 +205,7 @@ class SessionSerializer(serializers.Serializer):
     expires_at = serializers.DateTimeField()
 
 
-class OpusTokenObtainPairSerializer(TokenObtainPairSerializer):
+class H2TecsTokenObtainPairSerializer(TokenObtainPairSerializer):
     """Embeds identity + RBAC claims so client apps can authorize locally."""
 
     @classmethod

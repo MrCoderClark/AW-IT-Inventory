@@ -69,7 +69,7 @@ export function TopBar() {
         </SheetTrigger>
         <SheetContent side="left" className="w-64 p-0">
           <SheetHeader>
-            <SheetTitle>OPUS — IT Inventory</SheetTitle>
+            <SheetTitle>H2Tecs — IT Inventory</SheetTitle>
           </SheetHeader>
           <nav className="grid gap-0.5 px-3 pb-4">
             {[...NAV_PRIMARY, ...NAV_ASSETS, ...NAV_MANAGE].map((item) => {

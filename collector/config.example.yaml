@@ -1,4 +1,4 @@
-# OPUS collector config. Copy to config.yaml and adjust.
+# H2Tecs collector config. Copy to config.yaml and adjust.
 # Passwords are NOT stored here — each profile names an env var (see .env).
 
 networks:
@@ -76,7 +76,7 @@ snmp_timeout: 2.0
 output_dir: out
 
 # Ingest (used with `scan --ingest`). Credentials come from .env
-# (OPUS_CLIENT_ID / OPUS_CLIENT_SECRET) — created via aw-auth's
+# (H2TECS_CLIENT_ID / H2TECS_CLIENT_SECRET) — created via aw-auth's
 # `create_service_account`.
 auth_url: http://127.0.0.1:8000      # aw-auth
 ingest_url: http://localhost:3000    # web app
@@ -97,7 +97,7 @@ cutout_model: u2net
 printer_install_poll_interval: 60.0
 # Temp dir on the TARGET computer where the driver bundle is staged + unpacked
 # (cleaned up after each job).
-install_temp_dir: 'C:\Windows\Temp\opus-print'
+install_temp_dir: 'C:\Windows\Temp\h2tecs-print'
 # Transfer the bundle over the SMB admin share when available; currently the
 # collector always uses the base64-over-WinRM path (works everywhere). Reserved
 # for a future SMB fast path.
@@ -107,7 +107,7 @@ install_smb_transfer: true
 software_deploy_poll_interval: 5.0
 # Temp dir on the TARGET computer where installer files are staged + run (cleaned up
 # after each deployment).
-software_deploy_temp_dir: 'C:\Windows\Temp\opus-deploy'
+software_deploy_temp_dir: 'C:\Windows\Temp\h2tecs-deploy'
 # Retention for finished deployment rows; the worker's daily prune deletes ones
 # older than this.
 deploy_retention_days: 90

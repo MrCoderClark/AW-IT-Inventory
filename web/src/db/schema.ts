@@ -194,7 +194,7 @@ export const media = pgTable(
 
 export const assets = pgTable("assets", {
   id: uuid("id").primaryKey().defaultRandom(),
-  tag: text("tag").notNull().unique(), // human key, e.g. OPUS-COMP-7491
+  tag: text("tag").notNull().unique(), // human key, e.g. H2TECS-COMP-7491
   name: text("name").notNull(),
   type: assetType("type").notNull(),
   serial: text("serial"),

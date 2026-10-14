@@ -287,7 +287,7 @@ export function AppSidebar({ locations = [] }: { locations?: LocationNode[] }) {
           <span className="size-3 rounded-full bg-sidebar" />
         </span>
         <span className="leading-none">
-          <span className="block text-xl font-extrabold tracking-tight">OPUS</span>
+          <span className="block text-xl font-extrabold tracking-tight">H2Tecs</span>
           <span className="mt-1 block text-[9px] font-semibold uppercase tracking-[0.28em] text-muted-foreground">
             IT Inventory
           </span>

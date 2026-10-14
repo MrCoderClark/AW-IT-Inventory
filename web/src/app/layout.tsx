@@ -16,9 +16,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "OPUS — IT Inventory",
+  title: "H2Tecs — IT Inventory",
   description:
-    "OPUS: enterprise IT asset management for computers, monitors, printers, phones and related IT items.",
+    "H2Tecs: enterprise IT asset management for computers, monitors, printers, phones and related IT items.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

@@ -52,7 +52,7 @@ export function PeopleDirectory({
   people: DirectoryPerson[];
   canWrite?: boolean;
   locations?: LocationOption[];
-  /** Lowercased emails that have an OPUS login (admins only), for the badge. */
+  /** Lowercased emails that have an H2Tecs login (admins only), for the badge. */
   loginEmails?: string[];
 }) {
   const loginSet = React.useMemo(
@@ -164,7 +164,7 @@ export function PeopleDirectory({
                         <Badge
                           variant="secondary"
                           className="gap-1"
-                          title="Has an OPUS login"
+                          title="Has an H2Tecs login"
                         >
                           <KeyRound className="size-3" />
                           Login

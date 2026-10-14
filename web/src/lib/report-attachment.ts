@@ -65,7 +65,7 @@ export async function buildReportAttachment(
   if (format === "xlsx") {
     const ExcelJS = await import("exceljs");
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = "OPUS";
+    workbook.creator = "H2Tecs";
     workbook.created = new Date();
     const sheet = workbook.addWorksheet("Report");
     sheet.columns = result.columns.map((c) => ({

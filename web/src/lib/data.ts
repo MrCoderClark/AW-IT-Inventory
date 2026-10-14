@@ -527,7 +527,7 @@ export type SampleAsset = Omit<Asset, "locationId">;
 
 export const ASSETS: SampleAsset[] = [
   {
-    id: "OPUS-COMP-7491",
+    id: "H2TECS-COMP-7491",
     name: "Sarah's MacBook Pro 16\"",
     type: "Computer",
     serial: "C02DW480MD6R",
@@ -543,7 +543,7 @@ export const ASSETS: SampleAsset[] = [
     spec: "64GB RAM / 2TB SSD / Space Black",
   },
   {
-    id: "OPUS-COMP-7492",
+    id: "H2TECS-COMP-7492",
     name: "Michael's Dell XPS 15",
     type: "Computer",
     serial: "E8E630008",
@@ -559,7 +559,7 @@ export const ASSETS: SampleAsset[] = [
     spec: "i7-13700H / 32GB RAM / 1TB NVMe",
   },
   {
-    id: "OPUS-PRNT-7493",
+    id: "H2TECS-PRNT-7493",
     name: "Marketing Printer — HQ",
     type: "Printer",
     serial: "VNC3K12345",
@@ -575,7 +575,7 @@ export const ASSETS: SampleAsset[] = [
     spec: "Mono / 65ppm / Duplex / JetDirect",
   },
   {
-    id: "OPUS-MON-7494",
+    id: "H2TECS-MON-7494",
     name: "Priya's Studio Display",
     type: "Monitor",
     serial: "C07ZW2ABMD6T",
@@ -591,7 +591,7 @@ export const ASSETS: SampleAsset[] = [
     spec: "5K Retina / Nano-Texture",
   },
   {
-    id: "OPUS-PHN-7495",
+    id: "H2TECS-PHN-7495",
     name: "Field iPhone 15 Pro",
     type: "Phone",
     serial: "DX4Q9F7GHY",
@@ -607,7 +607,7 @@ export const ASSETS: SampleAsset[] = [
     spec: "256GB / Natural Titanium / eSIM",
   },
   {
-    id: "OPUS-COMP-7496",
+    id: "H2TECS-COMP-7496",
     name: "David's Latitude 7440",
     type: "Computer",
     serial: "7KJ2QN3",
@@ -623,7 +623,7 @@ export const ASSETS: SampleAsset[] = [
     spec: "i7-1365U / 32GB RAM / 1TB NVMe",
   },
   {
-    id: "OPUS-MON-7497",
+    id: "H2TECS-MON-7497",
     name: "Bay 3 — UltraSharp 34\"",
     type: "Monitor",
     serial: "CN0J8P2Q",
@@ -639,7 +639,7 @@ export const ASSETS: SampleAsset[] = [
     spec: "WQHD Curved / USB-C 90W hub",
   },
   {
-    id: "OPUS-NET-7498",
+    id: "H2TECS-NET-7498",
     name: "Core Switch — SF L4",
     type: "Network",
     serial: "FOC2450R1AB",
@@ -655,7 +655,7 @@ export const ASSETS: SampleAsset[] = [
     spec: "48-port / PoE+ / 10G uplink",
   },
   {
-    id: "OPUS-COMP-7499",
+    id: "H2TECS-COMP-7499",
     name: "Elena's ThinkPad X1",
     type: "Computer",
     serial: "PF3ABX12",
@@ -671,7 +671,7 @@ export const ASSETS: SampleAsset[] = [
     spec: "i7-1355U / 16GB RAM / 512GB",
   },
   {
-    id: "OPUS-PHN-7500",
+    id: "H2TECS-PHN-7500",
     name: "Ops Pixel 8 Pro",
     type: "Phone",
     serial: "35812110AB",
@@ -687,7 +687,7 @@ export const ASSETS: SampleAsset[] = [
     spec: "128GB / Obsidian",
   },
   {
-    id: "OPUS-MON-7501",
+    id: "H2TECS-MON-7501",
     name: "Design LG UltraFine",
     type: "Monitor",
     serial: "912NTLLAT881",
@@ -703,7 +703,7 @@ export const ASSETS: SampleAsset[] = [
     spec: "3840×2160 / Thunderbolt 3",
   },
   {
-    id: "OPUS-PRNT-7502",
+    id: "H2TECS-PRNT-7502",
     name: "Reception MFP — LDN",
     type: "Printer",
     serial: "JKL08876",
@@ -719,7 +719,7 @@ export const ASSETS: SampleAsset[] = [
     spec: "Color MFP / Scan-to-SMB / Badge auth",
   },
   {
-    id: "OPUS-COMP-7503",
+    id: "H2TECS-COMP-7503",
     name: "Kenji's iMac 24\"",
     type: "Computer",
     serial: "C02KJ9ABMD",
@@ -735,7 +735,7 @@ export const ASSETS: SampleAsset[] = [
     spec: "16GB RAM / 1TB SSD / Blue",
   },
   {
-    id: "OPUS-MON-7504",
+    id: "H2TECS-MON-7504",
     name: "Bay 7 — UltraSharp 27\"",
     type: "Monitor",
     serial: "CN0K2M9P",
@@ -751,7 +751,7 @@ export const ASSETS: SampleAsset[] = [
     spec: "4K / USB-C hub / IPS Black",
   },
   {
-    id: "OPUS-COMP-7505",
+    id: "H2TECS-COMP-7505",
     name: "Warehouse Latitude",
     type: "Computer",
     serial: "9QW2ZZ3",
@@ -767,7 +767,7 @@ export const ASSETS: SampleAsset[] = [
     spec: "i5-1345U / 16GB RAM / 512GB",
   },
   {
-    id: "OPUS-PHN-7506",
+    id: "H2TECS-PHN-7506",
     name: "Support iPhone SE",
     type: "Phone",
     serial: "F2LLD8QR",
@@ -783,7 +783,7 @@ export const ASSETS: SampleAsset[] = [
     spec: "128GB / Midnight",
   },
   {
-    id: "OPUS-NET-7507",
+    id: "H2TECS-NET-7507",
     name: "AP — LDN Floor 2",
     type: "Network",
     serial: "FCW2440A9BC",
@@ -799,7 +799,7 @@ export const ASSETS: SampleAsset[] = [
     spec: "Wi-Fi 6 / 4x4 MU-MIMO",
   },
   {
-    id: "OPUS-MON-7508",
+    id: "H2TECS-MON-7508",
     name: "Bay 1 — ProArt 32\"",
     type: "Monitor",
     serial: "M4LMQC0091",
@@ -815,7 +815,7 @@ export const ASSETS: SampleAsset[] = [
     spec: "QHD / 165Hz / Calman verified",
   },
   {
-    id: "OPUS-COMP-7509",
+    id: "H2TECS-COMP-7509",
     name: "Finance OptiPlex",
     type: "Computer",
     serial: "3RT8LM2",
@@ -831,7 +831,7 @@ export const ASSETS: SampleAsset[] = [
     spec: "i5-13500 / 16GB RAM / 512GB",
   },
   {
-    id: "OPUS-PRNT-7510",
+    id: "H2TECS-PRNT-7510",
     name: "Label Printer — Cage 01",
     type: "Printer",
     serial: "ZB4X20091",
@@ -847,7 +847,7 @@ export const ASSETS: SampleAsset[] = [
     spec: "Thermal / 300dpi / Ethernet",
   },
   {
-    id: "OPUS-COMP-7511",
+    id: "H2TECS-COMP-7511",
     name: "Nadia's MacBook Air",
     type: "Computer",
     serial: "FVFXK220Q6L1",
@@ -863,7 +863,7 @@ export const ASSETS: SampleAsset[] = [
     spec: "16GB RAM / 512GB SSD / Starlight",
   },
   {
-    id: "OPUS-MON-7512",
+    id: "H2TECS-MON-7512",
     name: "Bay 9 — UltraSharp 27\"",
     type: "Monitor",
     serial: "CN0P4R7T",
@@ -879,7 +879,7 @@ export const ASSETS: SampleAsset[] = [
     spec: "QHD / 120Hz / USB-C hub",
   },
   {
-    id: "OPUS-COMP-7513",
+    id: "H2TECS-COMP-7513",
     name: "Lab Precision Tower",
     type: "Computer",
     serial: "8HHT2QD",
@@ -895,7 +895,7 @@ export const ASSETS: SampleAsset[] = [
     spec: "i9-13900 / 64GB RAM / RTX A2000",
   },
   {
-    id: "OPUS-PHN-7514",
+    id: "H2TECS-PHN-7514",
     name: "Exec iPhone 15",
     type: "Phone",
     serial: "GX9P2L7QT",

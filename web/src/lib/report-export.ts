@@ -95,7 +95,7 @@ export async function exportExcel(
 ): Promise<void> {
   const ExcelJS = await import("exceljs");
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = "OPUS";
+  workbook.creator = "H2Tecs";
   workbook.created = new Date();
   const sheet = workbook.addWorksheet("Report");
 
