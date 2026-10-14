@@ -96,7 +96,10 @@ if (($null -eq $defRt) -and $mp) { if ($mp.AMServiceEnabled) { $avName = 'Window
 # Defender's signature age only applies when Defender is the active AV.
 if ($avName -and ($avName -notmatch 'Microsoft Defender|Windows Defender')) { $defAge = $null }
 # WUA history can hang on a wedged Update service; run it in a job with a 10s cap.
-$wuDays = $null; try { $wj = Start-Job { $s=(New-Object -ComObject Microsoft.Update.Session).CreateUpdateSearcher(); $n=$s.GetTotalHistoryCount(); if($n -gt 0){ $l=$s.QueryHistory(0,[Math]::Min($n,50)) | ?{$_.Operation -eq 1 -and $_.ResultCode -eq 2} | sort Date -Desc | select -First 1; if($l){[int]((Get-Date)-$l.Date).TotalDays} } }; if(Wait-Job $wj -Timeout 10){ $wuDays=Receive-Job $wj }; Remove-Job $wj -Force } catch {}
+# Re-cast the job result to [int]: Receive-Job attaches PSComputerName/RunspaceId
+# note-properties to the returned value, so without this ConvertTo-Json would emit
+# an object ({value,PSComputerName,...}) instead of a bare number (spec 21 bug).
+$wuDays = $null; try { $wj = Start-Job { $s=(New-Object -ComObject Microsoft.Update.Session).CreateUpdateSearcher(); $n=$s.GetTotalHistoryCount(); if($n -gt 0){ $l=$s.QueryHistory(0,[Math]::Min($n,50)) | ?{$_.Operation -eq 1 -and $_.ResultCode -eq 2} | sort Date -Desc | select -First 1; if($l){[int]((Get-Date)-$l.Date).TotalDays} } }; if(Wait-Job $wj -Timeout 10){ $r=Receive-Job $wj; if($null -ne $r){ $wuDays=[int]$r } }; Remove-Job $wj -Force } catch {}
 $sysPct = $null; try { $ld = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$($env:SystemDrive)'" -ErrorAction Stop; if ($ld -and $ld.Size -gt 0) { $sysPct = [math]::Round((($ld.Size - $ld.FreeSpace) / $ld.Size) * 100, 1) } } catch {}
 [ordered]@{
     bitlocker             = $bl
@@ -204,6 +207,25 @@ def _clean(value) -> str | None:
         return None
     v = value.strip()
     return v or None
+
+
+def _as_int(value) -> int | None:
+    """Coerce a ConvertTo-Json number to int, defensively. A value produced by
+    Receive-Job can serialize as an object ({value, PSComputerName, ...}) rather
+    than a bare number (spec 21 bug); unwrap that, and reject anything non-numeric
+    as None — so one malformed posture signal can never fail the whole parse."""
+    if isinstance(value, bool):
+        return None  # bools are ints in Python; a posture count is never a bool
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, dict):
+        return _as_int(value.get("value"))
+    if isinstance(value, str):
+        s = value.strip()
+        return int(s) if s.lstrip("-").isdigit() else None
+    return None
 
 
 def _run_ps_timeout(session, script: str, timeout: float):
@@ -344,12 +366,12 @@ def _parse_posture(data: dict) -> Compliance:
     return Compliance(
         bitlocker=_clean(data.get("bitlocker")),
         defender_realtime=data.get("defender_realtime"),
-        defender_sig_age_days=data.get("defender_sig_age_days"),
+        defender_sig_age_days=_as_int(data.get("defender_sig_age_days")),
         av_product=_clean(data.get("av_product")),
         tpm_ready=data.get("tpm_ready"),
         secure_boot=_clean(data.get("secure_boot")),
-        updates_last_days=data.get("updates_last_days"),
-        updates_pending=data.get("updates_pending"),
+        updates_last_days=_as_int(data.get("updates_last_days")),
+        updates_pending=_as_int(data.get("updates_pending")),
         system_drive_pct_used=data.get("system_drive_pct_used"),
     )
 
