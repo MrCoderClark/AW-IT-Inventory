@@ -36,6 +36,7 @@ from reachability import (
     run_counter_report,
     run_manual_reachability,
     run_reachability_check,
+    run_report_delivery,
     run_retention_prune,
     run_warranty_sweep,
 )
@@ -546,6 +547,7 @@ def _build_scheduler(config: Config, tokens: "TokenCache"):
     try:
         from apscheduler.schedulers.background import BackgroundScheduler
         from apscheduler.triggers.cron import CronTrigger
+        from apscheduler.triggers.interval import IntervalTrigger
     except ImportError:
         console.print(
             "[yellow]APScheduler not installed — printer reachability checks are "
@@ -605,6 +607,13 @@ def _build_scheduler(config: Config, tokens: "TokenCache"):
             run_warranty_sweep(config, tokens.get())
         except Exception as e:  # noqa: BLE001 — must never kill the scheduler
             console.print(f"  [red]warranty sweep job error:[/red] {e}")
+            tokens.invalidate()
+
+    def report_delivery_job() -> None:
+        try:
+            run_report_delivery(config, tokens.get())
+        except Exception as e:  # noqa: BLE001 — must never kill the scheduler
+            console.print(f"  [red]report delivery job error:[/red] {e}")
             tokens.invalidate()
 
     scheduled: list[str] = []
@@ -693,13 +702,30 @@ def _build_scheduler(config: Config, tokens: "TokenCache"):
         )
         warranty_scheduled.append(t)
 
+    # Scheduled custom-report delivery (spec 26 phase 2): poll web on an interval
+    # for reports due to be emailed. Web decides due-ness, so this is just the
+    # cadence. 0 = off.
+    delivery_scheduled = "off"
+    if config.report_delivery_interval_minutes > 0:
+        scheduler.add_job(
+            report_delivery_job,
+            IntervalTrigger(
+                minutes=config.report_delivery_interval_minutes, timezone=tz
+            ),
+            id="report-delivery",
+            replace_existing=True,
+            misfire_grace_time=300,
+        )
+        delivery_scheduled = f"every {config.report_delivery_interval_minutes}m"
+
     zone = config.schedule_timezone or "host local"
     console.print(
         f"[bold]Reachability schedule[/bold] ({zone}): "
         f"{', '.join(scheduled) if scheduled else 'none'} · prune 03:15 · "
         f"counter report {report_scheduled} · "
         f"computer sweep {', '.join(sweep_scheduled) if sweep_scheduled else 'off'} · "
-        f"warranty sweep {', '.join(warranty_scheduled) if warranty_scheduled else 'off'}."
+        f"warranty sweep {', '.join(warranty_scheduled) if warranty_scheduled else 'off'} · "
+        f"report delivery {delivery_scheduled}."
     )
     return scheduler
 

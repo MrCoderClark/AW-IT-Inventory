@@ -117,9 +117,15 @@ schedules are **data in web**, the worker just fires a periodic trigger).
   send failure → leave pending (retry); report that throws → advance anyway.
   Keyed on `sent`. Tests: web `report-delivery.test.ts`, aw-auth
   `ReportDeliveryResendTest`.
-- **2c worker cadence — 🔜 NEXT.** `report_delivery` trigger in collector
-  `reachability.py` + a scheduler job in `worker.py` (near-copy of
-  `warranty_sweep_job`), on a configurable cadence hitting the 2b endpoint.
+- **2c worker cadence — ✅ DONE.** `run_report_delivery` in collector
+  `reachability.py` (POSTs the 2b endpoint, outbound-only, errors swallowed) + an
+  `IntervalTrigger` job in `worker.py` `_build_scheduler` on
+  `report_delivery_interval_minutes` (config, default 15; 0 = off), added to the
+  schedule summary line + `config.example.yaml`. Test `test_report_delivery.py`.
 
-Later Phase 2 extras (each its own effort): report folders/categories, SQL
-push-down for scale, charts in reports.
+**Scheduled delivery COMPLETE** (2a+2b+2c). 739 web + 24 aw-auth + 54 collector
+tests pass. Deploy: `db:push` (report_schedules) + the worker picks up the new
+config knob; `RESEND_API_KEY`/`EMAIL_FROM` already drive the existing alert emails.
+
+Later Phase 2 extras (each its own effort, not started): report folders/categories,
+SQL push-down for scale, charts in reports.

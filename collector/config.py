@@ -168,6 +168,12 @@ class Config(BaseModel):
     # running daily never spams. Empty = off. Default once each morning.
     notification_sweep_times: list[str] = Field(default_factory=lambda: ["07:30"])
 
+    # Scheduled report delivery (spec 26 phase 2): how often (minutes) to poll the
+    # web app for custom reports that are due to be emailed. Web holds the schedules
+    # and decides due-ness, so this is just the check cadence (and the delivery
+    # granularity). 0 = off. Default every 15 minutes.
+    report_delivery_interval_minutes: int = 15
+
     @property
     def profiles_by_id(self) -> dict[str, CredentialProfile]:
         return {p.id: p for p in self.profiles}
