@@ -106,12 +106,18 @@ schedules are **data in web**, the worker just fires a periodic trigger).
   / `advanceSchedule` ready for 2b); actions `saveScheduleAction` /
   `deleteScheduleAction` (`report:write`); `src/components/schedule-dialog.tsx` on
   the saved-report page + schedule badges on the hub. **Needs `db:push`.**
-- **2b delivery engine + email — 🔜 NEXT.** Web `deliverDueReports()` +
-  `POST /api/scan/reports/deliver` (service `scan:dequeue`): find due schedules,
-  run each via `runReportBySpec`, email via new `sendReportEmail()` → **new aw-auth
-  `/v1/notify/report`** (HTML table + CSV/Excel attachment, explicit recipients),
-  then `advanceSchedule`. Best-effort, keyed on `sent`.
-- **2c worker cadence — 🔜.** `report_delivery` trigger in collector
+- **2b delivery engine + email — ✅ DONE.** Web `deliverDueReports()`
+  (`src/db/report-delivery.ts`) + `POST /api/scan/reports/deliver` (service
+  `scan:dequeue`, `runtime=nodejs` for exceljs): finds due schedules, runs each,
+  builds a capped preview table + full CSV/Excel attachment
+  (`src/lib/report-attachment.ts`), emails via `sendReportEmail()` (`notify.ts`) →
+  **new aw-auth `/v1/notify/report`** (`ReportDeliveryView` + `send_report` +
+  `_report_html`; `_deliver` generalized to take explicit recipients + Resend
+  attachments), then `advanceSchedule`. Advance rules: sent → advance; transient
+  send failure → leave pending (retry); report that throws → advance anyway.
+  Keyed on `sent`. Tests: web `report-delivery.test.ts`, aw-auth
+  `ReportDeliveryResendTest`.
+- **2c worker cadence — 🔜 NEXT.** `report_delivery` trigger in collector
   `reachability.py` + a scheduler job in `worker.py` (near-copy of
   `warranty_sweep_job`), on a configurable cadence hitting the 2b endpoint.
 

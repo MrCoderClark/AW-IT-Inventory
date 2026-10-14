@@ -112,6 +112,67 @@ class ComplianceAlertResendTest(TestCase):
         self.assertIn("Lab PC", body["subject"])
 
 
+class ReportDeliveryResendTest(TestCase):
+    """Scheduled report delivery email via Resend (spec 26 phase 2).
+
+    Unlike the printer/compliance alerts, a report goes to the EXPLICIT recipient
+    list the schedule carries — never the resolved admins — and carries the full
+    report as an attachment.
+    """
+
+    def setUp(self):
+        os.environ["RESEND_API_KEY"] = "re_test_key"
+        os.environ["EMAIL_FROM"] = "OPUS <reports@example.com>"
+
+    def tearDown(self):
+        os.environ.pop("RESEND_API_KEY", None)
+        os.environ.pop("EMAIL_FROM", None)
+
+    @patch.object(notifications, "resolve_admin_emails", return_value=["admin@x.com"])
+    @patch("accounts.notifications.urllib.request.urlopen")
+    def test_sends_to_explicit_recipients_with_attachment(
+        self, mock_urlopen, mock_admins
+    ):
+        import json
+
+        resp = MagicMock()
+        resp.status = 200
+        mock_urlopen.return_value.__enter__.return_value = resp
+
+        ok = notifications.send_report(
+            {"name": "Dell laptops", "description": "Finance"},
+            {
+                "columns": [
+                    {"label": "Tag", "align": "left"},
+                    {"label": "RAM", "align": "right"},
+                ],
+                "rows": [["AW-1", "16"]],
+                "shown": 1,
+                "total": 1,
+            },
+            ["ops@co.com", "it@co.com"],
+            {"filename": "report.csv", "content": "Zm9v"},
+        )
+
+        self.assertTrue(ok)
+        body = json.loads(mock_urlopen.call_args.args[0].data)
+        # Explicit recipients, NOT the admins.
+        self.assertEqual(body["to"], ["ops@co.com", "it@co.com"])
+        mock_admins.assert_not_called()
+        self.assertEqual(len(body["attachments"]), 1)
+        self.assertEqual(body["attachments"][0]["filename"], "report.csv")
+        self.assertIn("Dell laptops", body["subject"])
+        self.assertIn("<table", body["html"])
+
+    @patch("accounts.notifications.urllib.request.urlopen")
+    def test_returns_false_without_recipients(self, mock_urlopen):
+        ok = notifications.send_report(
+            {"name": "R"}, {"columns": [], "rows": []}, [], None
+        )
+        self.assertFalse(ok)
+        mock_urlopen.assert_not_called()
+
+
 class UserManagementTestBase(TestCase):
     """Seed the RBAC bits these tests need and build an admin + a plain user."""
 
