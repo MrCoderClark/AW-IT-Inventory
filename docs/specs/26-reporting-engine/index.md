@@ -92,8 +92,28 @@ Deploy prerequisites (once): `npm run db:push` (report_definitions) + aw-auth
 (exceljs / jspdf / jspdf-autotable). Engine entry points: `runReportBySpec(spec)` and the
 CRUD in `src/db/report-engine.ts`; catalog in `src/lib/report-sources.ts`.
 
-## Phase 2 (later)
+## Phase 2 — scheduled delivery (on branch `feat/spec-26-reporting-phase2`)
 
-Scheduled delivery (a saved report emailed to recipients on a cadence, reusing the
-aw-auth notify path + the worker scheduler), report folders/categories, SQL
+The headline feature: a saved report emailed to recipients on a cadence, reusing
+the aw-auth notify path + the worker scheduler (the spec 19 warranty-sweep model —
+schedules are **data in web**, the worker just fires a periodic trigger).
+
+- **2a schedule model + UI — ✅ DONE.** `report_schedules` table (one per report:
+  cadence daily/weekly/monthly + time, weekday/day-of-month, recipients, format
+  csv|xlsx, enabled, lastRunAt/nextRunAt). Pure core `src/lib/report-schedule.ts`
+  (`computeNextRun` / `describeSchedule` / `validateScheduleInput`, unit-tested);
+  server data `src/db/report-schedules.ts` (upsert/get/delete + `listDueSchedules`
+  / `advanceSchedule` ready for 2b); actions `saveScheduleAction` /
+  `deleteScheduleAction` (`report:write`); `src/components/schedule-dialog.tsx` on
+  the saved-report page + schedule badges on the hub. **Needs `db:push`.**
+- **2b delivery engine + email — 🔜 NEXT.** Web `deliverDueReports()` +
+  `POST /api/scan/reports/deliver` (service `scan:dequeue`): find due schedules,
+  run each via `runReportBySpec`, email via new `sendReportEmail()` → **new aw-auth
+  `/v1/notify/report`** (HTML table + CSV/Excel attachment, explicit recipients),
+  then `advanceSchedule`. Best-effort, keyed on `sent`.
+- **2c worker cadence — 🔜.** `report_delivery` trigger in collector
+  `reachability.py` + a scheduler job in `worker.py` (near-copy of
+  `warranty_sweep_job`), on a configurable cadence hitting the 2b endpoint.
+
+Later Phase 2 extras (each its own effort): report folders/categories, SQL
 push-down for scale, charts in reports.

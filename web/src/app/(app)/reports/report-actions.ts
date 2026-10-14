@@ -10,7 +10,13 @@ import {
   updateReport,
   validateSpec,
 } from "@/db/report-engine";
+import {
+  deleteSchedule,
+  upsertSchedule,
+  type SavedSchedule,
+} from "@/db/report-schedules";
 import { getCurrentUser, hasPermission } from "@/lib/auth/session";
+import { validateScheduleInput } from "@/lib/report-schedule";
 import type { ReportResult, ReportSpec } from "@/lib/report-spec";
 
 /* Server actions behind the custom report builder (spec 26, slice 1b). Running +
@@ -106,6 +112,62 @@ export async function saveReportAction(input: {
   });
   revalidatePath("/reports");
   return { ok: true, id: created.id, message: `Saved "${name}".` };
+}
+
+/* ----------------------------- schedules (phase 2) ----------------------------- */
+
+export type SaveScheduleResult =
+  | { ok: true; schedule: SavedSchedule; message: string }
+  | { ok: false; error: string };
+
+/** Create or replace a saved report's delivery schedule. `report:write`. */
+export async function saveScheduleAction(input: {
+  reportId: unknown;
+  enabled?: unknown;
+  schedule: unknown;
+}): Promise<SaveScheduleResult> {
+  const user = await getCurrentUser();
+  if (!hasPermission(user, "report:write")) {
+    return { ok: false, error: "You don't have permission to schedule reports." };
+  }
+  if (typeof input.reportId !== "string" || !input.reportId) {
+    return { ok: false, error: "Unknown report." };
+  }
+  const report = await getReport(input.reportId);
+  if (!report) return { ok: false, error: "That report no longer exists." };
+
+  const check = validateScheduleInput(input.schedule);
+  if (!check.ok) return { ok: false, error: check.error };
+
+  const schedule = await upsertSchedule(input.reportId, check.input, {
+    enabled: input.enabled === undefined ? true : Boolean(input.enabled),
+    createdBy: user?.email ?? null,
+  });
+  revalidatePath("/reports");
+  revalidatePath(`/reports/custom/${input.reportId}`);
+  return {
+    ok: true,
+    schedule,
+    message: schedule.enabled ? "Delivery scheduled." : "Schedule saved (paused).",
+  };
+}
+
+/** Remove a report's delivery schedule. `report:write`. */
+export async function deleteScheduleAction(
+  reportId: unknown,
+): Promise<SaveReportResult> {
+  const user = await getCurrentUser();
+  if (!hasPermission(user, "report:write")) {
+    return { ok: false, error: "You don't have permission to schedule reports." };
+  }
+  if (typeof reportId !== "string" || !reportId) {
+    return { ok: false, error: "Unknown report." };
+  }
+  const removed = await deleteSchedule(reportId);
+  if (!removed) return { ok: false, error: "There was no schedule to remove." };
+  revalidatePath("/reports");
+  revalidatePath(`/reports/custom/${reportId}`);
+  return { ok: true, id: reportId, message: "Delivery schedule removed." };
 }
 
 /** Delete a saved report. `report:write`. */

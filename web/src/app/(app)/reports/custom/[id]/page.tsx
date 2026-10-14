@@ -1,15 +1,18 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Lock, Pencil, Sparkles } from "lucide-react";
+import { ArrowLeft, CalendarClock, Lock, Pencil, Sparkles } from "lucide-react";
 
 import { HeroHeader } from "@/components/hero-header";
 import { PagePlaceholder } from "@/components/page-placeholder";
 import { ReportExportMenu } from "@/components/report-export-menu";
 import { ReportResultTable } from "@/components/report-result-table";
+import { ScheduleDialog } from "@/components/schedule-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { getReport, runReportBySpec } from "@/db/report-engine";
+import { getScheduleForReport } from "@/db/report-schedules";
+import { describeSchedule } from "@/lib/report-schedule";
 import { REPORT_SOURCES } from "@/lib/report-sources";
 import type { ReportResult } from "@/lib/report-spec";
 import { hasPermission, requireUser } from "@/lib/auth/session";
@@ -40,6 +43,7 @@ export default async function Page({
 
   const canWrite = hasPermission(user, "report:write");
   const sourceLabel = REPORT_SOURCES[report.source]?.label ?? report.source;
+  const schedule = canWrite ? await getScheduleForReport(report.id) : null;
 
   let result: ReportResult | null = null;
   let runError = false;
@@ -73,6 +77,26 @@ export default async function Page({
                 <Pencil /> Edit
               </Button>
             )}
+            {canWrite && (
+              <ScheduleDialog
+                reportId={report.id}
+                reportName={report.name}
+                initial={
+                  schedule
+                    ? {
+                        cadence: schedule.cadence,
+                        hour: schedule.hour,
+                        minute: schedule.minute,
+                        weekday: schedule.weekday,
+                        dayOfMonth: schedule.dayOfMonth,
+                        recipients: schedule.recipients,
+                        format: schedule.format,
+                        enabled: schedule.enabled,
+                      }
+                    : null
+                }
+              />
+            )}
             <ReportExportMenu
               source={report.source}
               spec={report.spec}
@@ -91,6 +115,18 @@ export default async function Page({
               {result.totalRows.toLocaleString()} row
               {result.totalRows === 1 ? "" : "s"}
             </span>
+          )}
+          {schedule && (
+            <Badge
+              variant="outline"
+              className="gap-1 text-muted-foreground"
+              title={`Delivered to ${schedule.recipients.join(", ")}`}
+            >
+              <CalendarClock className="size-3" />
+              {schedule.enabled
+                ? describeSchedule(schedule)
+                : `${describeSchedule(schedule)} (paused)`}
+            </Badge>
           )}
         </div>
 
