@@ -79,12 +79,18 @@ filters → group/sort → live preview → save). A saved report opens at
   load only on first export); `src/components/report-export-menu.tsx` (an Export
   dropdown that re-runs the full spec via `runReportAction` — not the capped
   preview — then downloads). Deps: `exceljs`, `jspdf@3`, `jspdf-autotable@5`.
-- **1d saved-reports hub — 🔜 NEXT** (`/reports` restructure + `/reports/custom/[id]`;
-  the builder's Save already redirects to `/reports/custom/[id]`, which 1d adds).
+- **1d saved-reports hub — ✅ DONE** (`/reports` gains a "Custom reports" tab listing
+  saved definitions — open/edit/delete, gated on `report:write` for edit+delete;
+  `src/components/custom-reports-list.tsx`. `/reports/custom/[id]` runs a saved report
+  live with the shared `ReportResultTable` + the export menu + Edit. Shared table
+  extracted to `src/components/report-result-table.tsx`, used by builder + saved page.)
 
-Resume: `npm run db:push` + aw-auth `seed_rbac` (+ admin re-login for `report:write`),
-then build 1d. Engine entry points: `runReportBySpec(spec)` and the CRUD in
-`src/db/report-engine.ts`; catalog in `src/lib/report-sources.ts`.
+**Phase 1 COMPLETE** (1a–1d). 717 web tests pass, type + lint clean.
+
+Deploy prerequisites (once): `npm run db:push` (report_definitions) + aw-auth
+`seed_rbac` (+ admin re-login for `report:write` — perms ride the JWT) + `npm install`
+(exceljs / jspdf / jspdf-autotable). Engine entry points: `runReportBySpec(spec)` and the
+CRUD in `src/db/report-engine.ts`; catalog in `src/lib/report-sources.ts`.
 
 ## Phase 2 (later)
 
