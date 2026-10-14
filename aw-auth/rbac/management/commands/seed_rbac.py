@@ -22,6 +22,7 @@ PERMISSIONS = [
     ("software:deploy", "Upload installers and deploy software to computers"),
     ("ingest:write", "Ingest scan data (service accounts)"),
     ("report:read", "View reports"),
+    ("report:write", "Create and manage shared report definitions"),
     ("audit:read", "View the audit log"),
     ("user:admin", "Manage users and roles"),
     ("org:admin", "Manage organization settings"),
@@ -34,7 +35,7 @@ ROLES = {
         "user:admin", "asset:read", "asset:write", "asset:delete",
         "location:write", "columns:write", "assignment:write", "scan:read",
         "scan:write", "printer:install", "software:deploy", "report:read",
-        "audit:read",
+        "report:write", "audit:read",
     ],
     "Technician": [
         "asset:read", "asset:write", "location:write", "assignment:write",

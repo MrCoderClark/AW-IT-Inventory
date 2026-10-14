@@ -5,13 +5,17 @@ import {
   Lock,
   PackageOpen,
   ShieldCheck,
+  Sparkles,
   Users,
+  Wand2,
 } from "lucide-react";
 
+import { CustomReportsList } from "@/components/custom-reports-list";
 import { HeroHeader } from "@/components/hero-header";
 import { PagePlaceholder } from "@/components/page-placeholder";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsList, TabsPanel, TabsTab } from "@/components/ui/tabs";
 import {
@@ -22,6 +26,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { listReports } from "@/db/report-engine";
 import {
   getAgingReport,
   getAssignmentSummary,
@@ -151,12 +156,19 @@ export default async function Page() {
   // to a page they can't access (RBAC audit).
   const canViewPeople = hasPermission(user, "asset:write");
 
-  const [warranty, aging, assignments, software] = await Promise.all([
-    getWarrantyReport(),
-    getAgingReport(),
-    getAssignmentSummary(),
-    getSoftwareInventory(),
-  ]);
+  // The custom report builder (spec 26) is open to any report:read viewer;
+  // saving/editing/deleting a shared definition needs report:write.
+  const canBuild = hasPermission(user, "report:read");
+  const canWriteReports = hasPermission(user, "report:write");
+
+  const [warranty, aging, assignments, software, savedReports] =
+    await Promise.all([
+      getWarrantyReport(),
+      getAgingReport(),
+      getAssignmentSummary(),
+      getSoftwareInventory(),
+      canBuild ? listReports() : Promise.resolve([]),
+    ]);
 
   const trackedTitles = software.length;
   const totalInstalls = software.reduce((sum, r) => sum + r.machineCount, 0);
@@ -167,6 +179,13 @@ export default async function Page() {
         title="Reports"
         subtitle="Warranty, asset aging, assignments and software across the fleet — live from the inventory."
         icon={<FileText />}
+        actions={
+          canBuild ? (
+            <Button nativeButton={false} render={<Link href="/reports/builder" />}>
+              <Wand2 /> New custom report
+            </Button>
+          ) : undefined
+        }
       />
 
       <Tabs defaultValue="warranty">
@@ -183,6 +202,11 @@ export default async function Page() {
           <TabsTab value="software" className="inline-flex items-center gap-2">
             <PackageOpen className="size-4" /> Software
           </TabsTab>
+          {canBuild && (
+            <TabsTab value="custom" className="inline-flex items-center gap-2">
+              <Sparkles className="size-4" /> Custom reports
+            </TabsTab>
+          )}
         </TabsList>
 
         {/* ---------------- Warranty expiry ---------------- */}
@@ -586,6 +610,22 @@ export default async function Page() {
             </Table>
           </Card>
         </TabsPanel>
+
+        {/* ---------------- Custom reports ---------------- */}
+        {canBuild && (
+          <TabsPanel value="custom" className="flex flex-col gap-4">
+            <CustomReportsList
+              reports={savedReports.map((r) => ({
+                id: r.id,
+                name: r.name,
+                description: r.description,
+                source: r.source,
+                updatedAt: r.updatedAt,
+              }))}
+              canWrite={canWriteReports}
+            />
+          </TabsPanel>
+        )}
       </Tabs>
     </div>
   );
