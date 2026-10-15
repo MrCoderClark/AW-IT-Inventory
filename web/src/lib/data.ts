@@ -3,7 +3,7 @@ import {
   LayoutDashboard,
   Monitor,
   Printer,
-  Smartphone,
+  Phone,
   Cpu,
   Network,
   AppWindow,
@@ -67,9 +67,9 @@ export interface Asset {
   search?: string;
   // Type-specific identifiers surfaced as per-category table columns (spec 10);
   // only the fields for the row's own type are set.
-  ip?: string; // printer or network IP
-  mac?: string; // network MAC
-  phoneNumber?: string; // phone number
+  ip?: string; // printer / network / desk-phone IP
+  mac?: string; // network or desk-phone MAC
+  extension?: string; // desk-phone SIP extension (spec 27)
   // Printer reachability rollup (spec 12), set only on printer rows that have a
   // reachability status yet; absent means never checked.
   reachability?: AssetReachability;
@@ -309,7 +309,7 @@ export const TYPE_ICON: Record<AssetType, LucideIcon> = {
   Computer: Cpu,
   Monitor: Monitor,
   Printer: Printer,
-  Phone: Smartphone,
+  Phone: Phone,
   Network: Network,
 };
 
@@ -419,7 +419,7 @@ export const NAV_ASSETS: NavItem[] = [
   { label: "Computers", href: "/computers", icon: Cpu },
   { label: "Monitors", href: "/monitors", icon: Monitor },
   { label: "Printers", href: "/printers", icon: Printer },
-  { label: "Phones", href: "/phones", icon: Smartphone },
+  { label: "Phones", href: "/phones", icon: Phone },
   { label: "Network", href: "/network", icon: Network },
   { label: "Software", href: "/software", icon: AppWindow },
 ];

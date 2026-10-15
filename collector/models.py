@@ -114,10 +114,24 @@ class PrinterInfo(BaseModel):
     supplies: dict[str, int] = Field(default_factory=dict)
 
 
+class PhoneInfo(BaseModel):
+    """VoIP desk phone inventory (spec 27). Phase 1 reads mac + model with no
+    credentials (TLS cert CN = MAC, HTTPS title = model). The rest is phase-2
+    authenticated enrichment (per-phone web login, or the Intermedia API); None
+    = not collected."""
+
+    mac: str | None = None  # the reconciliation key, from the device TLS cert CN
+    model: str | None = None  # e.g. "Yealink T54W"
+    firmware: str | None = None
+    extension: str | None = None  # SIP account Label, e.g. "117"
+    display_name: str | None = None  # SIP account Display Name, e.g. "Joseph Clark"
+    register_status: str | None = None  # "Registered" | "Unregistered" | …
+
+
 class HostResult(BaseModel):
     ip: str
     subnet: str
-    device_type: str = "unknown"  # windows | printer | unknown
+    device_type: str = "unknown"  # windows | printer | phone | unknown
     reachable: bool = False
     open_ports: list[int] = Field(default_factory=list)
     hostname: str | None = None
@@ -125,6 +139,8 @@ class HostResult(BaseModel):
     hardware: Hardware | None = None
     health: Health | None = None
     printer: PrinterInfo | None = None
+    # VoIP desk phone inventory (spec 27). None = not a phone / not collected.
+    phone: PhoneInfo | None = None
     # Installed programs matching interest (spec 15). None = not collected (a
     # non-Windows host, or a software read that failed); an empty list = read OK,
     # nothing found. The web app filters this to the watchlist at ingest.

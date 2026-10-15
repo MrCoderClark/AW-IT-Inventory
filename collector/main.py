@@ -22,6 +22,7 @@ from pathlib import Path
 
 from rich.console import Console
 
+from collect_phone import read_phone
 from collect_snmp import collect_printers
 from collect_windows import collect_windows
 from config import Config, load_config
@@ -92,6 +93,7 @@ def scan_targets(
     prn_targets = (
         [] if no_printers else [d for d in discovered if d["device_type"] == "printer"]
     )
+    phn_targets = [d for d in discovered if d["device_type"] == "phone"]
     other = [d for d in discovered if d["device_type"] == "unknown"]
 
     hosts: list[HostResult] = []
@@ -147,6 +149,28 @@ def scan_targets(
                     errors=errors,
                 )
             )
+
+    # VoIP phones (spec 27): confirm each 443 candidate via its device TLS cert and
+    # read MAC + model — no credentials. A candidate that isn't a Yealink phone is
+    # downgraded to "unknown". read_phone is blocking (TLS + HTTPS), so thread it.
+    if phn_targets:
+        console.print(
+            f"[bold]Phone[/bold] identifying {len(phn_targets)} candidate(s) …"
+        )
+
+        def do_phone(d: dict) -> HostResult:
+            info = read_phone(d["ip"], config.phone_timeout)
+            return HostResult(
+                ip=d["ip"],
+                subnet=d["subnet"],
+                device_type="phone" if info else "unknown",
+                reachable=True,
+                open_ports=d["open_ports"],
+                phone=info,
+            )
+
+        with ThreadPoolExecutor(max_workers=min(config.concurrency, 16)) as pool:
+            hosts.extend(pool.map(do_phone, phn_targets))
 
     for d in other:
         hosts.append(

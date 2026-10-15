@@ -321,16 +321,19 @@ export const phoneDetails = pgTable(
     assetId: uuid("asset_id")
       .primaryKey()
       .references(() => assets.id, { onDelete: "cascade" }),
-    imei: text("imei"),
-    phoneNumber: text("phone_number"),
-    carrier: text("carrier"),
-    storageGb: integer("storage_gb"),
-    os: text("os"), // iOS | Android
-    plan: text("plan"),
+    // VoIP desk phone (spec 27). Repurposed from the old mobile fields.
+    mac: text("mac"), // device MAC (from the TLS cert) — the scan reconciliation key
+    extension: text("extension"), // SIP account Label, e.g. "117"
+    ipAddress: text("ip_address"),
+    firmware: text("firmware"),
+    registerStatus: text("register_status"), // Registered | Unregistered | Unknown
   },
   (t) => [
-    index("phone_details_imei_idx").on(t.imei),
-    index("phone_details_number_idx").on(t.phoneNumber),
+    // One phone per MAC (the reconciliation key); null MAC (manual entry) never collides.
+    uniqueIndex("phone_details_mac_uq")
+      .on(t.mac)
+      .where(sql`${t.mac} is not null`),
+    index("phone_details_extension_idx").on(t.extension),
   ],
 );
 

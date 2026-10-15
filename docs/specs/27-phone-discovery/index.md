@@ -1,0 +1,146 @@
+# 27. VoIP phone discovery — Yealink desk phones from the scan
+
+## Summary
+
+Today **Phone** assets are manual-entry only — the collector scans Windows hosts
+(WinRM) and printers (SNMP), but nothing discovers desk phones. The fleet's
+Yealink **T5x** phones (e.g. T54W) sit on their own subnet, are managed by
+**Intermedia Unite** (hosted PBX, so each phone has a *unique* admin password),
+and expose only HTTPS (443) + SIP — **SNMP is disabled/unsupported**.
+
+Recon (`scratchpad/probe_yealink*.py`) found a clean, **credential-free** identity
+path: every Yealink serves a device TLS cert whose **CN is the phone's MAC** and
+whose **issuer is "Yealink Equipment Issuing CA"**, and the HTTPS login page
+`<title>` is the **model** ("Yealink T54W Phone"). So discovery can identify a
+phone — MAC, model, IP — from a bare TLS handshake, no login. Richer data
+(**Display Name, extension, firmware**) lives behind the authenticated web UI and
+is a second phase.
+
+Example: `192.168.75.62` → cert CN `805e0c034323` = MAC `80:5E:0C:03:43:23`
+(`80:5E:0C` is Yealink's OUI), title `Yealink T54W Phone`, account Label `117`,
+Display Name `Joseph Clark`.
+
+## Requirements
+
+- **AC-1**: A configurable subnet (e.g. `192.168.75.0/24`) is swept; a host with
+  **TCP 443 open** is TLS-probed. A cert issued by **Yealink** classifies it as a
+  **phone** — port 443 alone never classifies (too ambiguous).
+- **AC-2**: From the cert + login page, with **no credentials**, the collector reads
+  **MAC** (cert CN), **model** (HTTPS `<title>`), and **IP** (the probe target).
+- **AC-3**: Phones reconcile by **MAC** (phones have no scan-readable serial), a new
+  reconciliation key alongside the existing serial match. A re-scan updates in place.
+- **AC-4**: A discovered phone with no matching asset lands in the **discovered
+  inbox** (spec 06) as a Phone, like any other new device; an operator adds it.
+- **AC-5** (phase 2): When a per-phone credential is configured, the collect also
+  reads **Display Name, extension (account Label), register status, firmware** from
+  the authenticated web UI and stores them on the phone asset.
+- **AC-6** (phase 2): A phone's **Display Name** may auto-suggest a link to the
+  matching **Person** (spec 16) by name — surfaced, not auto-applied.
+- **AC-7**: Credentials are **never** in YAML. Per-phone secrets live in a gitignored
+  file keyed by **MAC**, path named in `config.yaml` (mirrors the `.env` convention).
+  A phone with no credential still discovers (AC-2) — enrichment just shows "not
+  configured", the same graceful degradation as the WinRM path.
+- **AC-8**: Outbound-only, like the rest of the collector. Read-only — the scan never
+  writes to a phone.
+
+## Decision
+
+**Two phases, split on whether credentials are needed.**
+
+**Phase 1 — credential-free discovery (proven, low-risk).** A new `collect_phone`
+path: TCP 443 probe → TLS cert read (`ssl.get_server_certificate`) → verify Yealink
+issuer → MAC from CN, model from the HTTPS title. New `device_type = "phone"` in
+discovery. Ingest upserts a Phone asset reconciled by MAC. No secrets, survives
+firmware updates (the cert is stable).
+
+**Phase 2 — authenticated enrichment.** Two independent options (either/both):
+- **(2a) On-phone web scrape.** Log into each phone's web UI with its per-MAC
+  credential and read the Account config (Display Name, Label/extension, register
+  status) + firmware. The T54W uses a **JS/SPA login** (no HTML form; legacy
+  `/servlet` endpoints 404) — the exact login + account-data requests must be
+  captured from the firmware (browser devtools) before implementing, and the flow is
+  **firmware-version-fragile**.
+- **(2b) Intermedia Unite API.** Pull the device/user/extension inventory centrally,
+  keyed by MAC — one source of truth, no per-phone passwords, survives firmware
+  updates, and includes the user↔extension mapping directly. Preferred for the
+  person/extension data **if** Intermedia exposes a partner/admin API or export.
+
+## Signals collected (how + what we store)
+
+| Phase | Source | Fields |
+|---|---|---|
+| 1 | TLS cert on 443 (`ssl.get_server_certificate`) | **MAC** (cert CN), Yealink issuer (classify) |
+| 1 | HTTPS `GET /` `<title>` | **model** ("Yealink T54W") |
+| 1 | discovery | **IP** |
+| 2a | authenticated web UI (per-phone cred) | Display Name, extension (account Label), register status, firmware |
+| 2b | Intermedia Unite API | Display Name / user, extension, model, firmware — keyed by MAC |
+
+## Data model (web DB `aw_it_inventory_web`)
+
+Phone assets already exist (`type = 'Phone'`, tag `H2TECS-PHN-…`). The Phone type is
+**repurposed from mobile to desk/VoIP** (user decision): `phone_details` drops the old
+mobile columns (imei / phone_number / carrier / storage_gb / os / plan) and gains
+**mac** (partial-unique — the reconciliation key), **extension**, **ip_address**,
+**firmware**, **register_status** (model is a shared asset field). The new-phone
+modal, `/phones` columns (Extension / IP / MAC), and the icon (handset) follow.
+**Destructive — needs `db:push`.**
+
+## API / ingest
+
+`/api/ingest/scan` accepts a **phone** host shape `{ mac, model, ip, …enrichment }`
+and reconciles by MAC (new key). A matched phone updates its details; an unmatched
+one becomes a discovered-device row (spec 06). Phones never touch the
+computer/printer reconcile paths.
+
+## Collector
+
+- `config.yaml`: add the phone subnet to `networks`; add `443` as a phone probe
+  port; a `phone_credentials_file` path (phase 2a); optional Intermedia creds (2b).
+- `discovery.classify`: TCP 443 open → TLS cert → Yealink issuer ⇒ `"phone"`.
+- `collect_phone.py` (new): phase-1 cert/model read; phase-2a authenticated fetch.
+- `worker`: phones ride the normal scan + a scheduled phone sweep (reuse the
+  scheduler like the printer/computer sweeps).
+
+## Phases / build plan
+
+1. **Phase 1 — credential-free discovery**: `collect_phone` (cert→MAC, title→model),
+   discovery classify, ingest reconcile-by-MAC, discovered-inbox, tests. **AC-1–4, 8.**
+   - **1a collector — ✅ DONE**: `collect_phone.py` (`parse_cert`/`model_from_title`/
+     `read_phone`), `PhoneInfo` model + `HostResult.phone`, `discovery.classify` phone
+     candidate (443, cert-confirmed), `main.py` phone branch, `ports.phone`/
+     `phone_timeout` config. 62 collector tests pass. The web ingest already tolerates
+     a `phone` host (writes a bare discovered row), so this is safe to ship alone.
+   - **1c desk-phone UI repurpose — ✅ DONE** (web): `phone_details` desk fields
+     (mac/extension/ipAddress/firmware/registerStatus, mac partial-unique); the
+     new-phone modal (`asset-fields.ts`), `/phones` columns (`table-columns.ts`:
+     extension/ip/mac + `extensionColumn`), Phone icon (handset), `queries.ts`
+     selects/search, csv export, and `Asset.extension` all updated. **Needs `db:push`.**
+     752 web tests pass, type+lint clean.
+   - **1b web ingest — 🔜 NEXT**: read `h.phone` in `web/src/db/ingest.ts`, reconcile
+     phones by **MAC** (new match key), populate `phone_details` mac/model/ip, surface
+     in the discovered inbox. (extension/firmware/register come from phase 2 or manual.)
+2. **Phase 2a — on-phone enrichment** *(blocked on capturing the T54W login flow)*:
+   per-MAC credential file, authenticated Account/firmware read, store + person-link
+   hint. **AC-5–7.**
+3. **Phase 2b — Intermedia Unite API** *(if available)*: central user/extension/MAC
+   pull as an alternative/supplement to 2a.
+
+## Consequences
+
+- A new reconciliation key (MAC) in the ingest — must not collide with the existing
+  serial match; phones are a separate branch.
+- Phase-2a scraping is firmware-fragile; 2b (Intermedia) is the durable source for the
+  person/extension data and should be preferred when reachable.
+- Phones on a new subnet need the collector host to **route** to it.
+
+## Follow-up
+
+- Other VoIP vendors (Polycom/Cisco) — the cert/issuer classify pattern generalizes.
+- Register-status health/alerting (an unregistered phone is "down"), reusing the
+  printer-reachability alert machinery.
+
+## Open questions (to resolve before building phase 2)
+
+- The T54W firmware's exact **login + account-data requests** (capture via devtools).
+- Whether **Intermedia Unite** exposes an API/export for the device/user inventory.
+- Credential-file keying: **MAC** (from cert, preferred) vs IP (if DHCP-reserved).

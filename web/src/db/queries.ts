@@ -73,8 +73,9 @@ const assetSelect = {
   // row per asset, so at most one set is non-null). See spec 10 AC-5.
   computerIp: computerDetails.ipAddress,
   printerIp: printerDetails.ipAddress,
-  phoneImei: phoneDetails.imei,
-  phoneNumber: phoneDetails.phoneNumber,
+  phoneExtension: phoneDetails.extension,
+  phoneMac: phoneDetails.mac,
+  phoneIp: phoneDetails.ipAddress,
   networkIp: networkDetails.ipAddress,
   networkMac: networkDetails.macAddress,
 };
@@ -101,8 +102,9 @@ type Row = {
   assigneeInitials: string | null;
   computerIp: string | null;
   printerIp: string | null;
-  phoneImei: string | null;
-  phoneNumber: string | null;
+  phoneExtension: string | null;
+  phoneMac: string | null;
+  phoneIp: string | null;
   networkIp: string | null;
   networkMac: string | null;
 };
@@ -141,16 +143,17 @@ function toAsset(r: Row, pathById: Map<string, string>): Asset {
     search: [
       r.computerIp,
       r.printerIp,
-      r.phoneImei,
-      r.phoneNumber,
+      r.phoneExtension,
+      r.phoneMac,
+      r.phoneIp,
       r.networkIp,
       r.networkMac,
     ]
       .filter(Boolean)
       .join(" "),
-    ip: r.printerIp ?? r.networkIp ?? r.computerIp ?? "",
-    mac: r.networkMac ?? "",
-    phoneNumber: r.phoneNumber ?? "",
+    ip: r.printerIp ?? r.networkIp ?? r.computerIp ?? r.phoneIp ?? "",
+    mac: r.networkMac ?? r.phoneMac ?? "",
+    extension: r.phoneExtension ?? "",
   };
 }
 

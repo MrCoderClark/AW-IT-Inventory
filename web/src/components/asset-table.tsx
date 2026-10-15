@@ -334,13 +334,13 @@ const macColumn: ColumnDef<Asset> = {
   ),
 };
 
-const phoneColumn: ColumnDef<Asset> = {
-  id: "phoneNumber",
-  accessorFn: (a) => a.phoneNumber ?? "",
-  header: "Phone",
+const extensionColumn: ColumnDef<Asset> = {
+  id: "extension",
+  accessorFn: (a) => a.extension ?? "",
+  header: "Extension",
   cell: ({ row }) => (
-    <span className="text-muted-foreground">
-      {row.original.phoneNumber || "—"}
+    <span className="font-mono text-muted-foreground tabular-nums">
+      {row.original.extension || "—"}
     </span>
   ),
 };
@@ -449,7 +449,7 @@ const COLUMN_REGISTRY: Record<ColumnId, ColumnDef<Asset>> = {
   lastSync: lastSyncColumn,
   ip: ipColumn,
   mac: macColumn,
-  phoneNumber: phoneColumn,
+  extension: extensionColumn,
   reachability: reachabilityColumn,
   pages: pagesColumn,
   actions: actionsColumn,

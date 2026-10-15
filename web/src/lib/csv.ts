@@ -47,8 +47,8 @@ export function assetCsvValue(asset: Asset, id: ColumnId): string {
       return asset.ip ?? "";
     case "mac":
       return asset.mac ?? "";
-    case "phoneNumber":
-      return asset.phoneNumber ?? "";
+    case "extension":
+      return asset.extension ?? "";
     case "reachability":
       return asset.reachability
         ? (REACHABILITY_LABEL[asset.reachability.state] ??

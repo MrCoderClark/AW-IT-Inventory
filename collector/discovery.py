@@ -32,6 +32,12 @@ def classify(open_ports: list[int], config: Config) -> str:
         return "windows"
     if p.printer in open_ports:
         return "printer"
+    # A host whose only signal is the phone web port (443) is a phone *candidate*
+    # (spec 27); the collect step confirms it via the device TLS cert and downgrades
+    # a non-Yealink HTTPS device back to "unknown". Windows/printer take priority, so
+    # a server that also serves 443 is not misread as a phone.
+    if p.phone in open_ports:
+        return "phone"
     return "unknown"
 
 
@@ -52,7 +58,12 @@ def discover(config: Config, limit: int | None = None) -> list[dict]:
     targets = _hosts_in(config.networks)
     if limit:
         targets = targets[:limit]
-    ports = [config.ports.winrm, config.ports.smb, config.ports.printer]
+    ports = [
+        config.ports.winrm,
+        config.ports.smb,
+        config.ports.printer,
+        config.ports.phone,
+    ]
 
     def work(item: tuple[str, str]) -> dict | None:
         ip, subnet = item

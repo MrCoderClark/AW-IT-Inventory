@@ -4,11 +4,14 @@
 networks:
   - 192.168.70.0/24   # domain (incl. printers)
   - 192.168.72.0/24   # workgroup
+  # - 192.168.75.0/24 # VoIP desk phones (spec 27) — add the phone subnet to scan them
 
 ports:
   winrm: 5985
   smb: 445
   printer: 9100
+  phone: 443          # VoIP phone web UI/TLS (spec 27); a phone is confirmed by its
+                      # device cert (issuer "Yealink…", CN = MAC), not the port alone
 
 snmp_community: public
 # SNMP version for printers: "auto" tries v2c then falls back to v1 (default),

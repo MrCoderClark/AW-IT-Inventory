@@ -24,7 +24,7 @@ describe("catalogFor (AC-3)", () => {
     const c = catalogFor("printer");
     expect(c).toContain("ip");
     expect(c).not.toContain("mac");
-    expect(c).not.toContain("phoneNumber");
+    expect(c).not.toContain("extension");
     expect(c).not.toContain("type");
   });
 
@@ -32,15 +32,15 @@ describe("catalogFor (AC-3)", () => {
     const c = catalogFor("network");
     expect(c).toContain("ip");
     expect(c).toContain("mac");
-    expect(c).not.toContain("phoneNumber");
+    expect(c).not.toContain("extension");
     expect(c).not.toContain("type");
   });
 
-  it("offers shared + Phone for phones", () => {
+  it("offers shared + desk-phone identifiers for phones", () => {
     const c = catalogFor("phone");
-    expect(c).toContain("phoneNumber");
-    expect(c).not.toContain("ip");
-    expect(c).not.toContain("mac");
+    expect(c).toContain("extension");
+    expect(c).toContain("ip"); // desk-phone IP (spec 27)
+    expect(c).toContain("mac"); // desk-phone MAC (spec 27)
     expect(c).not.toContain("type");
   });
 
@@ -48,7 +48,7 @@ describe("catalogFor (AC-3)", () => {
     const c = catalogFor("computer");
     expect(c).toContain("ip");
     expect(c).not.toContain("mac");
-    expect(c).not.toContain("phoneNumber");
+    expect(c).not.toContain("extension");
     expect(c).not.toContain("type");
   });
 
@@ -56,7 +56,7 @@ describe("catalogFor (AC-3)", () => {
     const c = catalogFor("monitor");
     expect(c).not.toContain("ip");
     expect(c).not.toContain("mac");
-    expect(c).not.toContain("phoneNumber");
+    expect(c).not.toContain("extension");
     expect(c).not.toContain("type");
   });
 
@@ -66,7 +66,7 @@ describe("catalogFor (AC-3)", () => {
       expect(c).toContain("type");
       expect(c).not.toContain("ip");
       expect(c).not.toContain("mac");
-      expect(c).not.toContain("phoneNumber");
+      expect(c).not.toContain("extension");
     }
   });
 
@@ -85,7 +85,7 @@ describe("defaultsFor (AC-2, matches today's hardcoded columns)", () => {
     monitor: ["id", "name", "model", "serial", "assignee", "location", "status", "actions"],
     printer: ["id", "name", "model", "serial", "ip", "reachability", "pages", "location", "status", "lastSync", "actions"],
     network: ["id", "name", "model", "serial", "ip", "mac", "location", "status", "actions"],
-    phone: ["id", "name", "model", "serial", "phoneNumber", "assignee", "location", "status", "actions"],
+    phone: ["id", "name", "model", "extension", "ip", "assignee", "location", "status", "actions"],
     dashboard: ["id", "name", "type", "serial", "model", "assignee", "location", "status", "lastSync", "actions"],
     location: ["id", "name", "type", "serial", "model", "assignee", "location", "status", "lastSync", "actions"],
   };
@@ -214,8 +214,8 @@ describe("sanitizeColumns — the write-side trust boundary (AC-6)", () => {
   });
 
   it("drops ids outside the view's catalog before writing", () => {
-    // Phone number is not a printer column.
-    expect(sanitizeColumns("printer", ["name", "phoneNumber", "actions"])).toEqual([
+    // Extension is a desk-phone column, not a printer column.
+    expect(sanitizeColumns("printer", ["name", "extension", "actions"])).toEqual([
       "name",
       "actions",
     ]);
