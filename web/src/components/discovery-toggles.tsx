@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Loader2, Monitor, Printer } from "lucide-react";
+import { Loader2, Monitor, Phone, Printer } from "lucide-react";
 import { toast } from "sonner";
 
 import { setDiscoveryToggleAction } from "@/app/(app)/discovery-actions";
@@ -22,9 +22,14 @@ const TYPE_META: Record<
     hint: "Discover printers over SNMP and run scheduled reachability checks.",
     icon: Printer,
   },
+  phone: {
+    label: "VoIP phones",
+    hint: "Auto-discover desk phones by their TLS cert (off by default). When off, add and scan phones manually.",
+    icon: Phone,
+  },
 };
 
-const ORDER: DiscoveryType[] = ["computer", "printer"];
+const ORDER: DiscoveryType[] = ["computer", "printer", "phone"];
 
 /**
  * The Discovery switches on the Admin page (spec 13, AC-1). Each switch flips one

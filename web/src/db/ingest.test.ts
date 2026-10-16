@@ -14,11 +14,12 @@ const H = vi.hoisted(() => {
     updates: { table: unknown; set: Record<string, unknown> }[];
     inserts: { table: unknown; values: Record<string, unknown>; conflictSet: Record<string, unknown> | null }[];
     deletes: { table: unknown }[];
-  } = { selectResults: [], updates: [], inserts: [], deletes: [] };
+    assignCalls: unknown[][];
+  } = { selectResults: [], updates: [], inserts: [], deletes: [], assignCalls: [] };
 
   const makeSelect = () => {
     const b: Record<string, unknown> = {};
-    for (const m of ["from", "leftJoin", "where", "limit"]) b[m] = () => b;
+    for (const m of ["from", "leftJoin", "innerJoin", "where", "limit"]) b[m] = () => b;
     b.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
       Promise.resolve(state.selectResults.shift() ?? []).then(res, rej);
     return b;
@@ -72,15 +73,22 @@ vi.mock("./counters", () => ({ upsertPrinterCounter: vi.fn() }));
 vi.mock("./software", () => ({ replaceInstalledSoftware: vi.fn() }));
 vi.mock("./compliance", () => ({ upsertComplianceStatus: vi.fn() }));
 vi.mock("./notifications", () => ({ createNotification: vi.fn(async () => null) }));
+vi.mock("./assignments", () => ({
+  assignAsset: vi.fn((...args: unknown[]) => {
+    H.state.assignCalls.push(args);
+    return Promise.resolve({ ok: true });
+  }),
+}));
 
 import { ingestScan } from "./ingest";
-import { assets, computerDetails, machines } from "./schema";
+import { assets, computerDetails, machines, phoneDetails } from "./schema";
 
 beforeEach(() => {
   H.state.selectResults = [];
   H.state.updates = [];
   H.state.inserts = [];
   H.state.deletes = [];
+  H.state.assignCalls = [];
   vi.clearAllMocks();
 });
 
@@ -98,6 +106,175 @@ const computerHost = {
   },
   health: { os_name: "Microsoft Windows 11 Pro", os_version: "10.0.22631" },
 };
+
+const phoneHost = {
+  ip: "192.168.75.62",
+  device_type: "phone",
+  phone: {
+    mac: "80:5E:0C:03:43:23",
+    model: "Yealink T54W",
+    extension: "117",
+  },
+};
+
+describe("ingestScan — desk phones (spec 27)", () => {
+  it("reconciles a phone by MAC and writes phone_details + model", async () => {
+    // No serial select for a phone; the first select is the MAC match.
+    H.state.selectResults = [[{ id: "p1", type: "Phone" }]];
+    const res = await ingestScan({ hosts: [phoneHost] });
+    expect(res.matched).toBe(1);
+
+    const pd = H.state.inserts.find((i) => i.table === phoneDetails);
+    expect(pd?.values).toMatchObject({
+      assetId: "p1",
+      mac: "80:5E:0C:03:43:23",
+      extension: "117",
+      ipAddress: "192.168.75.62",
+    });
+    // The model rides the shared asset fields.
+    const assetUpdate = H.state.updates.find(
+      (u) => u.table === assets && u.set.model !== undefined,
+    );
+    expect(assetUpdate?.set).toMatchObject({ model: "Yealink T54W" });
+  });
+
+  it("links a manually-added phone (no MAC yet) by its IP, then fills in the MAC", async () => {
+    // MAC miss (the asset has no MAC yet), then the IP fallback finds the asset.
+    H.state.selectResults = [[], [{ id: "p1", type: "Phone" }]];
+    const res = await ingestScan({ hosts: [phoneHost] });
+    expect(res.matched).toBe(1);
+
+    const pd = H.state.inserts.find((i) => i.table === phoneDetails);
+    expect(pd?.values).toMatchObject({ assetId: "p1", mac: "80:5E:0C:03:43:23" });
+  });
+
+  it("leaves an unmatched phone as a discovered row carrying its phone data", async () => {
+    H.state.selectResults = [[], []]; // MAC miss, IP miss
+    const res = await ingestScan({ hosts: [phoneHost] });
+    expect(res.discovered).toBe(1);
+    expect(res.matched).toBe(0);
+    // No phone_details write without a matched asset…
+    expect(H.state.inserts.some((i) => i.table === phoneDetails)).toBe(false);
+    // …but the machines (inbox) row carries the phone identity + kind.
+    const m = H.state.inserts.find((i) => i.table === machines);
+    expect(m?.values).toMatchObject({ kind: "phone", matchKey: "80:5E:0C:03:43:23" });
+    expect(m?.values.phone).toMatchObject({ mac: "80:5E:0C:03:43:23" });
+  });
+
+  it("persists phase-2 enrichment: vendor+serial on the asset, firmware/display_name/register on phone_details", async () => {
+    // Phase-2 adds vendor ("Yealink"), serial (Yealink Machine ID), firmware,
+    // display_name (SIP display), register_status. The first select is now
+    // the serial match (phone?.serial raised the asset serial to a strong key)
+    // which hits before the MAC fallback.
+    H.state.selectResults = [[{ id: "p1", type: "Phone" }]];
+    const enrichedPhone = {
+      ip: "192.168.75.62",
+      device_type: "phone",
+      phone: {
+        mac: "80:5E:0C:03:43:23",
+        model: "T54W",
+        vendor: "Yealink",
+        serial: "301081C101210254",
+        extension: "117",
+        display_name: "Joseph Clark",
+        firmware: "96.86.107.8",
+        register_status: "Registered",
+      },
+    };
+    const res = await ingestScan({ hosts: [enrichedPhone] });
+    expect(res.matched).toBe(1);
+
+    // Shared asset fields (serial / model / vendor) all take the phone's values.
+    const assetUpdate = H.state.updates.find(
+      (u) => u.table === assets && u.set.serial !== undefined,
+    );
+    expect(assetUpdate?.set).toMatchObject({
+      serial: "301081C101210254",
+      model: "T54W",
+      vendor: "Yealink",
+    });
+
+    // phone_details carries every phase-2 field (plus the phase-1 mac + ip).
+    const pd = H.state.inserts.find((i) => i.table === phoneDetails);
+    expect(pd?.values).toMatchObject({
+      assetId: "p1",
+      mac: "80:5E:0C:03:43:23",
+      extension: "117",
+      ipAddress: "192.168.75.62",
+      firmware: "96.86.107.8",
+      registerStatus: "Registered",
+      displayName: "Joseph Clark",
+    });
+  });
+
+  it("assigns an unassigned phone to the unique People match for the SIP display name", async () => {
+    H.state.selectResults = [
+      [{ id: "p1", type: "Phone" }], // serial match
+      [{ assigneeId: null, type: "Phone" }], // currently unassigned
+      [{ id: "person-nya" }], // unique active person named Nya Fauntleroy
+    ];
+    const res = await ingestScan({
+      hosts: [
+        {
+          ip: "192.168.75.41",
+          device_type: "phone",
+          phone: {
+            mac: "00:15:65:00:00:41",
+            display_name: "Nya Fauntleroy",
+            serial: "SERIAL41",
+          },
+        },
+      ],
+    });
+    expect(res.matched).toBe(1);
+    expect(H.state.assignCalls).toEqual([
+      ["p1", "person-nya", "collector"],
+    ]);
+  });
+
+  it("does not reassign a phone that already has an Assigned To", async () => {
+    H.state.selectResults = [
+      [{ id: "p1", type: "Phone" }],
+      [{ assigneeId: "already-held", type: "Phone" }],
+    ];
+    await ingestScan({
+      hosts: [
+        {
+          ip: "192.168.75.41",
+          device_type: "phone",
+          phone: {
+            mac: "00:15:65:00:00:41",
+            display_name: "Nya Fauntleroy",
+            serial: "SERIAL41",
+          },
+        },
+      ],
+    });
+    expect(H.state.assignCalls).toEqual([]);
+  });
+
+  it("does not assign when two people share the SIP display name", async () => {
+    H.state.selectResults = [
+      [{ id: "p1", type: "Phone" }],
+      [{ assigneeId: null, type: "Phone" }],
+      [{ id: "person-a" }, { id: "person-b" }],
+    ];
+    await ingestScan({
+      hosts: [
+        {
+          ip: "192.168.75.41",
+          device_type: "phone",
+          phone: {
+            mac: "00:15:65:00:00:41",
+            display_name: "John Smith",
+            serial: "SERIAL41",
+          },
+        },
+      ],
+    });
+    expect(H.state.assignCalls).toEqual([]);
+  });
+});
 
 describe("ingestScan — scan overwrites asset fields", () => {
   it("overwrites serial/model/vendor on a matched computer asset", async () => {

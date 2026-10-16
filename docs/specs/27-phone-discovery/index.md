@@ -101,6 +101,17 @@ computer/printer reconcile paths.
 - `worker`: phones ride the normal scan + a scheduled phone sweep (reuse the
   scheduler like the printer/computer sweeps).
 
+## Opt-in (spec 13 discovery toggle) — ✅ DONE
+
+VoIP-phone auto-discovery is **off by default** — a `phone` entry was added to the
+spec 13 discovery toggles (`/admin`) that **defaults OFF** (computers/printers stay
+on). When off, the auto-sweep probes 443 but never collects phones; **manual scan
+jobs bypass the toggle**, so a phone you add in the UI is scanned by targeting its IP.
+Web: `discovery.ts` `DISCOVERY_TYPES` + a `DEFAULT_ENABLED` map (phone false),
+`discovery_settings.deviceType` union, the `discovery-toggles.tsx` switch. Collector:
+`ingest.py` `DISCOVERY_DEFAULTS` (phone off, fail-closed), `main.py` `--no-phones` +
+`no_phones = not settings['phone']`, `scan_targets(no_phones)`, computer sweep sets it.
+
 ## Phases / build plan
 
 1. **Phase 1 — credential-free discovery**: `collect_phone` (cert→MAC, title→model),
@@ -116,9 +127,16 @@ computer/printer reconcile paths.
      extension/ip/mac + `extensionColumn`), Phone icon (handset), `queries.ts`
      selects/search, csv export, and `Asset.extension` all updated. **Needs `db:push`.**
      752 web tests pass, type+lint clean.
-   - **1b web ingest — 🔜 NEXT**: read `h.phone` in `web/src/db/ingest.ts`, reconcile
-     phones by **MAC** (new match key), populate `phone_details` mac/model/ip, surface
-     in the discovered inbox. (extension/firmware/register come from phase 2 or manual.)
+   - **1b web ingest — ✅ DONE**: `ingest.ts` reads `h.phone`, reconciles a phone by
+     **MAC** (`phone_details.mac`, a new match key above hostname/ip), populates
+     `phone_details` (mac/ip now; extension/firmware/register when phase 2 sends them)
+     + the shared `model`, and carries phone identity on a new `machines.phone` jsonb
+     for the discovered inbox (`kindMeta` gains a Phone entry → pre-selects type Phone).
+     **Needs `db:push`** (machines.phone). 754 web tests pass; 2 ingest phone tests added.
+
+**Credential-free path COMPLETE (1a+1b+1c):** a Yealink on a scanned subnet is
+discovered (MAC/model), reconciled by MAC, and either enriches its Phone asset or lands
+in the inbox as a Phone. Display Name / extension / firmware still need phase 2.
 2. **Phase 2a — on-phone enrichment** *(blocked on capturing the T54W login flow)*:
    per-MAC credential file, authenticated Account/firmware read, store + person-link
    hint. **AC-5–7.**

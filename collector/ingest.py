@@ -11,8 +11,11 @@ from config import Config
 from models import RunReport
 
 # The device types the toggles cover today (spec 13). Kept in sync with the web
-# app's DISCOVERY_TYPES and the `discovery_settings.device_type` union.
-DISCOVERY_TYPES = ("computer", "printer")
+# app's DISCOVERY_TYPES and the `discovery_settings.device_type` union. The per-type
+# default when a value is missing: computers/printers on, VoIP phones opt-in (off,
+# spec 27) — so a transient fetch failure never starts auto-scanning phones.
+DISCOVERY_DEFAULTS = {"computer": True, "printer": True, "phone": False}
+DISCOVERY_TYPES = tuple(DISCOVERY_DEFAULTS)
 
 
 def get_token(config: Config) -> str:
@@ -41,11 +44,11 @@ def get_token(config: Config) -> str:
 
 def _coerce_settings(data: object) -> dict[str, bool]:
     """Normalize the endpoint's (or cache's) JSON to a full {type: bool} map,
-    defaulting a missing or non-bool type to True (absent = on, AC-2)."""
+    defaulting a missing or non-bool type to its per-type default (AC-2; phones off)."""
     out: dict[str, bool] = {}
     for t in DISCOVERY_TYPES:
         value = data.get(t) if isinstance(data, dict) else None
-        out[t] = value if isinstance(value, bool) else True
+        out[t] = value if isinstance(value, bool) else DISCOVERY_DEFAULTS[t]
     return out
 
 
@@ -92,8 +95,9 @@ def get_discovery_settings(config: Config) -> tuple[dict[str, bool], str]:
     except Exception:  # noqa: BLE001 — a settings outage must not stop scanning
         cached = _read_discovery_cache(config)
         if cached is not None:
-            return cached, "cache"
-        return {t: True for t in DISCOVERY_TYPES}, "default"
+            # Coerce so an older cache missing a newer type (e.g. phone) still has it.
+            return _coerce_settings(cached), "cache"
+        return dict(DISCOVERY_DEFAULTS), "default"
 
 
 def post_scan(config: Config, report: RunReport) -> dict:

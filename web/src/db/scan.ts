@@ -8,6 +8,7 @@ import {
   computerDetails,
   machines,
   networkDetails,
+  phoneDetails,
   printerDetails,
   scanJobs,
   scanWorkers,
@@ -195,6 +196,30 @@ export async function updateJobStatus(
   return exists.length ? "stale" : "notfound";
 }
 
+/** Status of one scan job, for the asset-page Scan now wait loop. */
+export async function getScanJobStatus(jobId: string): Promise<{
+  status: ScanJobRow["status"];
+  error: string | null;
+  waitingForCollector: boolean;
+} | null> {
+  const rows = await db
+    .select({
+      status: scanJobs.status,
+      error: scanJobs.error,
+    })
+    .from(scanJobs)
+    .where(eq(scanJobs.id, jobId))
+    .limit(1);
+  const row = rows[0];
+  if (!row) return null;
+  const workerLive = await isWorkerLive();
+  return {
+    status: row.status,
+    error: row.error,
+    waitingForCollector: row.status === "pending" && !workerLive,
+  };
+}
+
 /**
  * Enqueue a scan job with a frozen, de-duplicated target list (AC-1, AC-2). The
  * caller resolves ids to IPs first; an empty list is rejected upstream (422).
@@ -260,10 +285,16 @@ export async function resolveAllTargets(): Promise<string[]> {
     .select({ ip: computerDetails.ipAddress })
     .from(computerDetails)
     .where(isNotNull(computerDetails.ipAddress));
+  // Desk-phone IPs (spec 27), so an all-scan reaches manually-entered phones.
+  const phoneIps = await db
+    .select({ ip: phoneDetails.ipAddress })
+    .from(phoneDetails)
+    .where(isNotNull(phoneDetails.ipAddress));
   // Detail-table IPs first so their canonical IP is the kept one on any overlap.
   return dedupeIps([
     ...printerIps.map((r) => r.ip),
     ...computerIps.map((r) => r.ip),
+    ...phoneIps.map((r) => r.ip),
     ...machineIps.map((r) => r.ip),
   ]);
 }
@@ -284,12 +315,14 @@ export async function resolveAssetTargets(
       printerIp: printerDetails.ipAddress,
       networkIp: networkDetails.ipAddress,
       computerIp: computerDetails.ipAddress,
+      phoneIp: phoneDetails.ipAddress,
       machineIp: machines.ip,
     })
     .from(assets)
     .leftJoin(printerDetails, eq(printerDetails.assetId, assets.id))
     .leftJoin(networkDetails, eq(networkDetails.assetId, assets.id))
     .leftJoin(computerDetails, eq(computerDetails.assetId, assets.id))
+    .leftJoin(phoneDetails, eq(phoneDetails.assetId, assets.id))
     .leftJoin(machines, eq(machines.assetId, assets.id))
     .where(inArray(assets.tag, tags));
 
@@ -297,7 +330,8 @@ export async function resolveAssetTargets(
   // collector discovered for the linked machine.
   return dedupeIps(
     rows.map(
-      (r) => r.printerIp ?? r.networkIp ?? r.computerIp ?? r.machineIp,
+      (r) =>
+        r.printerIp ?? r.networkIp ?? r.computerIp ?? r.phoneIp ?? r.machineIp,
     ),
   );
 }

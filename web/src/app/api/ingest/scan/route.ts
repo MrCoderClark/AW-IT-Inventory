@@ -1,3 +1,4 @@
+import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 
 import { bearerFrom, verifyServiceToken } from "@/lib/auth/service";
@@ -34,5 +35,9 @@ export async function POST(request: Request) {
   }
 
   const result = await ingestScan(body);
+  // Bust cached asset pages so Scan now / a CLI ingest shows new phone fields
+  // on the next render instead of looking like the scan did nothing.
+  revalidatePath("/phones");
+  revalidatePath("/assets", "layout");
   return NextResponse.json({ ok: true, run_id: body.run_id ?? null, ...result });
 }

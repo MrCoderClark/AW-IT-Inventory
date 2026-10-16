@@ -14,7 +14,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
 
-from collect_phone import model_from_title, normalize_mac, parse_cert
+from collect_phone import identity_from_html, model_from_title, normalize_mac, parse_cert
 
 
 def _cert(cn: str, org: str) -> str:
@@ -47,6 +47,18 @@ def test_normalize_mac():
     assert normalize_mac("80-5e-0c-03-43-23") == "80:5E:0C:03:43:23"
     assert normalize_mac("not-a-mac") is None
     assert normalize_mac("") is None
+
+
+def test_identity_from_t4x_login_html():
+    # T46S GET / is a JS stub; the login form still names the model + firmware.
+    html = (
+        "<title>Yealink T46S Phone</title>"
+        'g_phonetype = "T46S";'
+        'g_strFirmware = "66.84.107.3";'
+    )
+    assert identity_from_html(html) == ("Yealink T46S", "66.84.107.3")
+    stub = '<html><script>window.location="/servlet?m=mod_listener&p=login&q=loginForm";</script></html>'
+    assert identity_from_html(stub) == (None, None)
 
 
 def test_model_from_title():

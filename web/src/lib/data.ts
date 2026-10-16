@@ -323,6 +323,7 @@ export const KIND_META: Record<
 > = {
   windows: { label: "Windows", icon: Cpu, type: "Computer" },
   printer: { label: "Printer", icon: Printer, type: "Printer" },
+  phone: { label: "Phone", icon: Phone, type: "Phone" }, // VoIP desk phone (spec 27)
   unknown: { label: "Unknown", icon: HelpCircle, type: "Computer" },
 };
 
@@ -367,7 +368,7 @@ export interface LinkAsset {
 
 /* Result of an inbox write action (link / create / ignore / restore). */
 export type ActionResult =
-  | { ok: true; message: string; tag?: string }
+  | { ok: true; message: string; tag?: string; jobId?: string }
   | { ok: false; error: string };
 
 /* ---------------- Locations (the location tree) ---------------- */

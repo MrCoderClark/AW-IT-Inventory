@@ -29,6 +29,7 @@ staticfiles/
 collector/config.yaml
 collector/out/
 collector/.discovery-settings.json
+collector/phone_credentials.csv
 
 # Logs & caches
 *.log

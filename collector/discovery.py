@@ -42,14 +42,25 @@ def classify(open_ports: list[int], config: Config) -> str:
 
 
 def _hosts_in(networks: list[str]) -> list[tuple[str, str]]:
+    """Expand each CIDR (or bare IP) to ``(ip, subnet)`` pairs to probe.
+
+    ``IPv4Network.hosts()`` skips the network and broadcast addresses, which for
+    a ``/32`` (and IPv6 ``/128``) means *the only address* is dropped. Manual
+    Scan now jobs and ``--target 10.0.0.5/32`` both pass a single host, so those
+    would discover nothing and report "unreachable" even when the device is up.
+    """
     out: list[tuple[str, str]] = []
     for net in networks:
         try:
             network = ipaddress.ip_network(net, strict=False)
         except ValueError:
             continue
+        subnet = str(network)
+        if network.num_addresses == 1:
+            out.append((str(network.network_address), subnet))
+            continue
         for host in network.hosts():
-            out.append((str(host), str(network)))
+            out.append((str(host), subnet))
     return out
 
 

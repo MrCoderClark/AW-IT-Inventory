@@ -509,7 +509,7 @@ export function AssetTable({
   /** Show the "Columns" picker only for `columns:write` admins (spec 11). */
   canConfigureColumns?: boolean;
   /** Show the scan controls (select + Scan selected / Scan all) only for
-     `scan:write` users; the UI enables them on the Computers table (spec 12). */
+     `scan:write` users; enabled on Computers (spec 12) and Phones (spec 27). */
   canScan?: boolean;
   /** People for the assignee picker in the create form. */
   people?: PersonOption[];
@@ -536,8 +536,9 @@ export function AssetTable({
   } = config;
   const view: ColumnView =
     config.view ?? (type ? TYPE_TO_VIEW[type] : "dashboard");
-  // Scan controls live on the Computers table for `scan:write` users (spec 12).
-  const scanEnabled = canScan && type === "Computer";
+  // Scan controls live on Computers (spec 12) and Phones (spec 27) for
+  // `scan:write` users. Other thin types have no collector path.
+  const scanEnabled = canScan && (type === "Computer" || type === "Phone");
   // Resolve the column ids for this view (saved layout over code defaults), then
   // map each id to its cell. The mixed views drop Assigned To when nothing shown
   // is assigned to a person, but only when no layout is saved (spec 11).

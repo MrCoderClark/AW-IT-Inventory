@@ -55,7 +55,7 @@ def run_computer_sweep(config: Config, token: str) -> None:
 
     cfg = config.model_copy(deep=True)
     cfg.networks = list(ips)
-    report = scan_targets(cfg, no_printers=True)  # computers only
+    report = scan_targets(cfg, no_printers=True, no_phones=True)  # computers only
     res = post_scan(config, report)
     console.print(
         f"  [green]computer sweep ingested[/green] — matched: {res.get('matched')} · "

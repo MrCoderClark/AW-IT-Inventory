@@ -5,6 +5,8 @@ import { revalidatePath } from "next/cache";
 import {
   cancelPendingJob,
   enqueueScan,
+  getScanJobStatus,
+  isWorkerLive,
   resolveAllTargets,
   resolveAssetTargets,
 } from "@/db/scan";
@@ -63,12 +65,48 @@ export async function requestScan(
     };
   }
 
-  await enqueueScan({ scope: jobScope, targets, requestedBy: user.email });
+  const jobId = await enqueueScan({
+    scope: jobScope,
+    targets,
+    requestedBy: user.email,
+  });
   revalidatePath("/scans/jobs");
   const n = targets.length;
+  const live = await isWorkerLive();
+  if (!live) {
+    return {
+      ok: true,
+      jobId,
+      message:
+        `Scan queued for ${n} device${n === 1 ? "" : "s"}, but the collector worker is not running. In collector/: uv run python main.py worker`,
+    };
+  }
   return {
     ok: true,
+    jobId,
     message: `Scan queued for ${n} device${n === 1 ? "" : "s"}. The collector will pick it up.`,
+  };
+}
+
+/** Poll a queued scan job from the asset page until it finishes. */
+export async function pollScanJob(
+  jobId: unknown,
+): Promise<
+  | { ok: true; status: string; error: string | null; waitingForCollector: boolean }
+  | { ok: false; error: string }
+> {
+  const user = await requireScanWrite();
+  if (!user) return FORBIDDEN;
+  if (typeof jobId !== "string" || !jobId) {
+    return { ok: false, error: "Missing job id." };
+  }
+  const row = await getScanJobStatus(jobId);
+  if (!row) return { ok: false, error: "That scan job was not found." };
+  return {
+    ok: true,
+    status: row.status,
+    error: row.error,
+    waitingForCollector: row.waitingForCollector,
   };
 }
 

@@ -13,6 +13,11 @@ ports:
   phone: 443          # VoIP phone web UI/TLS (spec 27); a phone is confirmed by its
                       # device cert (issuer "Yealink…", CN = MAC), not the port alone
 
+# Per-phone web credentials for the authenticated phone read (spec 27 phase 2:
+# Display Name / extension). A gitignored CSV `ip,username,password` on THIS host —
+# never in the DB or git (same rule as the WinRM secrets). See phone_credentials.example.csv.
+phone_credentials_file: phone_credentials.csv
+
 snmp_community: public
 # SNMP version for printers: "auto" tries v2c then falls back to v1 (default),
 # "v2c" or "v1" pin one. The Canon imageFORCE answers only SNMPv1 and drops v2c,

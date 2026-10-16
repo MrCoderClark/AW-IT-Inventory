@@ -62,6 +62,10 @@ class Config(BaseModel):
     concurrency: int = 64
     connect_timeout: float = 2.0
     phone_timeout: float = 4.0  # TLS cert + HTTPS title read per phone (spec 27)
+    # Per-phone web credentials for the authenticated read (spec 27 phase 2:
+    # Display Name / extension). A gitignored CSV `ip,username,password` on the
+    # collector host — NEVER in the DB or git (same rule as the WinRM secrets).
+    phone_credentials_file: str = "phone_credentials.csv"
     # Wall-clock cap (seconds) on each WinRM PowerShell call: the main collect and
     # every best-effort enrichment step. A hung server-side query (e.g. a wedged
     # Windows Update) is abandoned at this cap so it can never stall a scan.
@@ -191,6 +195,11 @@ class Config(BaseModel):
     @property
     def discovery_cache_path(self) -> Path:
         p = Path(self.discovery_cache_file)
+        return p if p.is_absolute() else BASE_DIR / p
+
+    @property
+    def phone_credentials_path(self) -> Path:
+        p = Path(self.phone_credentials_file)
         return p if p.is_absolute() else BASE_DIR / p
 
 

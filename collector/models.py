@@ -116,12 +116,15 @@ class PrinterInfo(BaseModel):
 
 class PhoneInfo(BaseModel):
     """VoIP desk phone inventory (spec 27). Phase 1 reads mac + model with no
-    credentials (TLS cert CN = MAC, HTTPS title = model). The rest is phase-2
-    authenticated enrichment (per-phone web login, or the Intermedia API); None
-    = not collected."""
+    credentials (TLS cert CN = MAC, HTTPS title = model). Phase 2 adds vendor,
+    serial (Yealink "Machine ID"), firmware, extension (SIP label), display
+    name, and register status via the device's web UI (T5x ``/api`` or T4x
+    ``/servlet`` login). None = not collected."""
 
     mac: str | None = None  # the reconciliation key, from the device TLS cert CN
-    model: str | None = None  # e.g. "Yealink T54W"
+    model: str | None = None  # e.g. "T54W" (phase 2) or "Yealink T54W" (phase 1 title)
+    vendor: str | None = None  # "Yealink" — locked by the cert's issuer in phase 2
+    serial: str | None = None  # Yealink Machine ID, e.g. "301081C101210254"
     firmware: str | None = None
     extension: str | None = None  # SIP account Label, e.g. "117"
     display_name: str | None = None  # SIP account Display Name, e.g. "Joseph Clark"

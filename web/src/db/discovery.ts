@@ -9,13 +9,24 @@ import { discoverySettings } from "./schema";
  * collector pulls them before each automatic sweep (GET /api/scan/discovery-
  * settings) and skips an off type. Everything here is server-only.
  *
- * Invariant: an absent row means "on" (AC-2). Reads coalesce a missing type to
- * true, so an empty table equals "discover everything" and no seeding is needed.
+ * Invariant: an absent row means the type's default (AC-2) — computers/printers
+ * default on, phones default **off** (opt-in, spec 27). Reads coalesce a missing
+ * type to that default, so no seeding is needed.
  */
 
-/** The device types that can be toggled today (the two the collector classifies). */
-export const DISCOVERY_TYPES = ["computer", "printer"] as const;
+/** The device types that can be toggled today (the ones the collector classifies). */
+export const DISCOVERY_TYPES = ["computer", "printer", "phone"] as const;
 export type DiscoveryType = (typeof DISCOVERY_TYPES)[number];
+
+/** Default auto-discovery state per type when there's no saved row. Computers and
+   printers are on (the long-standing fleet behavior); VoIP phones are **opt-in**
+   (spec 27) — auto-sweep stays off until an admin turns it on, and phones are
+   otherwise added/scanned manually. */
+const DEFAULT_ENABLED: Record<DiscoveryType, boolean> = {
+  computer: true,
+  printer: true,
+  phone: false,
+};
 
 export type DiscoverySettings = Record<DiscoveryType, boolean>;
 
@@ -39,10 +50,10 @@ export async function getDiscoverySettings(): Promise<DiscoverySettings> {
     .from(discoverySettings);
 
   const saved = new Map(rows.map((r) => [r.deviceType, r.enabled]));
-  // Coalesce a missing type to true (absent row = on).
+  // Coalesce a missing type to its default (computers/printers on, phones opt-in).
   const out = {} as DiscoverySettings;
   for (const type of DISCOVERY_TYPES) {
-    out[type] = saved.get(type) ?? true;
+    out[type] = saved.get(type) ?? DEFAULT_ENABLED[type];
   }
   return out;
 }

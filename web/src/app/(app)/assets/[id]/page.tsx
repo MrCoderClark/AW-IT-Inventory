@@ -215,6 +215,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
       people={people}
       locations={locations}
       canWrite={canWrite}
+      canScan={canScan}
       connection={connection}
     />
   );
