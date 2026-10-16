@@ -19,6 +19,11 @@ export const metadata: Metadata = {
   title: "H2Tecs — IT Inventory",
   description:
     "H2Tecs: enterprise IT asset management for computers, monitors, printers, phones and related IT items.",
+  icons: {
+    icon: [{ url: "/h2tecs-favicon.svg", type: "image/svg+xml" }],
+    shortcut: "/h2tecs-favicon.svg",
+    apple: "/h2tecs-favicon.svg",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
