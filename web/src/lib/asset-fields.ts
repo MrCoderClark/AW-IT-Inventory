@@ -89,12 +89,29 @@ export const TYPE_FIELDS: Record<AssetType, TypeFormConfig> = {
   Phone: {
     hiddenShared: [],
     fields: [
-      { key: "imei", label: "IMEI", kind: "text" },
-      { key: "phoneNumber", label: "Phone number", kind: "text" },
-      { key: "carrier", label: "Carrier", kind: "text" },
-      { key: "storageGb", label: "Storage (GB)", kind: "int" },
-      { key: "os", label: "OS", kind: "select", options: ["iOS", "Android"] },
-      { key: "plan", label: "Plan", kind: "text" },
+      { key: "extension", label: "Extension", kind: "text" },
+      { key: "displayName", label: "Display name", kind: "text" },
+      { key: "mac", label: "MAC address", kind: "text" },
+      { key: "ipAddress", label: "IP address", kind: "text" },
+      { key: "firmware", label: "Firmware", kind: "text" },
+      {
+        // The six values Yealink T5x firmware returns in StatusAccount's
+        // account.info[].status (0..5), surfaced as human labels — kept
+        // broader than the common three so a scanned value always parses
+        // through the per-type form schema.
+        key: "registerStatus",
+        label: "Registration",
+        kind: "select",
+        options: [
+          "Registered",
+          "Registering",
+          "Unregistered",
+          "Register Failed",
+          "Expired",
+          "Timeout",
+          "Unknown",
+        ],
+      },
     ],
   },
   Network: {

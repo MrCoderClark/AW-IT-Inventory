@@ -67,5 +67,7 @@ export const config = {
   // navigations). Pages redirect to /login when unauthenticated; /api never does
   // (it self-authenticates — cookie routes 401, bearer/service routes verify their
   // own token).
-  matcher: ["/((?!login|_next/static|_next/image|favicon.ico).*)"],
+  matcher: [
+    "/((?!login|_next/static|_next/image|favicon.ico|h2tecs-favicon.svg|h2tecs-logo.svg|h2tecs-logo-dark.svg).*)",
+  ],
 };

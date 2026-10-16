@@ -36,25 +36,34 @@ def _config(tmp_path):
 # ── _coerce_settings: absent = on (AC-2) ─────────────────────────────────────
 
 
-def test_coerce_defaults_missing_types_to_on():
-    # covers: AC-2 — a missing type coalesces to True.
-    assert ingest._coerce_settings({}) == {"computer": True, "printer": True}
+def test_coerce_defaults_missing_types_to_their_default():
+    # covers: AC-2 — a missing type coalesces to its default: computers/printers on,
+    # phones off (opt-in, spec 27).
+    assert ingest._coerce_settings({}) == {
+        "computer": True,
+        "printer": True,
+        "phone": False,
+    }
 
 
 def test_coerce_honors_explicit_false():
-    assert ingest._coerce_settings({"computer": False, "printer": True}) == {
-        "computer": False,
-        "printer": True,
-    }
+    assert ingest._coerce_settings(
+        {"computer": False, "printer": True, "phone": True}
+    ) == {"computer": False, "printer": True, "phone": True}
 
 
-def test_coerce_treats_non_bool_and_non_dict_as_on():
-    # A junk value or a non dict payload must not turn a type off by accident.
+def test_coerce_treats_non_bool_and_non_dict_as_the_default():
+    # A junk value or a non-dict payload must not flip a type from its default.
     assert ingest._coerce_settings({"computer": "nope"}) == {
         "computer": True,
         "printer": True,
+        "phone": False,
     }
-    assert ingest._coerce_settings(None) == {"computer": True, "printer": True}
+    assert ingest._coerce_settings(None) == {
+        "computer": True,
+        "printer": True,
+        "phone": False,
+    }
 
 
 # ── get_discovery_settings: fetch, cache, fail open (AC-3, AC-6) ─────────────
@@ -73,10 +82,11 @@ def test_fetch_success_returns_fetched_and_writes_cache(tmp_path, monkeypatch):
     settings, source = ingest.get_discovery_settings(cfg)
 
     assert source == "fetched"
-    assert settings == {"computer": False, "printer": True}
+    assert settings == {"computer": False, "printer": True, "phone": False}
     assert json.loads(cfg.discovery_cache_path.read_text(encoding="utf-8")) == {
         "computer": False,
         "printer": True,
+        "phone": False,
     }
 
 
@@ -95,11 +105,13 @@ def test_read_failure_falls_back_to_cache(tmp_path, monkeypatch):
     settings, source = ingest.get_discovery_settings(cfg)
 
     assert source == "cache"
-    assert settings == {"computer": True, "printer": False}
+    # An older cache missing `phone` is coerced to the phone default (off).
+    assert settings == {"computer": True, "printer": False, "phone": False}
 
 
-def test_read_failure_without_cache_fails_open_all_on(tmp_path, monkeypatch):
-    # covers: AC-6 — nothing was ever cached, so proceed with all types on.
+def test_read_failure_without_cache_uses_defaults(tmp_path, monkeypatch):
+    # covers: AC-6 — nothing was ever cached, so proceed with the per-type defaults
+    # (computers/printers on so scanning never stops; phones stay opt-in/off).
     cfg = _config(tmp_path)
     monkeypatch.setattr(ingest, "get_token", lambda c: "tok")
 
@@ -111,4 +123,4 @@ def test_read_failure_without_cache_fails_open_all_on(tmp_path, monkeypatch):
     settings, source = ingest.get_discovery_settings(cfg)
 
     assert source == "default"
-    assert settings == {"computer": True, "printer": True}
+    assert settings == {"computer": True, "printer": True, "phone": False}

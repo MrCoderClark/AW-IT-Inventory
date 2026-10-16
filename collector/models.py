@@ -114,10 +114,27 @@ class PrinterInfo(BaseModel):
     supplies: dict[str, int] = Field(default_factory=dict)
 
 
+class PhoneInfo(BaseModel):
+    """VoIP desk phone inventory (spec 27). Phase 1 reads mac + model with no
+    credentials (TLS cert CN = MAC, HTTPS title = model). Phase 2 adds vendor,
+    serial (Yealink "Machine ID"), firmware, extension (SIP label), display
+    name, and register status via the device's web UI (T5x ``/api`` or T4x
+    ``/servlet`` login). None = not collected."""
+
+    mac: str | None = None  # the reconciliation key, from the device TLS cert CN
+    model: str | None = None  # e.g. "T54W" (phase 2) or "Yealink T54W" (phase 1 title)
+    vendor: str | None = None  # "Yealink" — locked by the cert's issuer in phase 2
+    serial: str | None = None  # Yealink Machine ID, e.g. "301081C101210254"
+    firmware: str | None = None
+    extension: str | None = None  # SIP account Label, e.g. "117"
+    display_name: str | None = None  # SIP account Display Name, e.g. "Joseph Clark"
+    register_status: str | None = None  # "Registered" | "Unregistered" | …
+
+
 class HostResult(BaseModel):
     ip: str
     subnet: str
-    device_type: str = "unknown"  # windows | printer | unknown
+    device_type: str = "unknown"  # windows | printer | phone | unknown
     reachable: bool = False
     open_ports: list[int] = Field(default_factory=list)
     hostname: str | None = None
@@ -125,6 +142,8 @@ class HostResult(BaseModel):
     hardware: Hardware | None = None
     health: Health | None = None
     printer: PrinterInfo | None = None
+    # VoIP desk phone inventory (spec 27). None = not a phone / not collected.
+    phone: PhoneInfo | None = None
     # Installed programs matching interest (spec 15). None = not collected (a
     # non-Windows host, or a software read that failed); an empty list = read OK,
     # nothing found. The web app filters this to the watchlist at ingest.

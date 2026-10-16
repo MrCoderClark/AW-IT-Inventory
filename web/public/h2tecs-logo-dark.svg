@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 268 64" role="img" aria-label="H2Tecs IT Inventory">
+  <defs>
+    <linearGradient id="lk-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4F6DF5"/>
+      <stop offset="55%" stop-color="#3B54E0"/>
+      <stop offset="100%" stop-color="#6C3FF0"/>
+    </linearGradient>
+    <linearGradient id="lk-sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.28"/>
+      <stop offset="60%" stop-color="#ffffff" stop-opacity="0.04"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.10"/>
+    </linearGradient>
+    <clipPath id="lk-round">
+      <rect x="0" y="0" width="64" height="64" rx="16" ry="16"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#lk-round)">
+    <rect width="64" height="64" fill="url(#lk-bg)"/>
+    <rect width="64" height="64" fill="url(#lk-sheen)"/>
+    <circle cx="52" cy="12" r="26" fill="#ffffff" opacity="0.10"/>
+    <circle cx="10" cy="58" r="22" fill="#000000" opacity="0.07"/>
+    <text
+      x="32"
+      y="34"
+      text-anchor="middle"
+      dominant-baseline="middle"
+      font-family="Inter, 'Segoe UI', system-ui, sans-serif"
+      font-size="26"
+      font-weight="800"
+      letter-spacing="-1.2"
+      fill="#ffffff"
+    >H2</text>
+    <rect x="17" y="46" width="22" height="3.4" rx="1.7" fill="#ffffff" opacity="0.55"/>
+    <rect x="25" y="51.2" width="22" height="3.4" rx="1.7" fill="#ffffff" opacity="0.34"/>
+  </g>
+  <g font-family="Inter, 'Segoe UI', system-ui, sans-serif">
+    <text x="76" y="27" font-size="22" font-weight="800" letter-spacing="-0.3" fill="#F8FAFC">H2Tecs</text>
+    <text x="76" y="50" font-size="15" font-weight="700" letter-spacing="0.6" fill="#CBD5E1">IT Inventory</text>
+  </g>
+</svg>

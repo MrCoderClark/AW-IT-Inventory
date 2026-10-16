@@ -19,6 +19,7 @@ jobs and runs the printer reachability + daily report schedule).
 | `creds.py` | Per-host credential profile resolution (rules matched top-down, ordered fallback) |
 | `collect_windows.py` | WinRM collection: one PowerShell/CIM call returns JSON; tries each profile; also reads installed software from the registry Uninstall keys (spec 15) |
 | `collect_snmp.py` | SNMP printer collection: identity, status, and the page counter (see Gotchas) |
+| `collect_phone.py` | VoIP desk-phone identity (spec 27): Yealink TLS cert → MAC (CN) + vendor (issuer), HTTPS title → model. Credential-free, read-only |
 | `reachability.py` | Worker's scheduled printer TCP probes, daily SNMP collect, counter report, prune |
 | `worker.py` | Long-running worker: the job claim loop + an in-process APScheduler |
 | `remote_session.py` | Interactive remote terminal (spec 24): claim a session, open WinRM, relay the owner's input lines ↔ command output (a REPL, not a PTY) |

@@ -15,14 +15,20 @@ import {
   type PostedMonitor,
 } from "./monitors";
 import { createNotification } from "./notifications";
+import { assignAsset } from "./assignments";
 import { replaceInstalledSoftware, type PostedSoftware } from "./software";
 import {
   assets,
   computerDetails,
   machines,
   networkDetails,
+  people,
+  phoneDetails,
   printerDetails,
 } from "./schema";
+
+/** Custody-log actor for scan-driven phone assignments (spec 27 AC-6). */
+const SCAN_ASSIGN_ACTOR = "collector";
 
 // Loose shapes matching the collector's HostResult payload.
 interface IngestDisk {
@@ -51,6 +57,20 @@ interface IngestPrinter {
   page_count?: number | null;
   [k: string]: unknown;
 }
+// VoIP desk phone (spec 27). Phase 1 sends mac + model (credential-free, from the
+// TLS cert); phase 2 adds vendor, serial (Yealink Machine ID), firmware,
+// extension, display_name (SIP account display), register_status.
+interface IngestPhone {
+  mac?: string | null;
+  model?: string | null;
+  vendor?: string | null;
+  serial?: string | null;
+  extension?: string | null;
+  display_name?: string | null;
+  firmware?: string | null;
+  register_status?: string | null;
+  [k: string]: unknown;
+}
 export interface IngestHost {
   ip?: string | null;
   subnet?: string | null;
@@ -60,6 +80,7 @@ export interface IngestHost {
   hardware?: IngestHardware | null;
   health?: IngestHealth | null;
   printer?: IngestPrinter | null;
+  phone?: IngestPhone | null;
   // Installed programs from a Windows collect (spec 15). null/absent = not
   // collected (leave stored software intact); an array = the current set.
   software?: PostedSoftware[] | null;
@@ -104,8 +125,10 @@ function summarizeDisks(disks: IngestDisk[] | null | undefined): string | null {
  * written — a field the collector didn't read never blanks an existing value — and
  * only the technical fields the scan can know (serial/model/vendor and, for a
  * computer, cpu/ram/os/storage). Human and admin fields (name, location, cost
- * center, dates, assignee) are never touched. Best-effort: a failure here must not
- * fail the machine ingest.
+ * center, dates) are never touched here. Phone Assigned To is a separate
+ * best-effort step: a unique People-directory name match can assign an
+ * *unassigned* phone (never overrides a manual assignment). Best-effort: a
+ * failure here must not fail the machine ingest.
  */
 async function applyScanToAsset(
   assetId: string,
@@ -114,17 +137,23 @@ async function applyScanToAsset(
   health: IngestHealth | null,
   serial: string | null,
   now: Date,
+  phone: IngestPhone | null,
+  ip: string | null,
 ): Promise<void> {
-  // Shared asset fields the scan can supply.
+  // Shared asset fields the scan can supply. A phone contributes its model
+  // (from the HTTPS title or the phase-2 wui bag), its vendor ("Yealink",
+  // locked by the cert issuer), and its machine id as the asset serial —
+  // the closest a desk phone has to a hardware serial, printed on the back
+  // of the device and used by Yealink for RMA.
   const assetSet: Partial<{
     serial: string | null;
     model: string | null;
     vendor: string | null;
   }> = {};
   if (serial) assetSet.serial = serial;
-  const model = clean(hw?.model);
+  const model = clean(hw?.model ?? phone?.model);
   if (model) assetSet.model = model;
-  const vendor = clean(hw?.manufacturer);
+  const vendor = clean(hw?.manufacturer ?? phone?.vendor);
   if (vendor) assetSet.vendor = vendor;
   if (Object.keys(assetSet).length) {
     await db
@@ -159,6 +188,73 @@ async function applyScanToAsset(
         .onConflictDoUpdate({ target: computerDetails.assetId, set: detailSet });
     }
   }
+
+  // Desk-phone detail fields (spec 27), from the credential-free scan (mac/ip) and
+  // any phase-2 enrichment (extension/firmware/register). Only written values are
+  // set, so a field the scan didn't read never blanks a manually-entered one.
+  if (assetType === "Phone" && phone) {
+    const detailSet: Partial<{
+      mac: string | null;
+      extension: string | null;
+      ipAddress: string | null;
+      firmware: string | null;
+      registerStatus: string | null;
+      displayName: string | null;
+    }> = {};
+    const m = clean(phone.mac);
+    if (m) detailSet.mac = m;
+    const ext = clean(phone.extension);
+    if (ext) detailSet.extension = ext;
+    if (ip) detailSet.ipAddress = ip;
+    const fw = clean(phone.firmware);
+    if (fw) detailSet.firmware = fw;
+    const reg = clean(phone.register_status);
+    if (reg) detailSet.registerStatus = reg;
+    const dn = clean(phone.display_name);
+    if (dn) detailSet.displayName = dn;
+
+    if (Object.keys(detailSet).length) {
+      await db
+        .insert(phoneDetails)
+        .values({ assetId, ...detailSet })
+        .onConflictDoUpdate({ target: phoneDetails.assetId, set: detailSet });
+    }
+  }
+}
+
+/**
+ * If the SIP display name uniquely matches one active person and the phone is
+ * currently unassigned, assign it through the spec-16 engine so Assigned To and
+ * the custody log stay in step. Ambiguous names (two "John Smith"s) and phones
+ * already assigned are left alone.
+ */
+async function maybeAssignPhoneByDisplayName(
+  assetId: string,
+  displayName: string,
+): Promise<void> {
+  const name = displayName.trim().replace(/\s+/g, " ");
+  if (!name) return;
+
+  const [asset] = await db
+    .select({ assigneeId: assets.assigneeId, type: assets.type })
+    .from(assets)
+    .where(eq(assets.id, assetId))
+    .limit(1);
+  if (!asset || asset.type !== "Phone" || asset.assigneeId) return;
+
+  const matches = await db
+    .select({ id: people.id })
+    .from(people)
+    .where(
+      and(
+        eq(people.status, "active"),
+        sql`lower(btrim(${people.name})) = ${name.toLowerCase()}`,
+      ),
+    )
+    .limit(2);
+  if (matches.length !== 1) return;
+
+  await assignAsset(assetId, matches[0].id, SCAN_ASSIGN_ACTOR);
 }
 
 export async function ingestScan(payload: IngestPayload): Promise<IngestResult> {
@@ -175,12 +271,19 @@ export async function ingestScan(payload: IngestPayload): Promise<IngestResult> 
   for (const h of hosts) {
     const hw = h.hardware ?? null;
     const pr = h.printer ?? null;
-    const serial = clean(hw?.serial ?? pr?.serial ?? null);
+    const ph = h.phone ?? null;
+    // A phone's phase-2 serial is Yealink's Machine ID — the device's stable
+    // identifier (never changes across resets). Treat it like any other scan
+    // serial so a phone reconciles by serial on subsequent scans too, not
+    // only by MAC.
+    const serial = clean(hw?.serial ?? pr?.serial ?? ph?.serial ?? null);
     const hardwareUuid = clean(hw?.hardware_uuid ?? null);
+    const mac = clean(ph?.mac ?? null); // a phone's stable identity (spec 27)
     const hostname = clean(h.hostname ?? null);
     const ip = clean(h.ip ?? null);
 
-    const matchKey = hardwareUuid || serial || hostname || ip;
+    // MAC is a strong key (a phone has no serial/hardware uuid), above hostname/ip.
+    const matchKey = hardwareUuid || serial || mac || hostname || ip;
     if (!matchKey) {
       result.skipped += 1;
       continue;
@@ -202,10 +305,27 @@ export async function ingestScan(payload: IngestPayload): Promise<IngestResult> 
       }
     }
 
+    // Reconcile a phone by its MAC (spec 27): phones have no scan-readable serial,
+    // so `phone_details.mac` is the identity — a phone whose IP changed still links.
+    if (!assetId && mac) {
+      const byMac = await db
+        .select({ id: assets.id, type: assets.type })
+        .from(assets)
+        .innerJoin(phoneDetails, eq(phoneDetails.assetId, assets.id))
+        .where(eq(phoneDetails.mac, mac))
+        .limit(1);
+      if (byMac.length) {
+        assetId = byMac[0].id;
+        assetType = byMac[0].type;
+      }
+    }
+
     // Fall back to matching a manually-entered device by its IP. For a printer,
     // `printer_details.ipAddress` is the device's identity (spec 12), so a printer
     // whose SNMP serial differs from — or is missing on — the asset still links to
-    // the right asset when scanned at its IP. Same for a network/computer detail IP.
+    // the right asset when scanned at its IP. Same for a network/computer/phone
+    // detail IP — this is how a manually-added phone (no MAC yet) first links to its
+    // scan, which then fills in its MAC for subsequent reconciliation (spec 27).
     if (!assetId && ip) {
       const byIp = await db
         .select({ id: assets.id, type: assets.type })
@@ -213,11 +333,13 @@ export async function ingestScan(payload: IngestPayload): Promise<IngestResult> 
         .leftJoin(printerDetails, eq(printerDetails.assetId, assets.id))
         .leftJoin(networkDetails, eq(networkDetails.assetId, assets.id))
         .leftJoin(computerDetails, eq(computerDetails.assetId, assets.id))
+        .leftJoin(phoneDetails, eq(phoneDetails.assetId, assets.id))
         .where(
           or(
             eq(printerDetails.ipAddress, ip),
             eq(networkDetails.ipAddress, ip),
             eq(computerDetails.ipAddress, ip),
+            eq(phoneDetails.ipAddress, ip),
           ),
         )
         .limit(1);
@@ -227,8 +349,9 @@ export async function ingestScan(payload: IngestPayload): Promise<IngestResult> 
       }
     }
 
-    const kind = h.device_type ?? (pr ? "printer" : hw ? "windows" : "unknown");
-    const hasData = Boolean(hw || pr);
+    const kind =
+      h.device_type ?? (pr ? "printer" : ph ? "phone" : hw ? "windows" : "unknown");
+    const hasData = Boolean(hw || pr || ph);
     const status = !hasData && h.errors?.length ? "error" : "ok";
 
     const row = {
@@ -246,6 +369,7 @@ export async function ingestScan(payload: IngestPayload): Promise<IngestResult> 
       hardware: hw,
       health: h.health ?? null,
       printer: pr,
+      phone: ph,
       credentialProfile: clean(h.credential_profile ?? null),
       lastScanStatus: status,
       lastSeenAt: now,
@@ -303,9 +427,32 @@ export async function ingestScan(payload: IngestPayload): Promise<IngestResult> 
       // Overwrite the asset's technical fields from the scan (best-effort). A
       // failure here must never fail the machine ingest.
       try {
-        await applyScanToAsset(assetId, assetType, hw, h.health ?? null, serial, now);
+        await applyScanToAsset(
+          assetId,
+          assetType,
+          hw,
+          h.health ?? null,
+          serial,
+          now,
+          ph,
+          ip,
+        );
       } catch (err) {
         console.error(`[ingest] asset enrich failed for asset ${assetId}:`, err);
+      }
+
+      // Spec 27 AC-6: unique SIP display name → Person. Only fills Assigned To
+      // when the phone is currently unassigned; never steals a manual assignment.
+      const displayName = clean(ph?.display_name);
+      if (assetType === "Phone" && displayName) {
+        try {
+          await maybeAssignPhoneByDisplayName(assetId, displayName);
+        } catch (err) {
+          console.error(
+            `[ingest] phone assignee match failed for asset ${assetId}:`,
+            err,
+          );
+        }
       }
 
       // Record today's printer page-counter snapshot (spec 14, AC-2). Rides this

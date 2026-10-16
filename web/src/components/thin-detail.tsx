@@ -20,6 +20,7 @@ import {
   Network as NetworkIcon,
   Pencil,
   Printer,
+  ScanLine,
   ShieldCheck,
   Sliders,
   Smartphone,
@@ -31,6 +32,7 @@ import {
 import { toast } from "sonner";
 
 import { deleteAsset } from "@/app/(app)/assets/actions";
+import { pollScanJob, requestScan } from "@/app/(app)/scan-actions";
 import {
   AssetFormDialog,
   type PersonOption,
@@ -105,6 +107,7 @@ export function ThinAssetDetail({
   people = [],
   locations = [],
   canWrite = false,
+  canScan = false,
   connection = null,
 }: {
   asset: Asset;
@@ -114,6 +117,8 @@ export function ThinAssetDetail({
   people?: PersonOption[];
   locations?: LocationOption[];
   canWrite?: boolean;
+  /** scan:write — enables "Scan now" for a desk phone (spec 27). */
+  canScan?: boolean;
   // Monitor only (spec 25 phase 3): the computer whose last scan reported this
   // monitor's serial as a connected display. Null = not matched to any scan.
   connection?: {
@@ -127,6 +132,54 @@ export function ThinAssetDetail({
   const [editOpen, setEditOpen] = React.useState(false);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [isDeleting, startDelete] = React.useTransition();
+  const [isScanning, startScan] = React.useTransition();
+
+  // Manually scan this phone (spec 27): a spec 12 scan job targeting its IP. The
+  // worker's manual job bypasses the discovery toggle, so an opt-out phone still
+  // scans on demand; reconciliation is by MAC.
+  function scanNow() {
+    startScan(async () => {
+      try {
+        const res = await requestScan("selected", [asset.id]);
+        if (!res.ok) {
+          toast.error(res.error);
+          return;
+        }
+        toast.success(res.message);
+        if (!res.jobId) {
+          router.refresh();
+          return;
+        }
+        for (let i = 0; i < 45; i++) {
+          await new Promise((r) => setTimeout(r, 1000));
+          const st = await pollScanJob(res.jobId);
+          if (!st.ok) continue;
+          if (st.waitingForCollector) {
+            toast.error(
+              "The collector worker is not running. In collector/: uv run python main.py worker",
+            );
+            return;
+          }
+          if (st.status === "succeeded") {
+            toast.success("Scan finished.");
+            router.refresh();
+            return;
+          }
+          if (st.status === "failed") {
+            toast.error(st.error || "Scan failed.");
+            return;
+          }
+          if (st.status === "canceled") {
+            toast.error("Scan was canceled.");
+            return;
+          }
+        }
+        toast.message("Scan is still running. Check Scan jobs, then refresh this page.");
+      } catch {
+        toast.error("Could not queue the scan. Try again, or check that the web app is running.");
+      }
+    });
+  }
 
   const type = asset.type as "Monitor" | "Phone" | "Network";
   const meta = TYPE_META[type] ?? TYPE_META.Monitor;
@@ -237,6 +290,16 @@ export function ThinAssetDetail({
 
         {/* Actions */}
         <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {type === "Phone" && canScan && (
+            <Button variant="outline" onClick={scanNow} disabled={isScanning}>
+              {isScanning ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <ScanLine className="size-4" />
+              )}
+              Scan now
+            </Button>
+          )}
           {canWrite && (
             <Button onClick={() => setEditOpen(true)}>
               <Pencil className="size-4" /> Edit

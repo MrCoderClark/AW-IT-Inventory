@@ -237,7 +237,7 @@ export const machines = pgTable("machines", {
   assetId: uuid("asset_id").references(() => assets.id, {
     onDelete: "set null",
   }),
-  kind: text("kind").notNull().default("unknown"), // windows | printer | unknown
+  kind: text("kind").notNull().default("unknown"), // windows | printer | phone | unknown
   hostname: text("hostname"),
   ip: text("ip"),
   subnet: text("subnet"),
@@ -249,6 +249,7 @@ export const machines = pgTable("machines", {
   hardware: jsonb("hardware"),
   health: jsonb("health"),
   printer: jsonb("printer"),
+  phone: jsonb("phone"), // VoIP desk phone identity (spec 27): mac, model, …
   credentialProfile: text("credential_profile"),
   lastScanStatus: text("last_scan_status"),
   lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
@@ -321,16 +322,23 @@ export const phoneDetails = pgTable(
     assetId: uuid("asset_id")
       .primaryKey()
       .references(() => assets.id, { onDelete: "cascade" }),
-    imei: text("imei"),
-    phoneNumber: text("phone_number"),
-    carrier: text("carrier"),
-    storageGb: integer("storage_gb"),
-    os: text("os"), // iOS | Android
-    plan: text("plan"),
+    // VoIP desk phone (spec 27). Repurposed from the old mobile fields.
+    mac: text("mac"), // device MAC (from the TLS cert) — the scan reconciliation key
+    extension: text("extension"), // SIP account Label, e.g. "117"
+    ipAddress: text("ip_address"),
+    firmware: text("firmware"),
+    registerStatus: text("register_status"), // Registered | Unregistered | Unknown
+    // SIP account Display Name (phase-2 auth read, e.g. "Joseph Clark"). This
+    // is the name the device shows on the handset, not the asset's assignee —
+    // the two often agree but can differ (shared desk, floater phone).
+    displayName: text("display_name"),
   },
   (t) => [
-    index("phone_details_imei_idx").on(t.imei),
-    index("phone_details_number_idx").on(t.phoneNumber),
+    // One phone per MAC (the reconciliation key); null MAC (manual entry) never collides.
+    uniqueIndex("phone_details_mac_uq")
+      .on(t.mac)
+      .where(sql`${t.mac} is not null`),
+    index("phone_details_extension_idx").on(t.extension),
   ],
 );
 
@@ -607,7 +615,9 @@ export const scanWorkers = pgTable("scan_workers", {
 // missing type to true. `deviceType` is plain text with a union `$type` (not a
 // pg enum) so adding a future type never needs an enum migration.
 export const discoverySettings = pgTable("discovery_settings", {
-  deviceType: text("device_type").$type<"computer" | "printer">().primaryKey(),
+  deviceType: text("device_type")
+    .$type<"computer" | "printer" | "phone">()
+    .primaryKey(),
   enabled: boolean("enabled").notNull().default(true),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .defaultNow()

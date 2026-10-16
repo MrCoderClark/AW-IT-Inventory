@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { requestScan } from "@/app/(app)/scan-actions";
 import { ThinAssetDetail } from "./thin-detail";
 import type { Asset } from "@/lib/data";
 
@@ -28,6 +29,10 @@ vi.mock("@/app/(app)/people-actions", () => ({
   returnAssetAction: vi.fn(),
 }));
 vi.mock("@/app/(app)/media-actions", () => ({ setAssetImage: vi.fn() }));
+vi.mock("@/app/(app)/scan-actions", () => ({
+  requestScan: vi.fn(async () => ({ ok: true, message: "queued" })),
+  pollScanJob: vi.fn(),
+}));
 
 function makeAsset(overrides: Partial<Asset> = {}): Asset {
   return {
@@ -107,6 +112,41 @@ describe("ThinAssetDetail — Monitor (AC-5.2, AC-5.3)", () => {
     await user.click(screen.getByRole("tab", { name: "Assignment" }));
     expect(screen.getByText("Assignment History")).toBeInTheDocument();
     expect(screen.getByText("Currently held")).toBeInTheDocument();
+  });
+});
+
+describe("ThinAssetDetail — Phone Scan now (spec 27)", () => {
+  it("queues a selected-scope scan of this phone's tag", async () => {
+    const user = userEvent.setup();
+    render(
+      <ThinAssetDetail
+        asset={makeAsset({
+          id: "H2TECS-PHN-1",
+          name: "Yealink T46S",
+          type: "Phone",
+        })}
+        details={{ ipAddress: "192.168.75.41" }}
+        canWrite
+        canScan
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Scan now" }));
+    expect(requestScan).toHaveBeenCalledWith("selected", ["H2TECS-PHN-1"]);
+  });
+
+  it("hides Scan now without scan:write", () => {
+    render(
+      <ThinAssetDetail
+        asset={makeAsset({
+          id: "H2TECS-PHN-1",
+          name: "Yealink T46S",
+          type: "Phone",
+        })}
+        details={{ ipAddress: "192.168.75.41" }}
+        canWrite
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "Scan now" })).toBeNull();
   });
 });
 

@@ -25,7 +25,7 @@ vi.mock("sonner", () => ({
   toast: Object.assign(vi.fn(), { success: toastSuccess, error: toastError }),
 }));
 
-const bothOn = { computer: true, printer: true };
+const bothOn = { computer: true, printer: true, phone: false };
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -33,7 +33,7 @@ describe("DiscoveryToggles — render (AC-1)", () => {
   it("renders a switch per type reflecting the saved state", () => {
     render(
       <DiscoveryToggles
-        settings={{ computer: true, printer: false }}
+        settings={{ computer: true, printer: false, phone: false }}
         canWrite
       />,
     );

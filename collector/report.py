@@ -26,7 +26,7 @@ def print_summary(report: RunReport, saved_to: Path) -> None:
     console = Console()
     by_type = Counter(h.device_type for h in report.hosts)
     collected = sum(
-        1 for h in report.hosts if h.hardware or h.printer
+        1 for h in report.hosts if h.hardware or h.printer or h.phone
     )
     failed = sum(1 for h in report.hosts if h.errors)
 
@@ -37,6 +37,7 @@ def print_summary(report: RunReport, saved_to: Path) -> None:
         f"reachable: [bold]{len(report.hosts)}[/bold]   "
         f"windows: {by_type.get('windows', 0)}   "
         f"printers: {by_type.get('printer', 0)}   "
+        f"phones: {by_type.get('phone', 0)}   "
         f"unknown: {by_type.get('unknown', 0)}   "
         f"collected: [green]{collected}[/green]   "
         f"with errors: [yellow]{failed}[/yellow]"
@@ -58,6 +59,11 @@ def print_summary(report: RunReport, saved_to: Path) -> None:
         elif h.device_type == "printer" and h.printer:
             name = (h.printer.model or "printer")[:32]
             detail = f"pages {h.printer.page_count or '?'} · {h.printer.status or '?'}"
+            status = "[green]ok[/green]"
+        elif h.device_type == "phone" and h.phone:
+            name = (h.phone.model or "phone")[:32]
+            bits = [p for p in (h.phone.extension, h.phone.display_name) if p]
+            detail = " · ".join(bits) if bits else ",".join(str(p) for p in h.open_ports)
             status = "[green]ok[/green]"
         else:
             name = h.hostname or "-"

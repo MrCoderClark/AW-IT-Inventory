@@ -22,6 +22,7 @@ from pathlib import Path
 
 from rich.console import Console
 
+from collect_phone import read_phone
 from collect_snmp import collect_printers
 from collect_windows import collect_windows
 from config import Config, load_config
@@ -29,6 +30,7 @@ from creds import resolve_profiles
 from discovery import discover
 from ingest import get_discovery_settings, post_scan
 from models import HostResult, RunReport
+from phone_creds import resolve_phone_credential
 from report import print_summary, write_report
 from cutout_worker import run_cutout_worker
 from worker import run_worker
@@ -67,11 +69,35 @@ def _collect_targets(args: argparse.Namespace) -> list[str]:
     return ordered
 
 
+def _scan_type_flags(
+    args: argparse.Namespace,
+    settings: dict[str, bool],
+    *,
+    explicit_targets: bool,
+) -> tuple[bool, bool, bool]:
+    """``(no_windows, no_printers, no_phones)`` for this run.
+
+    Auto-sweeps (config.yaml networks, no ``--target``) honor the app discovery
+    toggles — phones stay opt-in/off. An explicit ``--target`` / ``--targets-file``
+    is a manual scan of hosts the operator named, so it bypasses the toggles
+    the same way a worker job does (spec 13 AC-4, spec 27). ``--no-*`` CLI flags
+    still narrow either kind of run.
+    """
+    if args.ignore_discovery_settings or explicit_targets:
+        return args.no_windows, args.no_printers, args.no_phones
+    return (
+        args.no_windows or not settings.get("computer", True),
+        args.no_printers or not settings.get("printer", True),
+        args.no_phones or not settings.get("phone", False),
+    )
+
+
 def scan_targets(
     config: Config,
     *,
     no_windows: bool = False,
     no_printers: bool = False,
+    no_phones: bool = False,
     limit: int | None = None,
 ) -> RunReport:
     """Discover and collect the hosts on ``config.networks`` and return a report.
@@ -92,7 +118,30 @@ def scan_targets(
     prn_targets = (
         [] if no_printers else [d for d in discovered if d["device_type"] == "printer"]
     )
+    phn_targets = (
+        [] if no_phones else [d for d in discovered if d["device_type"] == "phone"]
+    )
     other = [d for d in discovered if d["device_type"] == "unknown"]
+
+    skipped: list[str] = []
+    if no_windows:
+        n = sum(1 for d in discovered if d["device_type"] == "windows")
+        if n:
+            skipped.append(f"{n} computer(s)")
+    if no_printers:
+        n = sum(1 for d in discovered if d["device_type"] == "printer")
+        if n:
+            skipped.append(f"{n} printer(s)")
+    if no_phones:
+        n = sum(1 for d in discovered if d["device_type"] == "phone")
+        if n:
+            skipped.append(f"{n} phone(s)")
+    if skipped:
+        console.print(
+            f"[yellow]  skipped {', '.join(skipped)} "
+            "(type switched off — pass --target or --ignore-discovery-settings "
+            "to collect them).[/yellow]"
+        )
 
     hosts: list[HostResult] = []
 
@@ -148,6 +197,45 @@ def scan_targets(
                 )
             )
 
+    # VoIP phones (spec 27): confirm each 443 candidate via its device TLS cert and
+    # read MAC + model — no credentials. A candidate that isn't a Yealink phone is
+    # downgraded to "unknown". read_phone is blocking (TLS + HTTPS), so thread it.
+    if phn_targets:
+        console.print(
+            f"[bold]Phone[/bold] identifying {len(phn_targets)} candidate(s) …"
+        )
+
+        def do_phone(d: dict) -> HostResult:
+            # Phase-2 enrichment runs opportunistically: when the configured
+            # per-phone CSV has a credential for this IP, read_phone logs in
+            # and fills extension/display name/firmware/serial/register. No
+            # credential = phase-1 identity only (MAC + model). Always
+            # outbound, read-only.
+            credential = resolve_phone_credential(config, d["ip"])
+            info = read_phone(
+                d["ip"], config.phone_timeout, credential=credential
+            )
+            errors: list[str] = []
+            # A CSV row was present but the phone rejected the login (wrong
+            # unique admin password, lockout). Phase 1 still identifies it.
+            if credential is not None and (
+                info is None
+                or not (info.extension or info.display_name or info.serial)
+            ):
+                errors.append("phone_login_failed")
+            return HostResult(
+                ip=d["ip"],
+                subnet=d["subnet"],
+                device_type="phone" if info else "unknown",
+                reachable=True,
+                open_ports=d["open_ports"],
+                phone=info,
+                errors=errors,
+            )
+
+        with ThreadPoolExecutor(max_workers=min(config.concurrency, 16)) as pool:
+            hosts.extend(pool.map(do_phone, phn_targets))
+
     for d in other:
         hosts.append(
             HostResult(
@@ -188,31 +276,40 @@ def run_scan(args: argparse.Namespace) -> int:
         )
         return 2
 
-    # Honor the app's discovery type toggles (spec 13), unless this run opts out
-    # with --ignore-discovery-settings (spec 13 follow-up): a one-off host scan
-    # that should not be governed by the app switches. Either way the CLI flags
-    # still apply: --no-windows/--no-printers can narrow the run further. When the
-    # switches are honored, a settings outage falls back to the cache, then to
-    # all-on, so scanning never stops (AC-3, AC-6). Manual worker jobs bypass this.
+    # Honor the app's discovery type toggles (spec 13) on an auto-sweep.
+    # Explicit --target / --targets-file is a manual scan of named hosts, so it
+    # bypasses the toggles the same way worker jobs do (spec 13 AC-4).
+    # --ignore-discovery-settings does the same for a sweep of config networks.
+    # --no-windows / --no-printers / --no-phones still narrow either kind of run.
+    bypass = bool(args.ignore_discovery_settings or targets)
+    if bypass:
+        settings: dict[str, bool] = {}
+        source = "bypassed"
+    else:
+        settings, source = get_discovery_settings(config)
+    no_windows, no_printers, no_phones = _scan_type_flags(
+        args, settings, explicit_targets=bypass
+    )
     if args.ignore_discovery_settings:
-        no_windows = args.no_windows
-        no_printers = args.no_printers
         console.print(
             "[dim]Discovery settings: ignored for this run "
             "(--ignore-discovery-settings); all types on.[/dim]"
         )
+    elif targets:
+        console.print(
+            "[dim]Discovery settings: bypassed (explicit --target, like a "
+            "manual job); all types on.[/dim]"
+        )
     else:
-        settings, source = get_discovery_settings(config)
-        no_windows = args.no_windows or not settings["computer"]
-        no_printers = args.no_printers or not settings["printer"]
         console.print(
             f"[dim]Discovery settings ({source}): "
             f"computers {'on' if settings['computer'] else 'off'}, "
-            f"printers {'on' if settings['printer'] else 'off'}.[/dim]"
+            f"printers {'on' if settings['printer'] else 'off'}, "
+            f"phones {'on' if settings.get('phone') else 'off'}.[/dim]"
         )
-    if no_windows and no_printers:
+    if no_windows and no_printers and no_phones:
         console.print(
-            "[yellow]Both device types are switched off — this sweep will "
+            "[yellow]Every device type is switched off — this sweep will "
             "discover nothing.[/yellow]"
         )
 
@@ -220,6 +317,7 @@ def run_scan(args: argparse.Namespace) -> int:
         config,
         no_windows=no_windows,
         no_printers=no_printers,
+        no_phones=no_phones,
         limit=args.limit,
     )
     saved = write_report(report, config)
@@ -269,6 +367,7 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument("--limit", type=int, help="Cap number of IPs probed (testing)")
     scan.add_argument("--no-windows", action="store_true")
     scan.add_argument("--no-printers", action="store_true")
+    scan.add_argument("--no-phones", action="store_true")
     scan.add_argument(
         "--ingest",
         action="store_true",
@@ -277,9 +376,9 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument(
         "--ignore-discovery-settings",
         action="store_true",
-        help="Ignore the app's Computers/Printers discovery switches for this "
-        "run (a one-off host scan that should not be governed by the app). Still "
-        "narrowed by --no-windows / --no-printers.",
+        help="Ignore the app's Computers/Printers/Phones discovery switches for "
+        "this run. Explicit --target already bypasses them. Still narrowed by "
+        "--no-windows / --no-printers / --no-phones.",
     )
     scan.set_defaults(func=run_scan)
 

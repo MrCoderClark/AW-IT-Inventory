@@ -33,31 +33,35 @@ beforeEach(() => {
 });
 
 describe("getDiscoverySettings — absent row = on (AC-2)", () => {
-  it("defaults every type to on when the table is empty", async () => {
+  it("defaults each type to its default when the table is empty (phones off)", async () => {
     fromMock.mockResolvedValue([]);
     expect(await getDiscoverySettings()).toEqual({
       computer: true,
       printer: true,
+      phone: false, // VoIP phones are opt-in (spec 27)
     });
   });
 
-  it("returns a saved false and coalesces the missing type to on", async () => {
-    // covers: AC-2 — only `printer` has a row; `computer` coalesces to true.
+  it("returns a saved false and coalesces the missing types to their default", async () => {
+    // covers: AC-2 — only `printer` has a row; `computer` → true, `phone` → false.
     fromMock.mockResolvedValue([{ deviceType: "printer", enabled: false }]);
     expect(await getDiscoverySettings()).toEqual({
       computer: true,
       printer: false,
+      phone: false,
     });
   });
 
-  it("reflects both saved rows", async () => {
+  it("reflects saved rows (incl. phone turned on)", async () => {
     fromMock.mockResolvedValue([
       { deviceType: "computer", enabled: false },
       { deviceType: "printer", enabled: false },
+      { deviceType: "phone", enabled: true },
     ]);
     expect(await getDiscoverySettings()).toEqual({
       computer: false,
       printer: false,
+      phone: true,
     });
   });
 });
@@ -79,7 +83,7 @@ describe("setDiscoveryToggle — upsert (AC-1)", () => {
 describe("isDiscoveryType", () => {
   it("accepts the known types and rejects anything else", () => {
     for (const t of DISCOVERY_TYPES) expect(isDiscoveryType(t)).toBe(true);
-    expect(isDiscoveryType("phone")).toBe(false);
+    expect(isDiscoveryType("router")).toBe(false);
     expect(isDiscoveryType(null)).toBe(false);
     expect(isDiscoveryType(3)).toBe(false);
   });

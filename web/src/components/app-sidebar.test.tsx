@@ -36,6 +36,15 @@ beforeEach(() => {
   permsRef.current = [...ALL_PERMS];
 });
 
+describe("AppSidebar — brand (AC-1.3)", () => {
+  it("renders the public H2Tecs logo linking to the dashboard", () => {
+    render(<AppSidebar />);
+    const logo = screen.getByRole("img", { name: "H2Tecs IT Inventory" });
+    expect(logo).toHaveAttribute("src", "/h2tecs-logo.svg");
+    expect(logo.closest("a")).toHaveAttribute("href", "/dashboard");
+  });
+});
+
 describe("AppSidebar — nav links (AC-1.3)", () => {
   it("renders the primary and asset nav links with their hrefs", () => {
     render(<AppSidebar />);
