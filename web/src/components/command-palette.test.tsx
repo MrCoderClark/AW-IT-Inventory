@@ -32,6 +32,7 @@ describe("command palette navigation gating", () => {
       expect.arrayContaining([
         "Admin",
         "Software Library",
+        "Scripts",
         "Scans",
         "People",
         "Media",
@@ -52,6 +53,7 @@ describe("command palette navigation gating", () => {
       "Roles",
       "Notifications",
       "Software Library",
+      "Scripts",
       "Scans",
       "Scan Jobs",
       "People",
@@ -66,5 +68,6 @@ describe("command palette navigation gating", () => {
     expect(l).toEqual(expect.arrayContaining(["Scans", "Scan Jobs"]));
     expect(l).not.toContain("Admin");
     expect(l).not.toContain("Software Library");
+    expect(l).not.toContain("Scripts");
   });
 });

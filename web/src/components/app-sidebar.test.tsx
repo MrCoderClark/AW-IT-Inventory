@@ -83,6 +83,7 @@ describe("AppSidebar — permission gating (RBAC audit)", () => {
     expect(
       screen.getByRole("link", { name: "Software Library" }),
     ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Scripts" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Scans" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Alert rules" })).toHaveAttribute(
       "href",
@@ -102,15 +103,17 @@ describe("AppSidebar — permission gating (RBAC audit)", () => {
     expect(
       screen.getByRole("link", { name: "Software Library" }),
     ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Scripts" })).toBeInTheDocument();
   });
 
   it("hides elevated items from a read-only viewer (asset:read only)", () => {
     permsRef.current = ["asset:read", "report:read"];
     render(<AppSidebar />);
-    // People & Media need asset:write; Software Library software:deploy; Scans scan:read.
+    // People & Media need asset:write; Software Library / Scripts software:deploy; Scans scan:read.
     expect(screen.queryByRole("link", { name: "People" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Media" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Software Library" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Scripts" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Scans" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Scan Jobs" })).toBeNull();
     // Baseline (asset:read) Manage items the viewer keeps.
