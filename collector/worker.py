@@ -587,6 +587,116 @@ def _drain_patch_install(config: Config, tokens: "TokenCache", worker_id: str) -
         _run_patch_install_job(config, tokens, worker_id, job)
 
 
+def _claim_missing_check(config: Config, token: str, worker_id: str) -> dict | None:
+    """Claim one pending one-host missing Search (spec 31 AC-21), or None."""
+    resp = httpx.post(
+        f"{config.ingest_url}/api/missing-update-checks/claim",
+        json={"workerId": worker_id},
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=30,
+    )
+    if resp.status_code == 204:
+        return None
+    if resp.status_code != 200:
+        raise RuntimeError(
+            f"missing-check claim failed ({resp.status_code}): {resp.text[:200]}"
+        )
+    return resp.json()
+
+
+def _post_missing_check_status(
+    config: Config,
+    token: str,
+    job_id: str,
+    worker_id: str,
+    claimed_at: str,
+    status: str,
+    *,
+    error: str | None = None,
+) -> bool:
+    body: dict = {"workerId": worker_id, "claimedAt": claimed_at, "status": status}
+    if error is not None:
+        body["error"] = error
+    resp = httpx.post(
+        f"{config.ingest_url}/api/missing-update-checks/{job_id}/status",
+        json=body,
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=60,
+    )
+    if resp.status_code == 409:
+        console.print(
+            f"  [yellow]claim lost[/yellow] on missing-check {job_id}; dropping."
+        )
+        return False
+    if resp.status_code != 200:
+        raise RuntimeError(
+            f"missing-check status failed ({resp.status_code}): {resp.text[:200]}"
+        )
+    return True
+
+
+def _run_missing_check_job(
+    config: Config, tokens: "TokenCache", worker_id: str, job: dict
+) -> None:
+    from collect_missing_updates import search_one_host
+
+    job_id = job["id"]
+    claimed_at = job["claimedAt"]
+    target = job.get("assetTag") or job.get("targetIp")
+    console.print(f"[bold]Check updates[/bold] {job_id} on {target} …")
+
+    if not _post_missing_check_status(
+        config, tokens.get(), job_id, worker_id, claimed_at, "running"
+    ):
+        return
+
+    try:
+        ok, err = search_one_host(
+            config,
+            tokens.get(),
+            asset_id=job["assetId"],
+            ip=job["targetIp"],
+        )
+    except Exception as e:  # noqa: BLE001
+        console.print(f"  [red]missing-check failed:[/red] {e}")
+        _post_missing_check_status(
+            config,
+            tokens.get(),
+            job_id,
+            worker_id,
+            claimed_at,
+            "failed",
+            error=str(e)[:800],
+        )
+        return
+
+    if ok:
+        if _post_missing_check_status(
+            config, tokens.get(), job_id, worker_id, claimed_at, "succeeded"
+        ):
+            console.print("  [green]done[/green] — Search recorded.")
+    else:
+        _post_missing_check_status(
+            config,
+            tokens.get(),
+            job_id,
+            worker_id,
+            claimed_at,
+            "failed",
+            error=(err or "Search failed")[:800],
+        )
+        console.print(f"  [red]failed:[/red] {err}")
+
+
+def _drain_missing_checks(config: Config, tokens: "TokenCache", worker_id: str) -> None:
+    """Process one-host Check for updates jobs (spec 31 AC-21)."""
+    while True:
+        job = _claim_missing_check(config, tokens.get(), worker_id)
+        if job is None:
+            return
+        _run_missing_check_job(config, tokens, worker_id, job)
+
+
 def _claim_remote(config: Config, token: str, worker_id: str) -> dict | None:
     """Claim one pending remote terminal session (spec 24), or None."""
     resp = httpx.post(
@@ -975,8 +1085,9 @@ def run_worker(args: argparse.Namespace) -> int:
                 if now - last_deploy >= deploy_poll:
                     last_deploy = now
                     _drain_deploy(config, tokens, worker_id)
-                    # Spec 31 phase 3: same poll cadence as software deploy.
+                    # Spec 31: patch install + one-host Check for updates.
                     _drain_patch_install(config, tokens, worker_id)
+                    _drain_missing_checks(config, tokens, worker_id)
                 if cutout_enabled and now - last_cutout >= cutout_poll:
                     last_cutout = now
                     _drain_cutout(config, tokens, worker_id)

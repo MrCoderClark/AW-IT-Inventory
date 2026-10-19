@@ -232,6 +232,14 @@ export async function getAssetsByType(
       if (p !== undefined) a.pageCount = p;
     }
   }
+  // Computers: pending-reboot badge from patch inventory (spec 31 AC-22).
+  if (type === "Computer" && list.length > 0) {
+    const { getPendingRebootMap } = await import("@/db/missing-update-checks");
+    const reboot = await getPendingRebootMap();
+    for (const a of list) {
+      if (reboot[a.id]) a.pendingReboot = true;
+    }
+  }
   return list;
 }
 

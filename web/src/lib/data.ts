@@ -78,6 +78,8 @@ export interface Asset {
   // Printer latest total page (life) counter (spec 14), set only on printer rows
   // that have a counter reading; absent/null means no reading yet.
   pageCount?: number | null;
+  // Computer pending reboot from patch inventory (spec 31 AC-22).
+  pendingReboot?: boolean;
 }
 
 /* ---------------- Printer reachability (spec 12) ---------------- */

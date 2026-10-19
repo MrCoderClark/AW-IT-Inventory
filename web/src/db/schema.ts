@@ -1387,6 +1387,50 @@ export const patchInstallJobs = pgTable(
 
 export type PatchInstallJobRow = typeof patchInstallJobs.$inferSelect;
 
+// One-host missing-update Search (spec 31 phase 4 closeout). Same claim shape as
+// patch install; runs PS_MISSING_UPDATES then posts /api/ingest/missing-updates.
+export const missingUpdateChecks = pgTable(
+  "missing_update_checks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    targetIp: text("target_ip").notNull(),
+    status: text("status")
+      .$type<
+        "pending" | "claimed" | "running" | "succeeded" | "failed" | "canceled"
+      >()
+      .notNull()
+      .default("pending"),
+    requestedBy: text("requested_by").notNull(),
+    workerId: text("worker_id"),
+    error: text("error"),
+    requestedAt: timestamp("requested_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("missing_update_checks_pending_idx")
+      .on(t.status, t.requestedAt)
+      .where(sql`${t.status} = 'pending'`),
+    index("missing_update_checks_inflight_idx")
+      .on(t.assetId)
+      .where(sql`${t.status} in ('pending','claimed','running')`),
+  ],
+);
+
+export type MissingUpdateCheckRow = typeof missingUpdateChecks.$inferSelect;
+
 // Connected displays per Computer (spec 25). Current state, fully replaced per scan
 // (like installed_software); `serial` keys the read-time join to Monitor assets.
 export const connectedMonitors = pgTable(

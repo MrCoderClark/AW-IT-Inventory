@@ -3,6 +3,10 @@
 import { revalidatePath } from "next/cache";
 
 import {
+  enqueueMissingUpdateCheck,
+  resolveDeployTarget as resolveCheckTarget,
+} from "@/db/missing-update-checks";
+import {
   buildPatchSelection,
   cancelPatchInstall,
   enqueuePatchInstall,
@@ -104,4 +108,40 @@ export async function requestCancelPatchInstall(input: {
 
   revalidatePath(`/assets/${input.assetTag}`);
   return { ok: true };
+}
+
+/** One-host missing Search (spec 31 AC-21). */
+export async function requestMissingUpdateCheck(input: {
+  assetTag: string;
+}): Promise<ActionOk | ActionErr> {
+  const user = await getCurrentUser();
+  if (!user || !hasPermission(user, "software:deploy")) return FORBIDDEN;
+
+  const tag = (input.assetTag ?? "").trim();
+  if (!tag) return { ok: false, error: "Missing asset.", code: "badrequest" };
+
+  const target = await resolveCheckTarget(tag);
+  if (!target) {
+    return {
+      ok: false,
+      error: "Computer needs an IP address before updates can be checked.",
+      code: "badrequest",
+    };
+  }
+
+  const enq = await enqueueMissingUpdateCheck({
+    assetId: target.assetId,
+    targetIp: target.ip,
+    requestedBy: user.email,
+  });
+  if (!enq.ok) {
+    return {
+      ok: false,
+      error: "A Check for updates is already in progress on this computer.",
+      code: "conflict",
+    };
+  }
+
+  revalidatePath(`/assets/${tag}`);
+  return { ok: true, id: enq.id };
 }
