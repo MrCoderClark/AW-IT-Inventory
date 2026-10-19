@@ -27,11 +27,10 @@ model, auth, and every screen:
 | Scope of PSA | light/none (internal) | ticketing + billing + contracts + portal |
 | Effort | incremental, builds on today | a large re-architecture before features |
 
-**Recommendation to decide (not yet decided):** **A — internal-IT RMM.** It builds
-directly on everything shipped, delivers the high-value RMM capabilities fast, and
-avoids a multi-month tenancy re-architecture. Revisit B only if H2Tecs is meant to
-become a product sold to other orgs. *The rest of this roadmap assumes A; call this
-out explicitly if B is chosen, since it reorders everything.*
+**DECIDED: A — internal-IT RMM** (single-org, on-prem). Builds directly on everything
+shipped and avoids a tenancy re-architecture; revisit B only if H2Tecs is ever sold to
+other orgs. **Priority DECIDED: the RMM core first** — Spec 29 (metric monitoring) →
+Spec 30 (alerting), ahead of ticketing.
 
 ## Capability matrix: Atera → what we have → the gap
 
@@ -82,9 +81,8 @@ giant spec; we need this roadmap plus small, shippable specs in sequence.
 
 ## Open questions (answer before spec 29)
 
-- **The fork:** A (internal-IT RMM) or B (MSP multi-tenant)? Everything below assumes A.
-- Which capability is the **actual priority** — monitoring/alerting (RMM core) or
-  **ticketing** (helpdesk)? That reorders the list.
+- ~~The fork: A or B?~~ **DECIDED: A (internal-IT RMM).**
+- ~~Priority: monitoring/alerting vs ticketing?~~ **DECIDED: RMM core first (spec 29 → 30).**
 - Retention/scale: metric history on ~hundreds of devices — sampling cadence +
   retention window (ties into whether SQL push-down from spec 26 is needed).
 - Agentless vs. agent: richer real-time monitoring may eventually want a light agent;
