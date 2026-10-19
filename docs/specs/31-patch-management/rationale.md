@@ -63,7 +63,17 @@ API.
 
 That signal is the health *score* input and already pages via the compliance
 rubric. The KB list is a different question ("which updates"). `/patches` can
-show both. Filling `updates_pending` waits for a trusted Search (phase 2).
+show both. Filling `updates_pending` is phase 2 (WUA Search on a dedicated
+daily job — never on the full scan).
+
+## Why a dedicated daily Search loop, not Scan now / computer sweep?
+
+`Search("IsInstalled=0")` talks to WSUS/Windows Update and is the same class of
+hang that forced WUA *history* into a 10s job on posture. Putting it on every
+hardware collect would make "Scan now" unreliable. A metrics-shaped worker pass
+with a **120s** per-host cap and a **24h** default interval keeps inventory fresh
+enough for patches without a WinRM storm. Manual Scan stays fast; install (phase 3)
+can still trigger a fresh Search for one host later if we need it.
 
 ## Why current-state, no hotfix history?
 

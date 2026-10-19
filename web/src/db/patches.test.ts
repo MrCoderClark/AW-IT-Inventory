@@ -80,10 +80,11 @@ vi.mock("@/db/index", () => ({
 
 import {
   upsertWindowsUpdates,
+  replaceMissingUpdates,
   getComputerPatches,
   getFleetPatches,
 } from "./patches";
-import { appUpgrades, windowsHotfixes } from "./schema";
+import { appUpgrades, windowsHotfixes, windowsMissingUpdates } from "./schema";
 
 const ASSET = "0959927f-1046-4582-9a70-60a4175f206b";
 const NOW = new Date("2026-10-19T16:00:00Z");
@@ -223,6 +224,49 @@ describe("upsertWindowsUpdates", () => {
   });
 });
 
+describe("replaceMissingUpdates", () => {
+  it("replaces missing rows, collapses dupes, and sets missingCount", async () => {
+    await replaceMissingUpdates(
+      ASSET,
+      [
+        {
+          kb: "KB5034441",
+          title: "Security Update",
+          severity: "Critical",
+          size_bytes: 1024,
+        },
+        { kb: "KB5034441", title: "dup" },
+        { kb: "  ", title: "blank" },
+        { kb: "guid-1", title: "No KB id", severity: null, size_bytes: null },
+      ],
+      NOW,
+    );
+
+    expect(insertsFor(windowsMissingUpdates)).toEqual([
+      {
+        assetId: ASSET,
+        kbId: "KB5034441",
+        title: "Security Update",
+        severity: "Critical",
+        sizeBytes: 1024,
+      },
+      {
+        assetId: ASSET,
+        kbId: "guid-1",
+        title: "No KB id",
+        severity: null,
+        sizeBytes: null,
+      },
+    ]);
+    expect(H.state.conflictSets[0]).toMatchObject({
+      missingCount: 2,
+      missingCollectedAt: NOW,
+    });
+    // compliance updates_pending also written
+    expect(H.state.conflictSets[1]).toMatchObject({ updatesPending: 2 });
+  });
+});
+
 describe("getComputerPatches", () => {
   it("returns null when this machine has never returned a hotfix collect", async () => {
     H.state.selectResults = [[]];
@@ -239,6 +283,8 @@ describe("getComputerPatches", () => {
           wingetDetail: null,
           appUpgradeCount: 1,
           collectedAt: NOW,
+          missingCount: 1,
+          missingCollectedAt: NOW,
           updatesLastDays: 9,
         },
       ],
@@ -258,6 +304,14 @@ describe("getComputerPatches", () => {
           source: "winget",
         },
       ],
+      [
+        {
+          kbId: "KB999",
+          title: "Missing Security Update",
+          severity: "Important",
+          sizeBytes: 2048,
+        },
+      ],
     ];
     const got = await getComputerPatches("PC1");
     expect(got).toMatchObject({
@@ -266,6 +320,7 @@ describe("getComputerPatches", () => {
       wingetAvailable: true,
       appUpgradeCount: 1,
       updatesLastDays: 9,
+      missingCount: 1,
       hotfixes: [
         {
           hotfixId: "KB5034441",
@@ -280,6 +335,14 @@ describe("getComputerPatches", () => {
           version: "128.0",
           available: "129.0",
           source: "winget",
+        },
+      ],
+      missing: [
+        {
+          kbId: "KB999",
+          title: "Missing Security Update",
+          severity: "Important",
+          sizeBytes: 2048,
         },
       ],
     });
@@ -298,6 +361,7 @@ describe("getFleetPatches", () => {
           hotfixCount: 3,
           wingetAvailable: false,
           appUpgradeCount: 0,
+          missingCount: 5,
           collectedAt: NOW,
           updatesLastDays: 40,
         },
@@ -308,6 +372,7 @@ describe("getFleetPatches", () => {
           hotfixCount: null,
           wingetAvailable: null,
           appUpgradeCount: null,
+          missingCount: null,
           collectedAt: null,
           updatesLastDays: null,
         },
@@ -320,11 +385,13 @@ describe("getFleetPatches", () => {
       pendingReboot: true,
       updatesLastDays: 40,
       wingetAvailable: false,
+      missingCount: 5,
     });
     expect(rows[1]).toMatchObject({
       tag: "B",
       collectedAt: null,
       hotfixCount: 0,
+      missingCount: 0,
     });
   });
 });

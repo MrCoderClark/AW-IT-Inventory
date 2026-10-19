@@ -218,9 +218,8 @@ No new ingest route.
 ## Phases / build plan
 
 1. **Inventory** — `PS_UPDATES` + optional `PS_APP_UPGRADES` (ensure winget +
-   list), tables, ingest, Updates tab, `/patches`. **AC-1–9.** *(Needs `db:push`.)*
-2. **OS missing** — time-boxed WUA `Search("IsInstalled=0")` on a **dedicated**
-   worker job (not the full scan), store missing KBs + fill `updates_pending`.
+   list), tables, ingest, Updates tab, `/patches`. **AC-1–9.** ✅ shipped.
+2. **OS missing (this branch)** — see **Phase 2** below. **AC-10–14.**
 3. **Install** — approve selected OS KBs (WUA Download/Install or spec-23 `.msu`)
    and/or selected winget ids (`winget upgrade --id … --silent
    --accept-package-agreements --accept-source-agreements --disable-interactivity`,
@@ -228,6 +227,84 @@ No new ingest route.
    credentials in the job row. Notify like a software deploy.
 4. **Later:** WSUS/target-group scoping; fold "pending reboot" / "N app upgrades"
    into spec 30 as built-in rules.
+
+## Phase 2 — Missing OS updates (WUA Search)
+
+Phase 1 answers "what's installed / reboot needed / app upgrades." Phase 2 answers
+**which OS updates are missing** without putting `Microsoft.Update.Session.Search`
+on the full computer scan (that hangs; we already isolate WUA *history* in a 10s
+job on posture).
+
+### Decision
+
+**Dedicated worker loop** (same shape as spec 29 metrics): for each known Computer
+with an IP, one time-boxed WinRM script that runs WUA
+`Search("IsInstalled=0")`, posts missing KBs + count. **Not** on `PS_COLLECT` /
+`PS_UPDATES`. Cadence is **daily** by default (`missing_patch_interval_hours: 24`,
+`0` = off) — Search talks to WSUS/WU and is expensive; hourly is wrong. Manual
+"Scan now" does **not** trigger Search in phase 2 (keeps Scan snappy); a later
+optional "Check for updates" button can enqueue one host.
+
+### Requirements (phase 2)
+
+- **AC-10**: The collector worker runs a scheduled missing-patch pass over every
+  computer target (same target list as metrics / computer sweep). Per host: WinRM
+  `PS_MISSING_UPDATES` creates `Microsoft.Update.Session`,
+  `CreateUpdateSearcher().Search("IsInstalled=0")`, returns
+  `{ missing: [{ kb, title, severity, size_bytes }], count }` (KB from
+  `KBArticleIDs` / title parse; severity from `MsrcSeverity` when present). Whole
+  script wall-clock capped (`missing_patch_timeout`, default **120s**). Timeout /
+  COM failure → skip that host (prior missing rows stay); never fail the loop.
+- **AC-11**: Web stores current state: replace `windows_missing_updates` for the
+  matched Computer; set `windows_update_state.missing_count` + `missing_collected_at`;
+  set `compliance_status.updates_pending` to the count (so compliance / reports
+  finally see a real pending number). Unmatched IPs do not write. Best-effort ingest.
+- **AC-12**: Updates tab gains a **Missing** section (KB, title, severity) above or
+  beside installed KBs. Empty = none missing or never searched. `/patches` gains a
+  tile + column for **OS updates missing** (count).
+- **AC-13**: Still **no install** in phase 2 (AC-6 unchanged). Search is read-only
+  against the update service; it does not download or install.
+- **AC-14**: Config: `missing_patch_interval_hours` (default 24, 0 = off),
+  `missing_patch_timeout` (default 120). No new RBAC / service scope — rides
+  existing scan/ingest credentials (`ingest:write` / computer target read).
+
+### Data model (additive)
+
+```
+windows_update_state  (extend)
+  missing_count          integer not null default 0
+  missing_collected_at   timestamptz | null
+
+windows_missing_updates
+  asset_id      uuid → assets.id (cascade)
+  kb_id         text not null      -- KBnnnnnn when known; else a stable title hash/id
+  title         text not null
+  severity      text               -- Critical | Important | … | null
+  size_bytes    bigint | null
+  primary key (asset_id, kb_id)
+```
+
+`compliance_status.updates_pending` is written on successful Search ingest (integer
+≥ 0). A failed/skipped Search does **not** null it out.
+
+### Collector sketch
+
+`collect_missing_updates.py` (metrics twin): fetch computer targets → thread pool →
+per-IP `PS_MISSING_UPDATES` via `_run_ps_timeout` → `POST /api/ingest/missing-updates`
+(or additive fields on an existing ingest if cleaner). Worker schedules
+`hours=missing_patch_interval_hours`. Startup log: `missing-patches every 24h`.
+
+Honest limits: Search needs network to WSUS/WU; offline / blocked hosts stay at
+prior state. Some updates have no KB id (store title-derived key). Driver-only /
+optional updates may appear depending on Search criteria — v1 uses
+`IsInstalled=0` only (no `IsHidden=0` filter unless we learn we need it).
+
+### UI
+
+- Computer **Updates** → Missing table + count badge.
+- `/patches` → tile "OS updates missing" + table column.
+- Compliance score rubric unchanged in phase 2 (still ages on `updates_last_days`);
+  filling `updates_pending` unlocks a later score tweak if we want it.
 
 ## Consequences
 
@@ -241,15 +318,17 @@ No new ingest route.
 
 - **Install permission:** reuse `software:deploy` vs add `patch:write`. Reuse
   unless Owner/Admin need to deploy software but not OS patches (unlikely here).
-- **Search cadence:** phase 2 — on the computer sweep vs a slower dedicated
-  interval (e.g. daily) because Search is expensive.
-- **Win10/11 QFE vs DISM packages:** if QFE is too thin on the fleet, phase 2
-  can switch the installed list to `Get-WindowsPackage -Online` (heavier).
+- **Search cadence:** ✅ phase 2 — dedicated daily interval (not on computer sweep /
+  not on Scan now).
+- **Win10/11 QFE vs DISM packages:** if QFE is too thin on the fleet, a later
+  pass can switch the *installed* list to `Get-WindowsPackage -Online` (heavier).
 - **Auto-reboot after install:** phase 3 default should be **no** (`/norestart`
   / WUA AllowCrashes semantics); an explicit "reboot when done" flag later.
 - **Winget bootstrap vs GPO:** some fleets block Store / App Installer. Fail
   soft (AC-9) rather than fighting policy; `collect_app_upgrades: false` turns
   the whole app path off.
+- **Search criteria:** start with `IsInstalled=0` only; add `IsHidden=0` /
+  exclude drivers if the fleet list is too noisy.
 
 ## Related
 

@@ -189,3 +189,9 @@ collect_app_upgrades: true
 # Wall-clock cap (seconds) on the winget script. Bootstrap can download App
 # Installer, so this is longer than winrm_timeout.
 app_upgrade_timeout: 60
+
+# Missing OS updates via WUA Search (spec 31 phase 2). Dedicated worker loop
+# (not on Scan now). Hours between fleet passes; 0 = off. Default daily.
+missing_patch_interval_hours: 24
+# Wall-clock cap (seconds) per host for Search — WU/WSUS can be slow.
+missing_patch_timeout: 120

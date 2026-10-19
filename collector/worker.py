@@ -625,6 +625,15 @@ def _build_scheduler(config: Config, tokens: "TokenCache"):
             console.print(f"  [red]metrics job error:[/red] {e}")
             tokens.invalidate()
 
+    def missing_patches_job() -> None:
+        try:
+            from collect_missing_updates import sample_missing_updates
+
+            sample_missing_updates(config, tokens.get())
+        except Exception as e:  # noqa: BLE001 — must never kill the scheduler
+            console.print(f"  [red]missing-patches job error:[/red] {e}")
+            tokens.invalidate()
+
     scheduled: list[str] = []
     for t in config.schedule_times:
         try:
@@ -742,6 +751,21 @@ def _build_scheduler(config: Config, tokens: "TokenCache"):
         )
         metrics_scheduled = f"every {config.metric_sample_interval_minutes}m"
 
+    # Missing OS updates via WUA Search (spec 31 phase 2). Dedicated loop — not on
+    # the full scan. Hours between fleet passes; 0 = off. Default daily.
+    missing_scheduled = "off"
+    if config.missing_patch_interval_hours > 0:
+        scheduler.add_job(
+            missing_patches_job,
+            IntervalTrigger(
+                hours=config.missing_patch_interval_hours, timezone=tz
+            ),
+            id="missing-patches",
+            replace_existing=True,
+            misfire_grace_time=3600,
+        )
+        missing_scheduled = f"every {config.missing_patch_interval_hours}h"
+
     zone = config.schedule_timezone or "host local"
     console.print(
         f"[bold]Reachability schedule[/bold] ({zone}): "
@@ -750,7 +774,8 @@ def _build_scheduler(config: Config, tokens: "TokenCache"):
         f"computer sweep {', '.join(sweep_scheduled) if sweep_scheduled else 'off'} · "
         f"warranty sweep {', '.join(warranty_scheduled) if warranty_scheduled else 'off'} · "
         f"report delivery {delivery_scheduled} · "
-        f"metrics {metrics_scheduled}."
+        f"metrics {metrics_scheduled} · "
+        f"missing-patches {missing_scheduled}."
     )
     return scheduler
 
