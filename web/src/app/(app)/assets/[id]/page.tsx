@@ -11,6 +11,8 @@ import { getDeviceMetrics } from "@/db/metrics";
 import { getComputerPatches } from "@/db/patches";
 import { listMissingUpdateChecksForAssetTag } from "@/db/missing-update-checks";
 import { listPatchInstallsForAssetTag } from "@/db/patch-install";
+import { listScriptRunsForAssetTag } from "@/db/script-runs";
+import { listScripts } from "@/db/scripts";
 import { getPrinterCounters } from "@/db/counters";
 import { getInstalledSoftware } from "@/db/software";
 import {
@@ -106,6 +108,8 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
       checkJobs,
       deployPkgs,
       deployHistoryRows,
+      scriptRows,
+      scriptRunRows,
       remoteSessions,
       monitors,
       metrics,
@@ -127,6 +131,8 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
       canDeploy ? listMissingUpdateChecksForAssetTag(id) : Promise.resolve([]),
       canDeploy ? listSoftwarePackages() : Promise.resolve([]),
       canDeploy ? listDeploymentsForAssetTag(id) : Promise.resolve([]),
+      canDeploy ? listScripts() : Promise.resolve([]),
+      canDeploy ? listScriptRunsForAssetTag(id) : Promise.resolve([]),
       canRemote ? listRemoteSessionsForAsset(id) : Promise.resolve([]),
       getConnectedMonitors(id),
       getDeviceMetrics(id),
@@ -200,6 +206,12 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
         checkJobs={checkJobs}
         deployPackages={deployPackages}
         deployHistory={deployHistory}
+        scriptOptions={scriptRows.map((s) => ({
+          id: s.id,
+          name: s.name,
+          timeoutSeconds: s.timeoutSeconds,
+        }))}
+        scriptRuns={scriptRunRows}
         metrics={metrics}
       />
     );

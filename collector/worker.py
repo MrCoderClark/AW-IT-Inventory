@@ -697,6 +697,107 @@ def _drain_missing_checks(config: Config, tokens: "TokenCache", worker_id: str) 
         _run_missing_check_job(config, tokens, worker_id, job)
 
 
+def _claim_script_run(config: Config, token: str, worker_id: str) -> dict | None:
+    """Claim one pending script-run job (spec 32), or None."""
+    resp = httpx.post(
+        f"{config.ingest_url}/api/script-runs/claim",
+        json={"workerId": worker_id},
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=30,
+    )
+    if resp.status_code == 204:
+        return None
+    if resp.status_code != 200:
+        raise RuntimeError(
+            f"script-run claim failed ({resp.status_code}): {resp.text[:200]}"
+        )
+    return resp.json()
+
+
+def _post_script_run_status(
+    config: Config,
+    token: str,
+    job_id: str,
+    worker_id: str,
+    claimed_at: str,
+    status: str,
+    *,
+    result: dict | None = None,
+    error: str | None = None,
+) -> bool:
+    body: dict = {"workerId": worker_id, "claimedAt": claimed_at, "status": status}
+    if result is not None:
+        body["result"] = result
+    if error is not None:
+        body["error"] = error
+    resp = httpx.post(
+        f"{config.ingest_url}/api/script-runs/{job_id}/status",
+        json=body,
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=60,
+    )
+    if resp.status_code == 409:
+        console.print(
+            f"  [yellow]claim lost[/yellow] on script-run {job_id}; dropping."
+        )
+        return False
+    if resp.status_code != 200:
+        raise RuntimeError(
+            f"script-run status failed ({resp.status_code}): {resp.text[:200]}"
+        )
+    return True
+
+
+def _run_script_run_job(
+    config: Config, tokens: "TokenCache", worker_id: str, job: dict
+) -> None:
+    from script_run import run_script_job
+
+    job_id = job["id"]
+    claimed_at = job["claimedAt"]
+    snap = job.get("scriptSnapshot") or {}
+    target = job.get("assetTag") or job.get("targetIp")
+    console.print(
+        f"[bold]Script[/bold] {job_id}: '{snap.get('name')}' on {target} …"
+    )
+
+    if not _post_script_run_status(
+        config, tokens.get(), job_id, worker_id, claimed_at, "running"
+    ):
+        return
+
+    try:
+        status, result = run_script_job(config, job)
+    except Exception as e:  # noqa: BLE001
+        console.print(f"  [red]script-run failed:[/red] {e}")
+        _post_script_run_status(
+            config,
+            tokens.get(),
+            job_id,
+            worker_id,
+            claimed_at,
+            "failed",
+            error=str(e)[:800],
+        )
+        return
+
+    if _post_script_run_status(
+        config, tokens.get(), job_id, worker_id, claimed_at, status, result=result
+    ):
+        console.print(
+            f"  [green]done[/green] — {status} (exit {result.get('exitCode')})."
+        )
+
+
+def _drain_script_runs(config: Config, tokens: "TokenCache", worker_id: str) -> None:
+    """Process pending script-run jobs (spec 32)."""
+    while True:
+        job = _claim_script_run(config, tokens.get(), worker_id)
+        if job is None:
+            return
+        _run_script_run_job(config, tokens, worker_id, job)
+
+
 def _claim_remote(config: Config, token: str, worker_id: str) -> dict | None:
     """Claim one pending remote terminal session (spec 24), or None."""
     resp = httpx.post(
@@ -1085,9 +1186,10 @@ def run_worker(args: argparse.Namespace) -> int:
                 if now - last_deploy >= deploy_poll:
                     last_deploy = now
                     _drain_deploy(config, tokens, worker_id)
-                    # Spec 31: patch install + one-host Check for updates.
+                    # Spec 31/32: patch install, Check for updates, script runs.
                     _drain_patch_install(config, tokens, worker_id)
                     _drain_missing_checks(config, tokens, worker_id)
+                    _drain_script_runs(config, tokens, worker_id)
                 if cutout_enabled and now - last_cutout >= cutout_poll:
                     last_cutout = now
                     _drain_cutout(config, tokens, worker_id)

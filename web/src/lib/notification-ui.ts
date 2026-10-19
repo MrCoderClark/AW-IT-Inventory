@@ -8,6 +8,7 @@ import {
   ScanLine,
   ShieldAlert,
   ShieldCheck,
+  TerminalSquare,
   type LucideIcon,
 } from "lucide-react";
 
@@ -26,6 +27,8 @@ export const NOTIFICATION_ICON: Record<NotificationType, LucideIcon> = {
   "software-deploy-failed": Boxes,
   "patch-install": RefreshCw,
   "patch-install-failed": RefreshCw,
+  "script-run": TerminalSquare,
+  "script-run-failed": TerminalSquare,
   "compliance-at-risk": ShieldAlert,
   "compliance-recovered": ShieldCheck,
   "metric-threshold": Activity,
@@ -46,6 +49,8 @@ export const NOTIFICATION_TYPE_LABEL: Record<NotificationType, string> = {
   "software-deploy-failed": "Software deploy failed",
   "patch-install": "Patch install",
   "patch-install-failed": "Patch install failed",
+  "script-run": "Script ran",
+  "script-run-failed": "Script failed",
   "compliance-at-risk": "Compliance at risk",
   "compliance-recovered": "Compliance recovered",
   "metric-threshold": "Metric threshold",

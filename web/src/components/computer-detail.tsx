@@ -80,6 +80,11 @@ import {
   type DeployHistoryItem,
   type DeployPackageOption,
 } from "@/components/software-deploy-panel";
+import {
+  ScriptRunPanel,
+  type ScriptOption,
+} from "@/components/script-run-panel";
+import type { ScriptRunListItem } from "@/db/script-runs";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -160,6 +165,8 @@ export function ComputerDetail({
   checkJobs = [],
   deployPackages = [],
   deployHistory = [],
+  scriptOptions = [],
+  scriptRuns = [],
   metrics = { points: [], latest: null },
 }: {
   asset: Asset;
@@ -187,6 +194,8 @@ export function ComputerDetail({
   checkJobs?: MissingCheckListItem[];
   deployPackages?: DeployPackageOption[];
   deployHistory?: DeployHistoryItem[];
+  scriptOptions?: ScriptOption[];
+  scriptRuns?: ScriptRunListItem[];
   metrics?: DeviceMetrics;
 }) {
   const router = useRouter();
@@ -711,6 +720,20 @@ export function ComputerDetail({
               assetTag={asset.id}
               packages={deployPackages}
               initialHistory={deployHistory}
+            />
+          )}
+          {canDeploy && (
+            <ScriptRunPanel
+              assetTag={asset.id}
+              scripts={scriptOptions}
+              initialHistory={scriptRuns}
+              hasIp={
+                !!(
+                  details &&
+                  typeof details.ipAddress === "string" &&
+                  details.ipAddress
+                )
+              }
             />
           )}
         </TabsPanel>

@@ -984,6 +984,8 @@ export const notifications = pgTable(
         | "software-deploy-failed"
         | "patch-install"
         | "patch-install-failed"
+        | "script-run"
+        | "script-run-failed"
         | "compliance-at-risk"
         | "compliance-recovered"
         | "metric-threshold"
@@ -1430,6 +1432,88 @@ export const missingUpdateChecks = pgTable(
 );
 
 export type MissingUpdateCheckRow = typeof missingUpdateChecks.$inferSelect;
+
+// Script library + run queue (spec 32). Saved PowerShell; run-now on one Computer.
+export const scripts = pgTable(
+  "scripts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    description: text("description"),
+    body: text("body").notNull(),
+    timeoutSeconds: integer("timeout_seconds").notNull().default(120),
+    createdBy: text("created_by").notNull(),
+    updatedBy: text("updated_by").notNull(),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [index("scripts_name_idx").on(t.name)],
+);
+
+export type ScriptRow = typeof scripts.$inferSelect;
+
+export type ScriptSnapshot = {
+  name: string;
+  body: string;
+  timeoutSeconds: number;
+};
+export type ScriptRunResult = {
+  exitCode: number | null;
+  outputTail: string | null;
+};
+
+export const scriptRunJobs = pgTable(
+  "script_run_jobs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    targetIp: text("target_ip").notNull(),
+    scriptId: uuid("script_id").references(() => scripts.id, {
+      onDelete: "set null",
+    }),
+    scriptSnapshot: jsonb("script_snapshot").$type<ScriptSnapshot>().notNull(),
+    status: text("status")
+      .$type<
+        "pending" | "claimed" | "running" | "succeeded" | "failed" | "canceled"
+      >()
+      .notNull()
+      .default("pending"),
+    requestedBy: text("requested_by").notNull(),
+    workerId: text("worker_id"),
+    result: jsonb("result").$type<ScriptRunResult>(),
+    error: text("error"),
+    requestedAt: timestamp("requested_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("script_run_jobs_pending_idx")
+      .on(t.status, t.requestedAt)
+      .where(sql`${t.status} = 'pending'`),
+    index("script_run_jobs_asset_idx").on(t.assetId, t.requestedAt),
+    index("script_run_jobs_inflight_idx")
+      .on(t.assetId)
+      .where(sql`${t.status} in ('pending','claimed','running')`),
+  ],
+);
+
+export type ScriptRunJobRow = typeof scriptRunJobs.$inferSelect;
 
 // Connected displays per Computer (spec 25). Current state, fully replaced per scan
 // (like installed_software); `serial` keys the read-time join to Monitor assets.

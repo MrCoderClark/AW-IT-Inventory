@@ -384,6 +384,42 @@ export async function notifyPatchInstallResult(job: {
   });
 }
 
+/**
+ * Raise an in-app notification when a script run finishes (spec 32).
+ */
+export async function notifyScriptRunResult(job: {
+  jobId: string;
+  status: "succeeded" | "failed";
+  assetId: string;
+  scriptName: string;
+  error?: string | null;
+}): Promise<void> {
+  const [asset] = await db
+    .select({ tag: assets.tag, name: assets.name })
+    .from(assets)
+    .where(eq(assets.id, job.assetId))
+    .limit(1);
+
+  const href = asset ? `/assets/${asset.tag}` : "/assets";
+  const on = asset?.name ?? "the computer";
+  const name = `"${job.scriptName}"`;
+  const ok = job.status === "succeeded";
+  const err = (job.error ?? "").trim().slice(0, 300);
+
+  await createNotification({
+    type: ok ? "script-run" : "script-run-failed",
+    severity: ok ? "info" : "warning",
+    title: ok ? "Script finished" : "Script failed",
+    body: ok
+      ? `${name} ran on ${on}.`
+      : `${name} on ${on} failed${err ? `: ${err}` : "."}`,
+    href,
+    dedupeKey: `script-run:${job.jobId}:${job.status}`,
+    assetId: job.assetId,
+    meta: { jobId: job.jobId, scriptName: job.scriptName },
+  });
+}
+
 /* ---------------- Warranty sweep (AC-5) ---------------- */
 
 const WARRANTY_WITHIN_DAYS = 30;

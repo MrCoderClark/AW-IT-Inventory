@@ -65,8 +65,8 @@ trend reporting). Numbers are indicative, not commitments.
    upgrades, daily missing Search, approve/install from Updates, one-host Check
    for updates. Fleet bulk / reboot-when-done / WSUS = v2 (see spec 31 out of
    scope).
-4. **Spec 32 — Automation/script library.** Saved scripts (PowerShell), run
-   on-demand / scheduled / on-alert against a device group via the spec-23/24 worker.
+4. **Spec 32 — Automation/script library.** Saved PowerShell library + run-now on
+   one Computer (spec 32). Multi-target / schedule / on-alert = v2.
    **Medium value, medium effort.**
 5. **Spec 33 — Ticketing / helpdesk.** Tickets tied to assets/people, status/SLA,
    threaded comments, email-in, optional auto-create from alerts. **High value, but
