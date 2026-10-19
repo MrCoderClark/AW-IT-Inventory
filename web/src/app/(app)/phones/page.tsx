@@ -45,6 +45,7 @@ export default async function Page({ searchParams }: PageProps<"/phones">) {
         title: "Phones",
         subtitle: "Manage and view all phone assets in your organization.",
         icon: <Smartphone />,
+        backgroundImage: "/heroes/phones.png",
         showStatusFilter: true,
         showVendorFilter: true,
         showModelFilter: true,

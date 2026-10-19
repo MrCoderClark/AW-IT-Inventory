@@ -53,17 +53,20 @@ issuer → MAC from CN, model from the HTTPS title. New `device_type = "phone"` 
 discovery. Ingest upserts a Phone asset reconciled by MAC. No secrets, survives
 firmware updates (the cert is stable).
 
-**Phase 2 — authenticated enrichment.** Two independent options (either/both):
-- **(2a) On-phone web scrape.** Log into each phone's web UI with its per-MAC
-  credential and read the Account config (Display Name, Label/extension, register
-  status) + firmware. The T54W uses a **JS/SPA login** (no HTML form; legacy
-  `/servlet` endpoints 404) — the exact login + account-data requests must be
-  captured from the firmware (browser devtools) before implementing, and the flow is
-  **firmware-version-fragile**.
-- **(2b) Intermedia Unite API.** Pull the device/user/extension inventory centrally,
-  keyed by MAC — one source of truth, no per-phone passwords, survives firmware
-  updates, and includes the user↔extension mapping directly. Preferred for the
-  person/extension data **if** Intermedia exposes a partner/admin API or export.
+**Phase 2 — authenticated enrichment — ✅ DONE (on-phone web read).** When a phone
+has a credential (see below), the collector logs into its web API and reads the live
+**Display Name, extension (SIP Label), register status, firmware, machine-id (serial)
+and vendor** — straight from the phone, which is the source of truth (Intermedia was
+rejected: it goes stale when users are terminated/reassigned). `collect_phone_auth.py`
+handles **both Yealink firmware generations**:
+- **T5x (e.g. T54W):** `GET /api/info?p=Login` publishes `rsaN`/`rsaE` → RSA
+  **PKCS#1 v1.5** encrypt the password, send as `pwd=__WUI_ENC__:<hex>` to
+  `POST /api/auth/login?p=Login` → `JSESSIONID` cookie → read the account/status pages.
+- **T4x:** HTML `g_rsa_n`/`g_rsa_e` + an **AES-128-CBC hybrid** (`<rand>;<JSESSIONID>;
+  <password>`, RSA-wrapped key/iv) → `servlet?m=mod_data&p=account-register` etc.
+
+All read-only. A phone with **no** credential still gets phase-1 identity (MAC/model);
+enrichment just stays blank. *(Intermedia Unite API — considered and rejected.)*
 
 ## Signals collected (how + what we store)
 
@@ -136,12 +139,30 @@ Web: `discovery.ts` `DISCOVERY_TYPES` + a `DEFAULT_ENABLED` map (phone false),
 
 **Credential-free path COMPLETE (1a+1b+1c):** a Yealink on a scanned subnet is
 discovered (MAC/model), reconciled by MAC, and either enriches its Phone asset or lands
-in the inbox as a Phone. Display Name / extension / firmware still need phase 2.
-2. **Phase 2a — on-phone enrichment** *(blocked on capturing the T54W login flow)*:
-   per-MAC credential file, authenticated Account/firmware read, store + person-link
-   hint. **AC-5–7.**
-3. **Phase 2b — Intermedia Unite API** *(if available)*: central user/extension/MAC
-   pull as an alternative/supplement to 2a.
+in the inbox as a Phone.
+   - **Opt-in toggle — ✅ DONE**: phone auto-discovery is a spec-13 discovery toggle
+     that **defaults OFF** (web `discovery.ts` + the `/admin` switch; collector
+     `DISCOVERY_DEFAULTS` + `--no-phones`). Manual scan jobs bypass it.
+   - **Manual "Scan now" — ✅ DONE**: `resolveAssetTargets`/`resolveAllTargets` include
+     `phone_details.ipAddress`; a "Scan now" button on the phone detail page
+     (`thin-detail.tsx`, `scan:write`) enqueues a spec-12 job targeting the phone IP.
+     The ingest IP fallback also matches `phone_details.ipAddress`, so a manual phone
+     (no MAC yet) links by IP on its first scan, then by MAC after.
+2. **Phase 2a — on-phone authenticated enrichment — ✅ DONE**: per-IP credential CSV
+   (`phone_creds.py`, gitignored), `collect_phone_auth.py` logs in (T5x RSA
+   `__WUI_ENC__` / T4x AES hybrid) and reads Display Name, extension, register status,
+   firmware, machine-id (→ asset serial) and vendor; `read_phone(credential=…)` wires
+   it; the web ingest stores `phone_details.displayName`/extension/firmware/
+   registerStatus and the asset serial/vendor. **AC-5–7.**
+3. **Phase 2b — Intermedia Unite API** — **rejected** (stale on terminated/reassigned
+   users; the phone's live config is authoritative).
+
+**SPEC 27 COMPLETE** (discovery + desk-phone UI + opt-in toggle + manual scan +
+authenticated enrichment, both firmware generations). 86 collector + 762 web tests
+pass, type-clean. Deploy: web `npm run db:push` (phone_details desk fields +
+`machines.phone`); on the collector, add the phone subnet when auto-discovery is
+wanted (or scan phones manually), set the phone toggle on `/admin`, and create the
+gitignored `collector/phone_credentials.csv` (`ip,username,password`) for enrichment.
 
 ## Consequences
 

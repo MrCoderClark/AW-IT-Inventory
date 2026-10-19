@@ -57,6 +57,7 @@ export default async function Page({ searchParams }: PageProps<"/monitors">) {
         title: "Monitors",
         subtitle: "Manage and view all monitor assets in your organization.",
         icon: <Monitor />,
+        backgroundImage: "/heroes/monitors.png",
         showStatusFilter: true,
         showVendorFilter: true,
         showModelFilter: true,

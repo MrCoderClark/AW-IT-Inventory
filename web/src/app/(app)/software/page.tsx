@@ -38,6 +38,7 @@ export default async function Page() {
         title="Software"
         subtitle="Track software titles across the fleet: computer counts, versions and publishers. Manage the watchlist here or on the Admin page."
         icon={<Code2 />}
+        backgroundImage="/heroes/software.png"
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
