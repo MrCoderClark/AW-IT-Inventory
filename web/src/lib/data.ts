@@ -20,6 +20,7 @@ import {
   Boxes,
   Bell,
   TriangleAlert,
+  RefreshCw,
 } from "lucide-react";
 
 /* ---------------- Types ---------------- */
@@ -433,6 +434,7 @@ export const NAV_MANAGE: NavItem[] = [
   { label: "Software Library", href: "/software/library", icon: Boxes, perm: "software:deploy" },
   { label: "Media", href: "/media", icon: Images, perm: "asset:write" },
   { label: "Compliance", href: "/compliance", icon: ShieldCheck },
+  { label: "Patches", href: "/patches", icon: RefreshCw },
   { label: "Reports", href: "/reports", icon: FileText },
   { label: "Scans", href: "/scans", icon: ScanLine, perm: "scan:read" },
   { label: "Scan Jobs", href: "/scans/jobs", icon: ListChecks, perm: "scan:read" },

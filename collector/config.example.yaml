@@ -180,3 +180,12 @@ report_delivery_interval_minutes: 15
 # from every manually-entered computer over WinRM — a light loop separate from the
 # full scan, feeding the device Monitoring sparklines. 0 turns it off.
 metric_sample_interval_minutes: 15
+
+# Optional app-upgrade list via winget (spec 31). When true (default), a computer
+# scan installs the WinGet client if missing, then lists available upgrades
+# (Chrome, etc.). false skips both bootstrap and list. Never installs other
+# packages, and never runs `winget upgrade --all`.
+collect_app_upgrades: true
+# Wall-clock cap (seconds) on the winget script. Bootstrap can download App
+# Installer, so this is longer than winrm_timeout.
+app_upgrade_timeout: 60

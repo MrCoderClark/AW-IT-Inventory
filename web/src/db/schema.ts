@@ -835,6 +835,61 @@ export const complianceStatus = pgTable("compliance_status", {
   alertedState: text("alerted_state").$type<"ok" | "at-risk">(),
 });
 
+// ── Windows patch inventory (spec 31) ────────────────────────────────────────
+// Current-state hotfix list + pending reboot + optional winget upgrade list per
+// Computer. Replaced on each successful collect; no history in v1.
+export const windowsUpdateState = pgTable("windows_update_state", {
+  assetId: uuid("asset_id")
+    .primaryKey()
+    .references(() => assets.id, { onDelete: "cascade" }),
+  pendingReboot: boolean("pending_reboot"),
+  hotfixCount: integer("hotfix_count").notNull().default(0),
+  // null = app collect skipped (config off); false = client unusable after bootstrap
+  wingetAvailable: boolean("winget_available"),
+  // Why winget was unavailable in the WinRM session (alias vs InstallLocation, etc.)
+  wingetDetail: text("winget_detail"),
+  appUpgradeCount: integer("app_upgrade_count").notNull().default(0),
+  collectedAt: timestamp("collected_at", { withTimezone: true }).notNull(),
+});
+
+export const windowsHotfixes = pgTable(
+  "windows_hotfixes",
+  {
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    hotfixId: text("hotfix_id").notNull(), // e.g. KB5034441
+    description: text("description"),
+    installedOn: date("installed_on"), // null when WMI date missing/garbage
+  },
+  (t) => [
+    primaryKey({ columns: [t.assetId, t.hotfixId] }),
+    index("windows_hotfixes_asset_idx").on(t.assetId),
+  ],
+);
+
+export const appUpgrades = pgTable(
+  "app_upgrades",
+  {
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    packageId: text("package_id").notNull(), // e.g. Google.Chrome
+    name: text("name").notNull(),
+    version: text("version"), // installed
+    available: text("available"), // winget latest
+    source: text("source"), // winget | msstore | …
+  },
+  (t) => [
+    primaryKey({ columns: [t.assetId, t.packageId] }),
+    index("app_upgrades_asset_idx").on(t.assetId),
+  ],
+);
+
+export type WindowsUpdateStateRow = typeof windowsUpdateState.$inferSelect;
+export type WindowsHotfixRow = typeof windowsHotfixes.$inferSelect;
+export type AppUpgradeRow = typeof appUpgrades.$inferSelect;
+
 // ── Device assignment history (spec 16) ──────────────────────────────────────
 // The custody log: one row per assignment of a device to a person. A row opens
 // when a device is handed out (`assignedAt`/`assignedBy` set, `unassignedAt`

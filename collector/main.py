@@ -165,6 +165,7 @@ def scan_targets(
                 software=res["software"],
                 compliance=res["compliance"],
                 monitors=res["monitors"],
+                updates=res.get("updates"),
                 errors=res["errors"],
             )
 

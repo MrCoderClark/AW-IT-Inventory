@@ -13,14 +13,17 @@ import winrm
 
 from config import Config, CredentialProfile
 from models import (
+    AppUpgrade,
     Compliance,
     Disk,
     Hardware,
     Health,
+    Hotfix,
     LocalAdmin,
     Monitor,
     NetworkAdapter,
     Software,
+    WindowsUpdates,
 )
 
 # Single round-trip: gather hardware + OS/health and emit compact JSON.
@@ -191,6 +194,60 @@ try {
     if ($q) { $sessions = @($q | Select-Object -Skip 1 | ForEach-Object { (($_.Trim() -split '\s{2,}')[0]).TrimStart('>') } | Where-Object { $_ }) }
 } catch {}
 [ordered]@{ network_adapters = $nics; logged_on_users = $sessions } | ConvertTo-Json -Depth 4 -Compress
+"""
+
+# Installed hotfixes + pending reboot (spec 31). Its own WinRM call so the others
+# stay under the command-line cap. Local CIM/registry only — no WUA Search in v1.
+PS_UPDATES = r"""
+$ErrorActionPreference = 'SilentlyContinue'
+$p = $false
+foreach ($k in @(
+  'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending',
+  'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired'
+)) { if (Test-Path $k) { $p = $true } }
+try {
+  $v = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' -Name PendingFileRenameOperations -ErrorAction Stop).PendingFileRenameOperations
+  if ($v) { $p = $true }
+} catch {}
+$h = @(Get-CimInstance Win32_QuickFixEngineering | ForEach-Object {
+  $d = $null
+  try { if ($_.InstalledOn) { $d = $_.InstalledOn.ToString('yyyy-MM-dd') } } catch {}
+  @{ id = "$($_.HotFixID)"; description = "$($_.Description)"; installed_on = $d }
+})
+[ordered]@{ pending_reboot = $p; hotfixes = $h } | ConvertTo-Json -Depth 4 -Compress
+"""
+
+# Available winget upgrades (spec 31). Time-boxed; bootstraps WinGet when missing
+# (AC-9); never `winget upgrade --all`. List via Get-WinGetPackage only (no CLI
+# table parse — that blew the EncodedCommand size cap / brace bugs). Never use
+# WindowsApps\winget.exe (AppX alias fails under WinRM); prefer InstallLocation.
+PS_APP_UPGRADES = r"""
+$ErrorActionPreference='SilentlyContinue'
+function FWx{
+  try{foreach($p in @(Get-AppxPackage Microsoft.DesktopAppInstaller -EA Stop)){$x=Join-Path $p.InstallLocation 'winget.exe';if(Test-Path -LiteralPath $x){return $x}}}catch{}
+  try{foreach($p in @(Get-AppxPackage -AllUsers Microsoft.DesktopAppInstaller -EA Stop)){$x=Join-Path $p.InstallLocation 'winget.exe';if(Test-Path -LiteralPath $x){return $x}}}catch{}
+  $c=Get-Command winget -EA SilentlyContinue
+  if($c.Source -and $c.Source -notmatch '\\WindowsApps\\winget\.exe$'){return $c.Source}
+  return $null
+}
+function TWm{try{Import-Module Microsoft.WinGet.Client -EA Stop;Get-Command Get-WinGetPackage -EA Stop|Out-Null;return $true}catch{return $false}}
+$e=FWx;$m=TWm
+if(-not $m){
+  try{Get-AppxPackage Microsoft.DesktopAppInstaller|%{Add-AppxPackage -DisableDevelopmentMode -Register "$($_.InstallLocation)\AppxManifest.xml" -EA SilentlyContinue}}catch{}
+  try{Add-AppxPackage -RegisterByFamilyName -MainPackage Microsoft.DesktopAppInstaller_8wekyb3d8bbwe -EA SilentlyContinue}catch{}
+  $e=FWx;$m=TWm
+}
+if(-not $m){
+  try{[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;Install-PackageProvider NuGet -Force -EA SilentlyContinue|Out-Null;Set-PSRepository PSGallery -InstallationPolicy Trusted -EA SilentlyContinue;Install-Module Microsoft.WinGet.Client -Force -Scope AllUsers -AllowClobber -EA Stop}catch{try{Install-Module Microsoft.WinGet.Client -Force -Scope CurrentUser -AllowClobber -EA Stop}catch{}}
+  try{Import-Module Microsoft.WinGet.Client -EA Stop;Repair-WinGetPackageManager -EA SilentlyContinue|Out-Null}catch{}
+  $m=TWm;$e=FWx
+}
+$d='';$ok=$m
+if(-not $ok -and $e){try{$v=& $e --version 2>&1|Out-String;if("$v" -match '\d+\.\d+'){$d='winget.exe ok but WinGet.Client module missing (Install-Module failed)'}else{$d="winget --version: $($v.Trim())"}}catch{$d="winget: $_"}}
+elseif(-not $ok){$d='no InstallLocation winget.exe / no WinGet.Client (WindowsApps alias ignored)'}
+$u=@()
+if($m){try{$u=@(Get-WinGetPackage|?{$_.IsUpdateAvailable}|%{$av=$null;if($_.AvailableVersions){$av="$($_.AvailableVersions[0])"};[ordered]@{id="$($_.Id)";name="$($_.Name)";version="$($_.InstalledVersion)";available=$av;source="$($_.Source)"}})}catch{$u=@()}}
+[ordered]@{winget_available=[bool]$ok;app_upgrades=@($u);detail=$d}|ConvertTo-Json -Depth 5 -Compress
 """
 
 
@@ -406,6 +463,83 @@ def _parse_endpoint(
     return adapters, sessions
 
 
+def _iso_date(value) -> str | None:
+    """Best-effort InstalledOn → YYYY-MM-DD. Empty, garbage, and epoch-ish
+    dates (year < 1990 — WMI's missing-date stand-in) become None, never 1970."""
+    s = _clean(value) if isinstance(value, str) else None
+    if not s or len(s) < 10:
+        return None
+    y, m, d = s[0:4], s[5:7], s[8:10]
+    if not (s[4] == "-" and s[7] == "-" and y.isdigit() and m.isdigit() and d.isdigit()):
+        return None
+    if int(y) < 1990:
+        return None
+    return f"{y}-{m}-{d}"
+
+
+def _parse_updates(data: dict) -> WindowsUpdates:
+    """Parse PS_UPDATES JSON. Duplicate HotFixIDs collapse to the first."""
+    seen: set[str] = set()
+    hotfixes: list[Hotfix] = []
+    for item in _as_list(data.get("hotfixes")):
+        if not isinstance(item, dict):
+            continue
+        hid = _clean(item.get("id"))
+        if not hid or hid in seen:
+            continue
+        seen.add(hid)
+        hotfixes.append(
+            Hotfix(
+                id=hid,
+                description=_clean(item.get("description")),
+                installed_on=_iso_date(item.get("installed_on")),
+            )
+        )
+    pending = data.get("pending_reboot")
+    return WindowsUpdates(
+        pending_reboot=pending if isinstance(pending, bool) else None,
+        hotfixes=hotfixes,
+    )
+
+
+def _parse_app_upgrades(
+    data: dict,
+) -> tuple[bool | None, list[AppUpgrade] | None, str | None]:
+    """Parse PS_APP_UPGRADES JSON.
+
+    True + list (maybe empty) = usable client, replace stored upgrades.
+    False + None = still unusable after bootstrap; ingest leaves prior rows.
+    None + None = skipped / unreadable payload.
+    Optional ``detail`` explains a WinRM miss (AppX alias vs real binary).
+    """
+    detail = _clean(data.get("detail"))
+    flag = data.get("winget_available")
+    if flag is True:
+        seen: set[str] = set()
+        upgrades: list[AppUpgrade] = []
+        for item in _as_list(data.get("app_upgrades")):
+            if not isinstance(item, dict):
+                continue
+            pid = _clean(item.get("id"))
+            name = _clean(item.get("name"))
+            if not pid or not name or pid in seen:
+                continue
+            seen.add(pid)
+            upgrades.append(
+                AppUpgrade(
+                    id=pid,
+                    name=name,
+                    version=_clean(item.get("version")),
+                    available=_clean(item.get("available")),
+                    source=_clean(item.get("source")),
+                )
+            )
+        return True, upgrades, None
+    if flag is False:
+        return False, None, detail
+    return None, None, detail
+
+
 def _parse_admins(data: dict) -> list[LocalAdmin] | None:
     """Parse the PS_ADMINS JSON (spec 21 v2). None = couldn't read the group.
     ConvertTo-Json collapses a 1-element array to a scalar, so coerce to a list."""
@@ -446,6 +580,7 @@ def collect_windows(
         "software": None,
         "compliance": None,
         "monitors": None,
+        "updates": None,
         "errors": [],
     }
     port = config.ports.winrm
@@ -555,6 +690,54 @@ def collect_windows(
                     out["monitors"] = _parse_monitors(json.loads(mraw))
             except Exception:  # noqa: BLE001 — optional, never fatal
                 pass
+            # Patch inventory (spec 31): hotfixes always (best-effort), then optional
+            # winget list. A failure never fails the machine collect.
+            updates: WindowsUpdates | None = None
+            try:
+                ur = _best_effort(PS_UPDATES)
+                if ur is not None and ur.status_code == 0:
+                    uraw = (ur.std_out or b"").decode("utf-8", errors="ignore").strip() or "{}"
+                    updates = _parse_updates(json.loads(uraw))
+            except Exception:  # noqa: BLE001 — optional, never fatal
+                pass
+            winget_flag: bool | None = None
+            app_upgrades: list[AppUpgrade] | None = None
+            winget_detail: str | None = None
+            if getattr(config, "collect_app_upgrades", True):
+                try:
+                    app_timeout = float(
+                        getattr(config, "app_upgrade_timeout", None)
+                        or max(getattr(config, "winrm_timeout", 25), 60)
+                    )
+                    ar = _run_ps_timeout(sub["session"], PS_APP_UPGRADES, app_timeout)
+                    if ar is None:
+                        sub["session"] = winrm.Session(
+                            endpoint,
+                            auth=(user, prof.password),
+                            transport=config.winrm_transport,
+                            server_cert_validation="ignore",
+                        )
+                        winget_flag = False
+                        winget_detail = f"app-upgrade script timed out (>{app_timeout:.0f}s)"
+                    elif ar.status_code == 0:
+                        araw = (ar.std_out or b"").decode("utf-8", errors="ignore").strip() or "{}"
+                        winget_flag, app_upgrades, winget_detail = _parse_app_upgrades(
+                            json.loads(araw)
+                        )
+                    else:
+                        winget_flag = False
+                        err = (ar.std_err or b"")[:300].decode(errors="ignore").strip()
+                        winget_detail = f"ps_exit_{ar.status_code}" + (f" {err}" if err else "")
+                except Exception as e:  # noqa: BLE001 — optional, never fatal
+                    winget_flag = False
+                    winget_detail = f"{type(e).__name__}: {e}"
+            if updates is not None or winget_flag is not None:
+                if updates is None:
+                    updates = WindowsUpdates()
+                updates.winget_available = winget_flag
+                updates.app_upgrades = app_upgrades
+                updates.winget_detail = winget_detail
+                out["updates"] = updates
             return out
         except Exception as e:  # noqa: BLE001 - report and try the next profile
             profile_errors.append(f"[{prof.id}] user={user!r}: {type(e).__name__}: {e}")

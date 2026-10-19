@@ -115,6 +115,10 @@ describe("AppSidebar — permission gating (RBAC audit)", () => {
     expect(screen.queryByRole("link", { name: "Scan Jobs" })).toBeNull();
     // Baseline (asset:read) Manage items the viewer keeps.
     expect(screen.getByRole("link", { name: "Compliance" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Patches" })).toHaveAttribute(
+      "href",
+      "/patches",
+    );
     expect(screen.getByRole("link", { name: "Reports" })).toBeInTheDocument();
   });
 

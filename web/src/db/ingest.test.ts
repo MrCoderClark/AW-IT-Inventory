@@ -72,6 +72,7 @@ vi.mock("@/db/index", () => ({
 vi.mock("./counters", () => ({ upsertPrinterCounter: vi.fn() }));
 vi.mock("./software", () => ({ replaceInstalledSoftware: vi.fn() }));
 vi.mock("./compliance", () => ({ upsertComplianceStatus: vi.fn() }));
+vi.mock("./patches", () => ({ upsertWindowsUpdates: vi.fn() }));
 vi.mock("./notifications", () => ({ createNotification: vi.fn(async () => null) }));
 vi.mock("./assignments", () => ({
   assignAsset: vi.fn((...args: unknown[]) => {
