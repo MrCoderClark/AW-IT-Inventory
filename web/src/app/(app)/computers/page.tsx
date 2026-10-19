@@ -47,6 +47,7 @@ export default async function Page({
         title: "Computers",
         subtitle: "Manage and view all computer assets in your organization.",
         icon: <Cpu />,
+        backgroundImage: "/heroes/computers.png",
         // New list layout (spec 17.04, AC-4.1): restyled header (no photo hero),
         // the type's filters, and a "New Computer" button.
         showStatusFilter: true,

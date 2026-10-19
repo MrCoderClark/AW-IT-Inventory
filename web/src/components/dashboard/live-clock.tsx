@@ -17,32 +17,34 @@ export function LiveClock() {
     return () => clearInterval(id);
   }, []);
 
+  const dateLabel = now
+    ? now.toLocaleDateString("en-US", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })
+    : "\u00a0";
+  const timeLabel = now
+    ? now.toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : "\u00a0";
+
   return (
-    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-      <CalendarDays className="size-4 shrink-0" />
-      <span className="text-right leading-tight">
-        {now ? (
-          <>
-            <span className="block font-medium text-foreground">
-              {now.toLocaleDateString("en-US", {
-                weekday: "short",
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-              })}
-            </span>
-            <span className="block text-xs">
-              {now.toLocaleTimeString("en-US", {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </span>
-          </>
-        ) : (
-          // Reserve height so the header doesn't jump when the clock mounts.
-          <span className="block h-8" />
-        )}
+    <time
+      dateTime={now?.toISOString()}
+      className="flex h-8 shrink-0 items-center gap-2 text-sm text-muted-foreground"
+    >
+      <CalendarDays className="size-4 shrink-0" aria-hidden />
+      <span className="whitespace-nowrap leading-none">
+        <span className="font-medium text-foreground">{dateLabel}</span>
+        <span className="mx-2 text-foreground/25" aria-hidden>
+          ·
+        </span>
+        <span className="tabular-nums">{timeLabel}</span>
       </span>
-    </div>
+    </time>
   );
 }

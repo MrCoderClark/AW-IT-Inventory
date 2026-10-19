@@ -96,7 +96,9 @@ export async function pollScanJob(
   | { ok: false; error: string }
 > {
   const user = await requireScanWrite();
-  if (!user) return FORBIDDEN;
+  if (!user) {
+    return { ok: false, error: "You don't have permission to start scans." };
+  }
   if (typeof jobId !== "string" || !jobId) {
     return { ok: false, error: "Missing job id." };
   }

@@ -158,8 +158,8 @@ export default async function DashboardPage() {
   return (
     <div className="mx-auto flex max-w-[1400px] flex-col gap-6">
       {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+        <div className="min-w-0">
           <h1 className="text-2xl font-extrabold tracking-tight">Dashboard</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Real-time visibility of your fleet, assignments and system health.
