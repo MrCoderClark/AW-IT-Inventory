@@ -1466,6 +1466,34 @@ export type ScriptRunResult = {
   exitCode: number | null;
   outputTail: string | null;
 };
+/** Frozen target set for a batch or schedule (spec 32 v2). */
+export type ScriptTargetSpec =
+  | { mode: "tags"; tags: string[] }
+  | { mode: "location"; locationId: string };
+
+// Fan-out batch (spec 32 v2): one row per Run-on… / schedule fire.
+export const scriptRunBatches = pgTable(
+  "script_run_batches",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    scriptId: uuid("script_id").references(() => scripts.id, {
+      onDelete: "set null",
+    }),
+    scriptSnapshot: jsonb("script_snapshot").$type<ScriptSnapshot>().notNull(),
+    targetSpec: jsonb("target_spec").$type<ScriptTargetSpec>().notNull(),
+    source: text("source").$type<"manual" | "schedule">().notNull(),
+    scheduleId: uuid("schedule_id"),
+    requestedBy: text("requested_by").notNull(),
+    enqueuedCount: integer("enqueued_count").notNull().default(0),
+    skippedCount: integer("skipped_count").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [index("script_run_batches_created_idx").on(t.createdAt)],
+);
+
+export type ScriptRunBatchRow = typeof scriptRunBatches.$inferSelect;
 
 export const scriptRunJobs = pgTable(
   "script_run_jobs",
@@ -1476,6 +1504,9 @@ export const scriptRunJobs = pgTable(
       .references(() => assets.id, { onDelete: "cascade" }),
     targetIp: text("target_ip").notNull(),
     scriptId: uuid("script_id").references(() => scripts.id, {
+      onDelete: "set null",
+    }),
+    batchId: uuid("batch_id").references(() => scriptRunBatches.id, {
       onDelete: "set null",
     }),
     scriptSnapshot: jsonb("script_snapshot").$type<ScriptSnapshot>().notNull(),
@@ -1510,10 +1541,43 @@ export const scriptRunJobs = pgTable(
     index("script_run_jobs_inflight_idx")
       .on(t.assetId)
       .where(sql`${t.status} in ('pending','claimed','running')`),
+    index("script_run_jobs_batch_idx").on(t.batchId),
   ],
 );
 
 export type ScriptRunJobRow = typeof scriptRunJobs.$inferSelect;
+
+// Scheduled script runs (spec 32 v2). Data in web; worker ticks due rows.
+export const scriptSchedules = pgTable(
+  "script_schedules",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    scriptId: uuid("script_id")
+      .notNull()
+      .references(() => scripts.id, { onDelete: "cascade" }),
+    targetSpec: jsonb("target_spec").$type<ScriptTargetSpec>().notNull(),
+    cadence: text("cadence").$type<"daily" | "weekly">().notNull(),
+    hour: integer("hour").notNull(),
+    minute: integer("minute").notNull(),
+    weekday: integer("weekday"), // 0–6 for weekly
+    enabled: boolean("enabled").notNull().default(true),
+    lastRunAt: timestamp("last_run_at", { withTimezone: true }),
+    nextRunAt: timestamp("next_run_at", { withTimezone: true }).notNull(),
+    createdBy: text("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("script_schedules_next_run_idx").on(t.nextRunAt),
+    index("script_schedules_script_idx").on(t.scriptId),
+  ],
+);
+
+export type ScriptScheduleRow = typeof scriptSchedules.$inferSelect;
 
 // Connected displays per Computer (spec 25). Current state, fully replaced per scan
 // (like installed_software); `serial` keys the read-time join to Monitor assets.

@@ -38,6 +38,7 @@ from reachability import (
     run_reachability_check,
     run_report_delivery,
     run_retention_prune,
+    run_script_schedules,
     run_warranty_sweep,
 )
 from sweep import run_computer_sweep
@@ -939,6 +940,13 @@ def _build_scheduler(config: Config, tokens: "TokenCache"):
             console.print(f"  [red]report delivery job error:[/red] {e}")
             tokens.invalidate()
 
+    def script_schedules_job() -> None:
+        try:
+            run_script_schedules(config, tokens.get())
+        except Exception as e:  # noqa: BLE001 — must never kill the scheduler
+            console.print(f"  [red]script schedules job error:[/red] {e}")
+            tokens.invalidate()
+
     def metrics_job() -> None:
         try:
             from collect_metrics import sample_metrics
@@ -1059,6 +1067,22 @@ def _build_scheduler(config: Config, tokens: "TokenCache"):
         )
         delivery_scheduled = f"every {config.report_delivery_interval_minutes}m"
 
+    # Scheduled script runs (spec 32 v2): poll web for due script_schedules.
+    script_sched_scheduled = "off"
+    if config.script_schedule_interval_minutes > 0:
+        scheduler.add_job(
+            script_schedules_job,
+            IntervalTrigger(
+                minutes=config.script_schedule_interval_minutes, timezone=tz
+            ),
+            id="script-schedules",
+            replace_existing=True,
+            misfire_grace_time=300,
+        )
+        script_sched_scheduled = (
+            f"every {config.script_schedule_interval_minutes}m"
+        )
+
     # Device metric sampling (spec 29): CPU/RAM/disk/uptime from every known computer
     # on an interval, a light loop separate from the full scan. 0 = off.
     metrics_scheduled = "off"
@@ -1097,6 +1121,7 @@ def _build_scheduler(config: Config, tokens: "TokenCache"):
         f"computer sweep {', '.join(sweep_scheduled) if sweep_scheduled else 'off'} · "
         f"warranty sweep {', '.join(warranty_scheduled) if warranty_scheduled else 'off'} · "
         f"report delivery {delivery_scheduled} · "
+        f"script schedules {script_sched_scheduled} · "
         f"metrics {metrics_scheduled} · "
         f"missing-patches {missing_scheduled}."
     )

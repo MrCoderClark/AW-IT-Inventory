@@ -3,6 +3,10 @@ import { Lock, TerminalSquare } from "lucide-react";
 import { HeroHeader } from "@/components/hero-header";
 import { PagePlaceholder } from "@/components/page-placeholder";
 import { ScriptLibrary } from "@/components/script-library";
+import { ScriptSchedulesPanel } from "@/components/script-schedules-panel";
+import { getLocationOptions } from "@/db/queries";
+import { listScriptSchedules } from "@/db/script-schedules";
+import { listComputerPickerOptions } from "@/db/script-targets";
 import { listScripts } from "@/db/scripts";
 import { hasPermission, requireUser } from "@/lib/auth/session";
 
@@ -21,16 +25,31 @@ export default async function Page() {
     );
   }
 
-  const scripts = await listScripts();
+  const [scripts, schedules, computers, locations] = await Promise.all([
+    listScripts(),
+    listScriptSchedules(),
+    listComputerPickerOptions(),
+    getLocationOptions(),
+  ]);
 
   return (
-    <div className="mx-auto flex max-w-[1100px] flex-col gap-6">
+    <div className="mx-auto flex max-w-[1100px] flex-col gap-8">
       <HeroHeader
         title="Scripts"
-        subtitle="Saved PowerShell to run on one computer at a time."
+        subtitle="Saved PowerShell — run on one computer, fan out to many, or schedule."
         icon={<TerminalSquare />}
       />
-      <ScriptLibrary initial={scripts} />
+      <ScriptLibrary
+        initial={scripts}
+        computers={computers}
+        locations={locations}
+      />
+      <ScriptSchedulesPanel
+        schedules={schedules}
+        scripts={scripts}
+        computers={computers}
+        locations={locations}
+      />
     </div>
   );
 }

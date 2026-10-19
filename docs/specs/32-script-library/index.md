@@ -88,11 +88,25 @@ always clean temp; never reboot.
 
 ## Phases
 
-1. **v1 (this branch)** — AC-1–8.
-2. **v2** — multi-computer / location fan-out; schedules; on-alert from spec 30;
-   script parameters; non-PowerShell.
+1. **v1** — AC-1–8. ✅ shipped (library + run-now on one Computer).
+2. **v2 (this branch)** — multi-computer / location fan-out + daily/weekly
+   schedules. **AC-9–12.**
+3. **Later** — on-alert from spec 30; script parameters; non-PowerShell.
+
+### Phase 2 — Fan-out + schedules
+
+- **AC-9**: From `/scripts`, **Run on…** with targets = multi-select Computer tags
+  **or** a location subtree. Resolves to Computers with IPs; skips no-IP; soft-skips
+  hosts with an in-flight script run. Creates a `script_run_batches` row and one
+  `script_run_jobs` per host (reuses v1 runner).
+- **AC-10**: `script_schedules` — script + targetSpec + daily|weekly + time
+  (+ weekday for weekly), enabled, lastRunAt/nextRunAt. Manage on `/scripts`.
+- **AC-11**: Worker polls due schedules (same shape as report delivery), materializes
+  each into a batch, advances nextRunAt. Service `deploy:agent`.
+- **AC-12**: Still `software:deploy`. Per-host history unchanged; batch id on jobs.
 
 ## Related
 
 - [28](../28-rmm-roadmap/index.md) · [23](../23-software-deployment/index.md) ·
-  [24](../24-remote-actions/index.md) · [31](../31-patch-management/index.md)
+  [24](../24-remote-actions/index.md) · [31](../31-patch-management/index.md) ·
+  [26](../26-reporting-engine/index.md) (schedule tick pattern)

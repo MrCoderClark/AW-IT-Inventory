@@ -37,6 +37,7 @@ export async function enqueueScriptRun(input: {
   scriptId: string;
   scriptSnapshot: ScriptSnapshot;
   requestedBy: string;
+  batchId?: string | null;
 }): Promise<EnqueueRunResult> {
   const [inflight] = await db
     .select({ id: scriptRunJobs.id })
@@ -56,6 +57,7 @@ export async function enqueueScriptRun(input: {
       assetId: input.assetId,
       targetIp: input.targetIp,
       scriptId: input.scriptId,
+      batchId: input.batchId ?? null,
       scriptSnapshot: input.scriptSnapshot,
       requestedBy: input.requestedBy,
     })
