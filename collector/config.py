@@ -196,6 +196,8 @@ class Config(BaseModel):
     missing_patch_interval_hours: int = 24
     # Wall-clock cap (seconds) per-host Search. WU/WSUS can be slow.
     missing_patch_timeout: int = 120
+    # Wall-clock cap (seconds) for one patch-install job (all selected items).
+    patch_install_timeout: int = 600
 
     @property
     def profiles_by_id(self) -> dict[str, CredentialProfile]:

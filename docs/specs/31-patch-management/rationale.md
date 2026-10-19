@@ -50,10 +50,11 @@ is the **only** scan-time write — not Chrome, not `--all`. Bootstrap is
 time-boxed; PSGallery/CDN blocked → `winget_available = false`, retry next
 scan. Turn the whole app path off with `collect_app_upgrades: false`.
 
-**Do not run `winget upgrade --all` in v1.** Same rule as OS install: see
-before you push. `--all` as the scan's local-admin identity will miss or
-wrongly upgrade per-user packages. Phase 3 is an explicit per-id (or
-allow-listed) job with `--silent --disable-interactivity`.
+**Do not run `winget upgrade --all`.** Same rule as OS install: see before you
+push. `--all` as the scan's local-admin identity will miss or wrongly upgrade
+per-user packages. Phase 3 installs only explicit per-id selections with
+`--silent --disable-interactivity`, via a `patch_install_jobs` queue (deploy
+twin) — not on Scan now.
 
 App upgrades live on `/patches` next to OS KBs because that is how admins
 triage "this PC is behind," not because Windows Update and winget are the same

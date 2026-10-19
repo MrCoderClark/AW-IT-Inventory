@@ -982,6 +982,8 @@ export const notifications = pgTable(
         | "printer-install-failed"
         | "software-deploy"
         | "software-deploy-failed"
+        | "patch-install"
+        | "patch-install-failed"
         | "compliance-at-risk"
         | "compliance-recovered"
         | "metric-threshold"
@@ -1313,6 +1315,77 @@ export const softwareDeployments = pgTable(
       .where(sql`${t.status} in ('pending','claimed','running')`),
   ],
 );
+
+// Patch install queue (spec 31 phase 3). Approve selected missing OS KBs and/or
+// winget upgrades on one Computer; collector claims and runs over WinRM.
+export type PatchInstallOsItem = { kbId: string; title: string };
+export type PatchInstallAppItem = {
+  packageId: string;
+  name: string;
+  version: string | null;
+  available: string | null;
+};
+export type PatchInstallSelection = {
+  os: PatchInstallOsItem[];
+  apps: PatchInstallAppItem[];
+};
+export type PatchInstallItemResult = {
+  kind: "os" | "app";
+  id: string; // kbId or packageId
+  ok: boolean;
+  rebootRequired?: boolean;
+  exitCode?: number | null;
+  outputTail?: string | null;
+};
+export type PatchInstallResult = {
+  items: PatchInstallItemResult[];
+  rebootRequired: boolean;
+};
+
+export const patchInstallJobs = pgTable(
+  "patch_install_jobs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    targetIp: text("target_ip").notNull(),
+    selection: jsonb("selection").$type<PatchInstallSelection>().notNull(),
+    status: text("status")
+      .$type<
+        "pending" | "claimed" | "running" | "succeeded" | "failed" | "canceled"
+      >()
+      .notNull()
+      .default("pending"),
+    requestedBy: text("requested_by").notNull(),
+    workerId: text("worker_id"),
+    result: jsonb("result").$type<PatchInstallResult>(),
+    error: text("error"),
+    requestedAt: timestamp("requested_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("patch_install_jobs_pending_idx")
+      .on(t.status, t.requestedAt)
+      .where(sql`${t.status} = 'pending'`),
+    index("patch_install_jobs_asset_idx").on(t.assetId, t.requestedAt),
+    index("patch_install_jobs_inflight_idx")
+      .on(t.assetId)
+      .where(sql`${t.status} in ('pending','claimed','running')`),
+  ],
+);
+
+export type PatchInstallJobRow = typeof patchInstallJobs.$inferSelect;
 
 // Connected displays per Computer (spec 25). Current state, fully replaced per scan
 // (like installed_software); `serial` keys the read-time join to Monitor assets.

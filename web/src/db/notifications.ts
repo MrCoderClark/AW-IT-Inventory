@@ -338,6 +338,52 @@ export async function notifyDeployResult(job: {
   });
 }
 
+/**
+ * Raise an in-app notification when a patch install finishes (spec 31 phase 3).
+ * Best-effort + idempotent per job+status, like software deploy.
+ */
+export async function notifyPatchInstallResult(job: {
+  jobId: string;
+  status: "succeeded" | "failed";
+  assetId: string;
+  osCount: number;
+  appCount: number;
+  error?: string | null;
+}): Promise<void> {
+  const [asset] = await db
+    .select({ tag: assets.tag, name: assets.name })
+    .from(assets)
+    .where(eq(assets.id, job.assetId))
+    .limit(1);
+
+  const href = asset ? `/assets/${asset.tag}` : "/assets";
+  const on = asset?.name ?? "the computer";
+  const parts: string[] = [];
+  if (job.osCount) parts.push(`${job.osCount} OS update${job.osCount === 1 ? "" : "s"}`);
+  if (job.appCount)
+    parts.push(`${job.appCount} app upgrade${job.appCount === 1 ? "" : "s"}`);
+  const what = parts.join(" + ") || "selected updates";
+  const ok = job.status === "succeeded";
+  const err = (job.error ?? "").trim().slice(0, 300);
+
+  await createNotification({
+    type: ok ? "patch-install" : "patch-install-failed",
+    severity: ok ? "info" : "warning",
+    title: ok ? "Patch install finished" : "Patch install failed",
+    body: ok
+      ? `${what} installed on ${on}.`
+      : `Installing ${what} on ${on} failed${err ? `: ${err}` : "."}`,
+    href,
+    dedupeKey: `patch-install:${job.jobId}:${job.status}`,
+    assetId: job.assetId,
+    meta: {
+      jobId: job.jobId,
+      osCount: job.osCount,
+      appCount: job.appCount,
+    },
+  });
+}
+
 /* ---------------- Warranty sweep (AC-5) ---------------- */
 
 const WARRANTY_WITHIN_DAYS = 30;

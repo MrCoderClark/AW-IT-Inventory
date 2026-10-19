@@ -195,3 +195,5 @@ app_upgrade_timeout: 60
 missing_patch_interval_hours: 24
 # Wall-clock cap (seconds) per host for Search — WU/WSUS can be slow.
 missing_patch_timeout: 120
+# Wall-clock cap (seconds) for one patch-install job (all selected OS + app items).
+patch_install_timeout: 600

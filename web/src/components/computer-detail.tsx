@@ -50,6 +50,7 @@ import { PrinterInstallPanel } from "@/components/printer-install-panel";
 import { UpdatesPanel } from "@/components/updates-panel";
 import type { DeviceMetrics } from "@/db/metrics";
 import type { ComputerPatches } from "@/db/patches";
+import type { PatchInstallListItem } from "@/db/patch-install";
 import type { CompliancePosture } from "@/lib/compliance-score";
 import type {
   PackageOption,
@@ -154,6 +155,7 @@ export function ComputerDetail({
   livePrinters = null,
   compliancePosture = null,
   patches = null,
+  patchJobs = [],
   deployPackages = [],
   deployHistory = [],
   metrics = { points: [], latest: null },
@@ -179,6 +181,7 @@ export function ComputerDetail({
   livePrinters?: PrinterListSnapshot | null;
   compliancePosture?: CompliancePosture | null;
   patches?: ComputerPatches | null;
+  patchJobs?: PatchInstallListItem[];
   deployPackages?: DeployPackageOption[];
   deployHistory?: DeployHistoryItem[];
   metrics?: DeviceMetrics;
@@ -711,7 +714,12 @@ export function ComputerDetail({
 
         {/* -------- Updates (spec 31) -------- */}
         <TabsPanel value="updates">
-          <UpdatesPanel patches={patches} />
+          <UpdatesPanel
+            patches={patches}
+            assetTag={asset.id}
+            canInstall={canDeploy}
+            patchJobs={patchJobs}
+          />
         </TabsPanel>
 
         {/* -------- Compliance -------- */}

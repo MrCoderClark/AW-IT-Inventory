@@ -9,6 +9,7 @@ import { getAssetAssignmentHistory } from "@/db/assignments";
 import { getComplianceStatus } from "@/db/compliance";
 import { getDeviceMetrics } from "@/db/metrics";
 import { getComputerPatches } from "@/db/patches";
+import { listPatchInstallsForAssetTag } from "@/db/patch-install";
 import { getPrinterCounters } from "@/db/counters";
 import { getInstalledSoftware } from "@/db/software";
 import {
@@ -100,6 +101,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
       livePrinters,
       compliancePosture,
       patches,
+      patchJobs,
       deployPkgs,
       deployHistoryRows,
       remoteSessions,
@@ -119,6 +121,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
       canInstall ? getLatestPrinterList(id) : Promise.resolve(null),
       getComplianceStatus(id),
       getComputerPatches(id),
+      canDeploy ? listPatchInstallsForAssetTag(id) : Promise.resolve([]),
       canDeploy ? listSoftwarePackages() : Promise.resolve([]),
       canDeploy ? listDeploymentsForAssetTag(id) : Promise.resolve([]),
       canRemote ? listRemoteSessionsForAsset(id) : Promise.resolve([]),
@@ -190,6 +193,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
         livePrinters={livePrinters}
         compliancePosture={compliancePosture}
         patches={patches}
+        patchJobs={patchJobs}
         deployPackages={deployPackages}
         deployHistory={deployHistory}
         metrics={metrics}
