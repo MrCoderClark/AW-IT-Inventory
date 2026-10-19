@@ -17,12 +17,18 @@ class FakeAuthError(Exception):
     """Stand-in for pywinrm's InvalidCredentialsError etc."""
 
 
-def _config():
-    return SimpleNamespace(
+def _config(**kwargs):
+    ns = SimpleNamespace(
         ports=SimpleNamespace(winrm=5985),
         winrm_scheme="http",
         winrm_transport="ntlm",
+        winrm_timeout=25,
+        collect_app_upgrades=True,
+        app_upgrade_timeout=60,
     )
+    for k, v in kwargs.items():
+        setattr(ns, k, v)
+    return ns
 
 
 def _profile(pid: str, username: str, password: str):
@@ -34,10 +40,17 @@ def _result(status_code: int, std_out: bytes = b"", std_err: bytes = b""):
 
 
 def _patch_winrm(
-    monkeypatch, plan: dict, attempted: list[str], posture=None, admins=None, endpoint=None
+    monkeypatch,
+    plan: dict,
+    attempted: list[str],
+    posture=None,
+    admins=None,
+    endpoint=None,
+    updates=None,
+    app_upgrades=None,
 ):
     """plan: qualified-username -> Exception (raise) | result (main PS_COLLECT run).
-    posture/admins/endpoint: results the PS_POSTURE / PS_ADMINS / PS_ENDPOINT calls
+    posture/admins/endpoint/updates/app_upgrades: results the matching PS_* calls
     return. None for any → that call reports status 1 (failure)."""
 
     class FakeSession:
@@ -51,6 +64,10 @@ def _patch_winrm(
                 return admins if admins is not None else _result(1)
             if "Get-BitLockerVolume" in script:  # the PS_POSTURE call
                 return posture if posture is not None else _result(1)
+            if "Win32_QuickFixEngineering" in script:  # PS_UPDATES
+                return updates if updates is not None else _result(1)
+            if "Repair-WinGetPackageManager" in script:  # PS_APP_UPGRADES
+                return app_upgrades if app_upgrades is not None else _result(1)
             if isinstance(self._action, Exception):
                 raise self._action
             return self._action
@@ -267,3 +284,117 @@ def test_posture_failure_leaves_compliance_none_without_failing_collect(monkeypa
     assert out["hardware"] is not None
     assert out["compliance"] is None
     assert out["errors"] == []
+
+
+def test_updates_second_call_populates_hotfixes_and_winget(monkeypatch):
+    attempted: list[str] = []
+    main = _result(0, std_out=json.dumps({"hostname": "PC1"}).encode())
+    updates = _result(
+        0,
+        std_out=json.dumps(
+            {
+                "pending_reboot": True,
+                "hotfixes": [
+                    {
+                        "id": "KB5034441",
+                        "description": "Security Update",
+                        "installed_on": "2024-01-15",
+                    }
+                ],
+            }
+        ).encode(),
+    )
+    app_upgrades = _result(
+        0,
+        std_out=json.dumps(
+            {
+                "winget_available": True,
+                "app_upgrades": [
+                    {
+                        "id": "Google.Chrome",
+                        "name": "Google Chrome",
+                        "version": "128.0",
+                        "available": "129.0",
+                        "source": "winget",
+                    }
+                ],
+            }
+        ).encode(),
+    )
+    _patch_winrm(
+        monkeypatch,
+        {"alice": main},
+        attempted,
+        updates=updates,
+        app_upgrades=app_upgrades,
+    )
+
+    out = collect_windows.collect_windows(
+        "10.0.0.5", [5985], [_profile("good", "alice", "pw")], _config()
+    )
+    u = out["updates"]
+    assert u is not None
+    assert u.pending_reboot is True
+    assert [h.id for h in u.hotfixes] == ["KB5034441"]
+    assert u.winget_available is True
+    assert [a.id for a in u.app_upgrades] == ["Google.Chrome"]
+    assert out["errors"] == []
+
+
+def test_updates_failure_does_not_fail_collect(monkeypatch):
+    attempted: list[str] = []
+    main = _result(0, std_out=json.dumps({"hostname": "PC1", "serial": "SN1"}).encode())
+    _patch_winrm(monkeypatch, {"alice": main}, attempted)
+
+    out = collect_windows.collect_windows(
+        "10.0.0.5", [5985], [_profile("good", "alice", "pw")], _config()
+    )
+    assert out["hostname"] == "PC1"
+    assert out["hardware"] is not None
+    assert out["errors"] == []
+    # App path ran and failed → flag false, no hotfix rows.
+    assert out["updates"] is not None
+    assert out["updates"].hotfixes is None
+    assert out["updates"].winget_available is False
+    assert out["updates"].app_upgrades is None
+
+
+def test_collect_app_upgrades_off_skips_winget_bootstrap(monkeypatch):
+    attempted: list[str] = []
+    main = _result(0, std_out=json.dumps({"hostname": "PC1"}).encode())
+    updates = _result(
+        0,
+        std_out=json.dumps(
+            {"pending_reboot": False, "hotfixes": [{"id": "KB1", "description": "Update"}]}
+        ).encode(),
+    )
+    # Would succeed if called — config off must not use it.
+    app_upgrades = _result(
+        0,
+        std_out=json.dumps(
+            {
+                "winget_available": True,
+                "app_upgrades": [{"id": "Google.Chrome", "name": "Google Chrome"}],
+            }
+        ).encode(),
+    )
+    _patch_winrm(
+        monkeypatch,
+        {"alice": main},
+        attempted,
+        updates=updates,
+        app_upgrades=app_upgrades,
+    )
+
+    out = collect_windows.collect_windows(
+        "10.0.0.5",
+        [5985],
+        [_profile("good", "alice", "pw")],
+        _config(collect_app_upgrades=False),
+    )
+    u = out["updates"]
+    assert u is not None
+    assert [h.id for h in u.hotfixes] == ["KB1"]
+    assert u.winget_available is None
+    assert u.app_upgrades is None
+

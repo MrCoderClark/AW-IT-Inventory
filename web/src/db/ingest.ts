@@ -18,6 +18,10 @@ import { createNotification } from "./notifications";
 import { assignAsset } from "./assignments";
 import { replaceInstalledSoftware, type PostedSoftware } from "./software";
 import {
+  upsertWindowsUpdates,
+  type PostedWindowsUpdates,
+} from "./patches";
+import {
   assets,
   computerDetails,
   machines,
@@ -90,6 +94,8 @@ export interface IngestHost {
   // Security posture from a Windows collect (spec 21). null/absent = not
   // collected (leave the prior posture row intact).
   compliance?: PostedCompliance | null;
+  // Patch inventory (spec 31). null/absent = not collected (leave prior rows).
+  updates?: PostedWindowsUpdates | null;
   errors?: string[];
 }
 export interface IngestPayload {
@@ -506,6 +512,20 @@ export async function ingestScan(payload: IngestPayload): Promise<IngestResult> 
         } catch (err) {
           console.error(
             `[ingest] compliance alert failed for asset ${assetId}:`,
+            err,
+          );
+        }
+      }
+
+      // Patch inventory (spec 31, AC-2): matched Computer with an updates block
+      // upserts state + replaces hotfixes / app upgrades. null/absent → leave
+      // prior rows. Best-effort — must never fail the machine ingest.
+      if (assetType === "Computer" && h.updates) {
+        try {
+          await upsertWindowsUpdates(assetId, h.updates, now);
+        } catch (err) {
+          console.error(
+            `[ingest] patch inventory failed for asset ${assetId}:`,
             err,
           );
         }

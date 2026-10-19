@@ -47,7 +47,9 @@ import { AssignmentControls } from "@/components/assignment-controls";
 import { CompliancePanel } from "@/components/compliance-panel";
 import { DeviceMonitoring } from "@/components/device-monitoring";
 import { PrinterInstallPanel } from "@/components/printer-install-panel";
+import { UpdatesPanel } from "@/components/updates-panel";
 import type { DeviceMetrics } from "@/db/metrics";
+import type { ComputerPatches } from "@/db/patches";
 import type { CompliancePosture } from "@/lib/compliance-score";
 import type {
   PackageOption,
@@ -151,6 +153,7 @@ export function ComputerDetail({
   printerOptions = [],
   livePrinters = null,
   compliancePosture = null,
+  patches = null,
   deployPackages = [],
   deployHistory = [],
   metrics = { points: [], latest: null },
@@ -175,6 +178,7 @@ export function ComputerDetail({
   printerOptions?: PrinterOption[];
   livePrinters?: PrinterListSnapshot | null;
   compliancePosture?: CompliancePosture | null;
+  patches?: ComputerPatches | null;
   deployPackages?: DeployPackageOption[];
   deployHistory?: DeployHistoryItem[];
   metrics?: DeviceMetrics;
@@ -341,6 +345,7 @@ export function ComputerDetail({
           <TabsTab value="monitoring">Monitoring</TabsTab>
           <TabsTab value="livescan">Live scan</TabsTab>
           <TabsTab value="software">Software</TabsTab>
+          <TabsTab value="updates">Updates</TabsTab>
           <TabsTab value="compliance">Compliance</TabsTab>
           <TabsTab value="printers">Printers</TabsTab>
           {canRemote && <TabsTab value="remote">Remote Actions</TabsTab>}
@@ -702,6 +707,11 @@ export function ComputerDetail({
               initialHistory={deployHistory}
             />
           )}
+        </TabsPanel>
+
+        {/* -------- Updates (spec 31) -------- */}
+        <TabsPanel value="updates">
+          <UpdatesPanel patches={patches} />
         </TabsPanel>
 
         {/* -------- Compliance -------- */}

@@ -86,6 +86,41 @@ class Compliance(BaseModel):
     local_admins: list[LocalAdmin] | None = None  # local Administrators members
 
 
+class Hotfix(BaseModel):
+    """One installed hotfix from Win32_QuickFixEngineering (spec 31)."""
+
+    id: str  # HotFixID as returned, typically KBnnnnnn
+    description: str | None = None
+    installed_on: str | None = None  # ISO date (YYYY-MM-DD), never epoch
+
+
+class AppUpgrade(BaseModel):
+    """One available winget upgrade (spec 31). Listed only — never installed in v1."""
+
+    id: str  # package id, e.g. Google.Chrome
+    name: str
+    version: str | None = None  # installed
+    available: str | None = None  # winget latest
+    source: str | None = None  # winget | msstore | …
+
+
+class WindowsUpdates(BaseModel):
+    """Patch inventory from PS_UPDATES + optional PS_APP_UPGRADES (spec 31).
+
+    ``hotfixes is None`` = hotfix collect failed (ingest leaves prior KB rows).
+    ``winget_available is None`` = app path skipped (config off).
+    ``winget_available is False`` and ``app_upgrades is None`` = client unusable
+    after bootstrap; ingest records the flag and leaves prior app rows (AC-8).
+    """
+
+    pending_reboot: bool | None = None
+    hotfixes: list[Hotfix] | None = None
+    winget_available: bool | None = None
+    app_upgrades: list[AppUpgrade] | None = None
+    # Why winget was unavailable (WinRM path/alias/module); null when ok/skipped.
+    winget_detail: str | None = None
+
+
 class Monitor(BaseModel):
     """A display connected to a computer, decoded from its EDID (spec 25). Best-
     effort — a headless, virtual, or serial-less ("Generic PnP Monitor") display may
@@ -154,6 +189,9 @@ class HostResult(BaseModel):
     # Connected displays from EDID (spec 25). None = not collected (non-Windows, or
     # the read failed); an empty list = read OK, no displays detected.
     monitors: list[Monitor] | None = None
+    # Windows patch inventory (spec 31). None = not collected (non-Windows, or both
+    # hotfix and app scripts failed/skipped). Nested Nones are per-section.
+    updates: WindowsUpdates | None = None
     errors: list[str] = Field(default_factory=list)
 
 

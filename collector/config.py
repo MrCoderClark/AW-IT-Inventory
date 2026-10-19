@@ -184,6 +184,13 @@ class Config(BaseModel):
     # uptime from every manually-entered computer over WinRM. A light, frequent loop
     # separate from the full scan. 0 = off. Default every 15 minutes.
     metric_sample_interval_minutes: int = 15
+    # Optional app-upgrade list via winget (spec 31). When on (default), a computer
+    # scan bootstraps the WinGet client if missing, then lists available upgrades.
+    # False skips both bootstrap and list. Never installs other packages.
+    collect_app_upgrades: bool = True
+    # Wall-clock cap (seconds) on the winget script. Bootstrap can download App
+    # Installer, so this is longer than winrm_timeout. A hang is abandoned.
+    app_upgrade_timeout: int = 60
 
     @property
     def profiles_by_id(self) -> dict[str, CredentialProfile]:
