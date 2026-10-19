@@ -175,3 +175,8 @@ notification_sweep_times: ["07:30"]
 # custom reports due to be emailed. Web holds the schedules and decides due-ness,
 # so this is just the check cadence (and the delivery granularity). 0 turns it off.
 report_delivery_interval_minutes: 15
+
+# Device metric sampling (spec 29): how often (minutes) to read CPU/RAM/disk/uptime
+# from every manually-entered computer over WinRM — a light loop separate from the
+# full scan, feeding the device Monitoring sparklines. 0 turns it off.
+metric_sample_interval_minutes: 15

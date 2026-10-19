@@ -45,7 +45,9 @@ import {
 import { AssetImageUpload } from "@/components/asset-image-upload";
 import { AssignmentControls } from "@/components/assignment-controls";
 import { CompliancePanel } from "@/components/compliance-panel";
+import { DeviceMonitoring } from "@/components/device-monitoring";
 import { PrinterInstallPanel } from "@/components/printer-install-panel";
+import type { DeviceMetrics } from "@/db/metrics";
 import type { CompliancePosture } from "@/lib/compliance-score";
 import type {
   PackageOption,
@@ -151,6 +153,7 @@ export function ComputerDetail({
   compliancePosture = null,
   deployPackages = [],
   deployHistory = [],
+  metrics = { points: [], latest: null },
 }: {
   asset: Asset;
   machine?: MachineSummary;
@@ -174,6 +177,7 @@ export function ComputerDetail({
   compliancePosture?: CompliancePosture | null;
   deployPackages?: DeployPackageOption[];
   deployHistory?: DeployHistoryItem[];
+  metrics?: DeviceMetrics;
 }) {
   const router = useRouter();
   const [tab, setTab] = React.useState("overview");
@@ -334,6 +338,7 @@ export function ComputerDetail({
       <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
         <TabsList>
           <TabsTab value="overview">Overview</TabsTab>
+          <TabsTab value="monitoring">Monitoring</TabsTab>
           <TabsTab value="livescan">Live scan</TabsTab>
           <TabsTab value="software">Software</TabsTab>
           <TabsTab value="compliance">Compliance</TabsTab>
@@ -545,6 +550,10 @@ export function ComputerDetail({
         </TabsPanel>
 
         {/* -------- Live scan -------- */}
+        <TabsPanel value="monitoring" className="flex flex-col gap-5">
+          <DeviceMonitoring metrics={metrics} />
+        </TabsPanel>
+
         <TabsPanel value="livescan" className="flex flex-col gap-5">
           <Panel
             icon={<MonitorCog />}
