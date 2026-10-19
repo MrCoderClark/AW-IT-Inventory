@@ -217,6 +217,8 @@ export type NotificationType =
   | "software-deploy-failed"
   | "compliance-at-risk"
   | "compliance-recovered"
+  | "metric-threshold"
+  | "metric-recovered"
   | "scan-failed"
   | "device-discovered"
   | "warranty-expiring";

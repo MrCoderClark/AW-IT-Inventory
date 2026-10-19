@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { evaluateMetricAlerts } from "@/db/alert-rules";
 import { recordMetrics, type MetricSample } from "@/db/metrics";
 import { bearerFrom, verifyServiceToken } from "@/lib/auth/service";
 
@@ -67,6 +68,14 @@ export async function POST(request: Request) {
       { ok: false, received: body.samples.length, recorded: 0 },
       { status: 200 },
     );
+  }
+  // Threshold alerts (spec 30): best-effort, never fail the ingest.
+  if (samples.length > 0) {
+    try {
+      await evaluateMetricAlerts(samples);
+    } catch (err) {
+      console.error("[ingest/metrics] alert evaluate failed:", err);
+    }
   }
   return NextResponse.json({ ok: true, received: body.samples.length, recorded });
 }
