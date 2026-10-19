@@ -80,6 +80,8 @@ const H = vi.hoisted(() => {
     async (_input: Record<string, unknown>) => "notif-id" as string | null,
   );
 
+  const emailMock = vi.fn(async (_p: Record<string, unknown>) => true);
+
   return {
     state,
     selectMock,
@@ -87,6 +89,7 @@ const H = vi.hoisted(() => {
     updateMock,
     deleteMock,
     notifyMock,
+    emailMock,
   };
 });
 
@@ -100,6 +103,7 @@ vi.mock("@/db/index", () => ({
   },
 }));
 vi.mock("./notifications", () => ({ createNotification: H.notifyMock }));
+vi.mock("@/lib/notify", () => ({ sendAlertRuleEmail: H.emailMock }));
 
 import {
   createAlertRule,
@@ -161,6 +165,7 @@ beforeEach(() => {
   H.state.deleteReturning = [];
   H.state.inserts = [];
   H.notifyMock.mockResolvedValue("notif-id");
+  H.emailMock.mockResolvedValue(true);
 });
 
 describe("evaluateMetricAlerts", () => {
@@ -178,12 +183,20 @@ describe("evaluateMetricAlerts", () => {
       consecutive: 1,
       alertedState: "firing",
     });
+    expect(H.emailMock).toHaveBeenCalledTimes(1);
+    expect(H.emailMock.mock.calls[0][0]).toMatchObject({
+      computer: { name: "Reception PC", tag: "H2TECS-COMP-1" },
+      event: "firing",
+      rule: { name: "Disk almost full", severity: "critical" },
+      value: "97%",
+    });
   });
 
   it("does not fire CPU ≥ 90 until the second consecutive sample", async () => {
     H.state.rules = [CPU];
     await evaluateMetricAlerts([sample({ cpuPct: 94 })]);
     expect(H.notifyMock).not.toHaveBeenCalled();
+    expect(H.emailMock).not.toHaveBeenCalled();
     expect(H.state.upserts[0]).toMatchObject({
       consecutive: 1,
       alertedState: "ok",
@@ -213,6 +226,7 @@ describe("evaluateMetricAlerts", () => {
     ];
     await evaluateMetricAlerts([sample({ cpuPct: null })]);
     expect(H.notifyMock).not.toHaveBeenCalled();
+    expect(H.emailMock).not.toHaveBeenCalled();
     expect(H.state.upserts).toEqual([]);
   });
 
@@ -235,6 +249,9 @@ describe("evaluateMetricAlerts", () => {
       consecutive: 0,
       alertedState: "ok",
     });
+    expect(H.emailMock).toHaveBeenCalledWith(
+      expect.objectContaining({ event: "recovered" }),
+    );
   });
 
   it("does not advance alertedState when the notification write fails", async () => {
@@ -245,6 +262,15 @@ describe("evaluateMetricAlerts", () => {
       consecutive: 1,
       alertedState: null,
     });
+    expect(H.emailMock).not.toHaveBeenCalled();
+  });
+
+  it("still advances the episode when the email fails (AC-6)", async () => {
+    H.state.rules = [DISK];
+    H.emailMock.mockResolvedValue(false);
+    await evaluateMetricAlerts([sample({ diskPct: 97 })]);
+    expect(H.notifyMock).toHaveBeenCalledTimes(1);
+    expect(H.state.upserts[0]).toMatchObject({ alertedState: "firing" });
   });
 });
 

@@ -7,6 +7,7 @@ import { alertRules, alertRuleStates, assets } from "./schema";
 import { createNotification } from "./notifications";
 import type { MetricSample } from "./metrics";
 import type { AlertRuleInput } from "@/lib/alert-rule-schema";
+import { sendAlertRuleEmail } from "@/lib/notify";
 import {
   applyMetricTick,
   episodeAction,
@@ -266,7 +267,21 @@ export async function evaluateMetricAlerts(
               : `metric-recovered-${rule.id}-${assetId}-${now.toISOString()}`,
             assetId,
           });
-          if (id) nextAlerted = fired ? "firing" : "ok";
+          if (id) {
+            nextAlerted = fired ? "firing" : "ok";
+            // Best-effort email, non-gating (AC-6): the in-app write above is
+            // the durable record. A failed send is logged inside notify.
+            await sendAlertRuleEmail({
+              computer: { name: asset.name, tag: asset.tag },
+              event: fired ? "firing" : "recovered",
+              rule: {
+                name: rule.name,
+                condition: formatCondition(spec),
+                severity: rule.severity,
+              },
+              value: valueText,
+            });
+          }
         } else if (tick.verdict === "ok" && nextAlerted === null) {
           nextAlerted = "ok";
         }

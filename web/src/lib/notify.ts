@@ -289,3 +289,66 @@ export async function sendComplianceAlertEmail(
     return false;
   }
 }
+
+/** One metric-threshold fire/recover email (spec 30, AC-6). */
+export interface AlertRuleEmailPayload {
+  computer: { name: string; tag: string };
+  event: "firing" | "recovered";
+  rule: { name: string; condition: string; severity: string };
+  value: string;
+}
+
+/**
+ * Ask aw-auth to email the admins about one metric-threshold episode (spec 30,
+ * AC-6): a rule firing or recovering. Web detects the transition at metric
+ * ingest; aw-auth resolves the admins and sends via Resend, the same
+ * `h2tecs-web` service account (`notify:send`) as printer/compliance. Returns
+ * true only on a real send (keys on `sent`). The caller treats this as
+ * best-effort and non-gating — the in-app notification is the durable record,
+ * so a failed email is logged, not retried (which would re-fire the bell).
+ */
+export async function sendAlertRuleEmail(
+  payload: AlertRuleEmailPayload,
+): Promise<boolean> {
+  const who = `${payload.computer.name} (${payload.rule.name} ${payload.event})`;
+  try {
+    const token = await getServiceToken();
+    if (!token) return false;
+
+    const res = await fetch(`${AUTH_API_URL}/v1/notify/alert-rule`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        computer: payload.computer,
+        event: payload.event,
+        rule: payload.rule,
+        value: payload.value,
+      }),
+      cache: "no-store",
+    });
+    if (res.status === 401) {
+      cachedToken = null;
+    }
+    if (!res.ok) {
+      console.error(
+        `[notify] alert-rule ${res.status} for ${who}: ` +
+          `${(await res.text()).slice(0, 200)}`,
+      );
+      return false;
+    }
+    const data = (await res.json().catch(() => null)) as { sent?: boolean } | null;
+    if (data?.sent !== true) {
+      console.error(
+        `[notify] aw-auth accepted but did not deliver the alert-rule email for ${who}.`,
+      );
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error(`[notify] alert-rule failed for ${who}:`, err);
+    return false;
+  }
+}

@@ -7,6 +7,7 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 from accounts.jwks import jwks, openid_configuration
 from accounts.views import (
+    AlertRuleView,
     ComplianceAlertView,
     CounterReportView,
     PrinterAlertView,
@@ -42,6 +43,11 @@ urlpatterns = [
         "v1/notify/compliance-alert",
         ComplianceAlertView.as_view(),
         name="notify-compliance-alert",
+    ),
+    path(
+        "v1/notify/alert-rule",
+        AlertRuleView.as_view(),
+        name="notify-alert-rule",
     ),
     path(
         "v1/notify/report",

@@ -112,6 +112,67 @@ class ComplianceAlertResendTest(TestCase):
         self.assertIn("Lab PC", body["subject"])
 
 
+class AlertRuleResendTest(TestCase):
+    """Metric-threshold alert email via Resend (spec 30, AC-6)."""
+
+    def setUp(self):
+        os.environ["RESEND_API_KEY"] = "re_test_key"
+        os.environ["EMAIL_FROM"] = "H2Tecs <alerts@example.com>"
+
+    def tearDown(self):
+        os.environ.pop("RESEND_API_KEY", None)
+        os.environ.pop("EMAIL_FROM", None)
+
+    @patch.object(notifications, "resolve_admin_emails", return_value=["a@example.com"])
+    @patch("accounts.notifications.urllib.request.urlopen")
+    def test_firing_includes_rule_value_and_condition(self, mock_urlopen, _mock_admins):
+        import json
+
+        resp = MagicMock()
+        resp.status = 200
+        mock_urlopen.return_value.__enter__.return_value = resp
+
+        ok = notifications.send_alert_rule(
+            {"name": "Reception PC", "tag": "H2TECS-COMP-1"},
+            "firing",
+            {
+                "name": "Disk almost full",
+                "condition": "Disk ≥ 90% for 1 sample (~15 min)",
+                "severity": "critical",
+            },
+            "91%",
+        )
+
+        self.assertTrue(ok)
+        body = json.loads(mock_urlopen.call_args.args[0].data)
+        self.assertIn("Disk almost full", body["subject"])
+        self.assertIn("Reception PC", body["subject"])
+        self.assertIn("91%", body["text"])
+        self.assertIn("Disk ≥ 90%", body["text"])
+
+    @patch.object(notifications, "resolve_admin_emails", return_value=["a@example.com"])
+    @patch("accounts.notifications.urllib.request.urlopen")
+    def test_recovered_subject(self, mock_urlopen, _mock_admins):
+        import json
+
+        resp = MagicMock()
+        resp.status = 200
+        mock_urlopen.return_value.__enter__.return_value = resp
+
+        ok = notifications.send_alert_rule(
+            {"name": "Lab PC"},
+            "recovered",
+            {"name": "CPU high", "condition": "CPU ≥ 90% for 2 samples (~30 min)"},
+            "40%",
+        )
+
+        self.assertTrue(ok)
+        body = json.loads(mock_urlopen.call_args.args[0].data)
+        self.assertIn("recovered", body["subject"].lower())
+        self.assertIn("CPU high", body["subject"])
+        self.assertIn("Lab PC", body["subject"])
+
+
 class ReportDeliveryResendTest(TestCase):
     """Scheduled report delivery email via Resend (spec 26 phase 2).
 
