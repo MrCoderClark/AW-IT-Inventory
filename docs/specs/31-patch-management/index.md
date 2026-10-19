@@ -219,14 +219,12 @@ No new ingest route.
 
 1. **Inventory** — `PS_UPDATES` + optional `PS_APP_UPGRADES` (ensure winget +
    list), tables, ingest, Updates tab, `/patches`. **AC-1–9.** ✅ shipped.
-2. **OS missing (this branch)** — see **Phase 2** below. **AC-10–14.**
-3. **Install** — approve selected OS KBs (WUA Download/Install or spec-23 `.msu`)
-   and/or selected winget ids (`winget upgrade --id … --silent
-   --accept-package-agreements --accept-source-agreements --disable-interactivity`,
-   never `--all` as a blind fleet action). Reboot-required must not leave
-   credentials in the job row. Notify like a software deploy.
+2. **OS missing** — dedicated daily WUA Search; Missing UI + `/patches` tile.
+   **AC-10–14.** ✅ shipped.
+3. **Install (this branch)** — see **Phase 3** below. **AC-15–20.**
 4. **Later:** WSUS/target-group scoping; fold "pending reboot" / "N app upgrades"
-   into spec 30 as built-in rules.
+   into spec 30 as built-in rules; fleet `/patches` multi-install; optional
+   reboot-when-done; `.msu` via Software Library as an alternate OS path.
 
 ## Phase 2 — Missing OS updates (WUA Search)
 
@@ -306,6 +304,85 @@ optional updates may appear depending on Search criteria — v1 uses
 - Compliance score rubric unchanged in phase 2 (still ages on `updates_last_days`);
   filling `updates_pending` unlocks a later score tweak if we want it.
 
+## Phase 3 — Install selected OS KBs + winget upgrades
+
+Phase 1–2 answer "what's installed / what's missing." Phase 3 lets an admin
+**approve and install** selected items on one computer from the Updates tab.
+
+### Decision
+
+**Dedicated `patch_install_jobs` queue** (same outbound-only claim/status/reaper
+shape as spec 23 software deploy). Updates tab only: checkboxes on Missing OS
+rows and App upgrades → **Install selected**. Permission: reuse
+`software:deploy`. Service scope: reuse `deploy:agent`. **No auto-reboot.**
+Never `winget upgrade --all`. No fleet bulk from `/patches` in this phase.
+Credentials never stored on the job row (collector resolves WinRM profiles at
+run time).
+
+OS path: WUA `Search` → match by KB / UpdateID → Download → Install (read-only
+Search from phase 2 stays on the daily loop; install is a separate job). App
+path: `winget upgrade --id <id> --silent --accept-package-agreements
+--accept-source-agreements --disable-interactivity` via the same InstallLocation
+winget resolution as the list script.
+
+### Requirements (phase 3)
+
+- **AC-15**: Admin with `software:deploy` can enqueue an install from a Computer's
+  Updates tab for a non-empty selection of current missing OS `kb_id`s and/or
+  winget `package_id`s. Selection is validated against stored inventory at
+  enqueue; unknown ids are rejected. Soft one-in-flight-per-computer (pending /
+  claimed / running). Requires Computer + IP (same as deploy).
+- **AC-16**: Job row freezes `selection` jsonb
+  `{ os: [{ kbId, title }], apps: [{ packageId, name, version, available }] }`
+  plus `targetIp` / `requestedBy`. No passwords. Status machine matches deploy:
+  `pending` → `claimed` → `running` → `succeeded` | `failed` | `canceled`.
+- **AC-17**: Collector worker claims via `/api/patch-install/claim`, runs OS then
+  app items over WinRM, posts `/api/patch-install/{id}/status` under the claim
+  fence. Whole job wall-clock capped (`patch_install_timeout`, default **600s**).
+  Per-item results in `result` jsonb; job-level errors in `error`. WUA / winget
+  reboot-required exit maps to item success with `rebootRequired: true` — **do
+  not** reboot the host.
+- **AC-18**: Updates tab: checkboxes + Install selected (confirm dialog stating
+  no reboot) + in-flight / history list (who, when, status, item counts). Cancel
+  while pending/claimed. Hidden / disabled without `software:deploy`.
+- **AC-19**: On terminal status, notify like a software deploy (`notifyDeployResult`
+  or a thin patch twin). Inventory refresh is best-effort / next scan+Search —
+  install does not itself rewrite missing/upgrade tables in v1.
+- **AC-20**: Config: `patch_install_timeout` (default 600). No new RBAC perm; no
+  new service scope. AC-6 is superseded for *approved* installs only — Scan now
+  and the daily Search remain read-only.
+
+### Data model (additive)
+
+```
+patch_install_jobs
+  id            uuid pk
+  asset_id      uuid → assets.id (cascade)
+  target_ip     text not null
+  selection     jsonb not null   -- frozen { os[], apps[] }
+  status        text not null default 'pending'
+  requested_by  text not null
+  worker_id     text | null
+  claimed_at / started_at / finished_at  timestamptz | null
+  result        jsonb | null     -- { items: [{ kind, id, ok, rebootRequired, exitCode, outputTail }], rebootRequired }
+  error         text | null
+  created_at / updated_at
+  partial index: pending claim poll; in-flight per assetId
+```
+
+### Collector sketch
+
+`patch_install.py` + `_drain_patch_install` in the worker (alongside deploy).
+Claim → mark running → resolve profiles → for each OS item run a time-sliced
+WUA install script; for each app run winget upgrade `--id`. Always clean up;
+post fenced status. Startup: no new schedule line (on-demand only).
+
+### UI
+
+- Computer **Updates** → checkboxes on Missing + App upgrades; Install selected;
+  job history.
+- `/patches` unchanged (counts only) in phase 3.
+
 ## Consequences
 
 - One or two extra WinRM round-trips per computer scan (hotfixes always; winget
@@ -316,14 +393,13 @@ optional updates may appear depending on Search criteria — v1 uses
 
 ## Open questions
 
-- **Install permission:** reuse `software:deploy` vs add `patch:write`. Reuse
-  unless Owner/Admin need to deploy software but not OS patches (unlikely here).
+- **Install permission:** ✅ phase 3 — reuse `software:deploy` (no `patch:write`).
 - **Search cadence:** ✅ phase 2 — dedicated daily interval (not on computer sweep /
   not on Scan now).
 - **Win10/11 QFE vs DISM packages:** if QFE is too thin on the fleet, a later
   pass can switch the *installed* list to `Get-WindowsPackage -Online` (heavier).
-- **Auto-reboot after install:** phase 3 default should be **no** (`/norestart`
-  / WUA AllowCrashes semantics); an explicit "reboot when done" flag later.
+- **Auto-reboot after install:** ✅ phase 3 — **no** by default; explicit
+  "reboot when done" flag later.
 - **Winget bootstrap vs GPO:** some fleets block Store / App Installer. Fail
   soft (AC-9) rather than fighting policy; `collect_app_upgrades: false` turns
   the whole app path off.

@@ -217,6 +217,8 @@ export type NotificationType =
   | "printer-install-failed"
   | "software-deploy"
   | "software-deploy-failed"
+  | "patch-install"
+  | "patch-install-failed"
   | "compliance-at-risk"
   | "compliance-recovered"
   | "metric-threshold"

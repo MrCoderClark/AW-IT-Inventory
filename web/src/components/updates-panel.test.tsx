@@ -1,9 +1,17 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
 import { UpdatesPanel } from "./updates-panel";
 import type { ComputerPatches } from "@/db/patches";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
+}));
+vi.mock("@/app/(app)/patch-install-actions", () => ({
+  requestPatchInstall: vi.fn(),
+  requestCancelPatchInstall: vi.fn(),
+}));
 
 const SAMPLE: ComputerPatches = {
   pendingReboot: true,
@@ -43,12 +51,12 @@ const SAMPLE: ComputerPatches = {
 
 describe("UpdatesPanel", () => {
   it("prompts to scan when there is no patch row", () => {
-    render(<UpdatesPanel patches={null} />);
+    render(<UpdatesPanel patches={null} assetTag="PC1" />);
     expect(screen.getByText(/No patch inventory yet/i)).toBeTruthy();
   });
 
   it("shows pending reboot, missing KBs, installed KBs, and app upgrades", () => {
-    render(<UpdatesPanel patches={SAMPLE} />);
+    render(<UpdatesPanel patches={SAMPLE} assetTag="PC1" />);
     expect(screen.getByText(/Pending reboot/i)).toBeTruthy();
     expect(screen.getByText(/1 missing/i)).toBeTruthy();
     expect(screen.getByText("KB9999999")).toBeTruthy();
@@ -60,9 +68,19 @@ describe("UpdatesPanel", () => {
     expect(screen.getByText(/9 days ago/i)).toBeTruthy();
   });
 
+  it("shows Install selected when canInstall", () => {
+    render(
+      <UpdatesPanel patches={SAMPLE} assetTag="PC1" canInstall patchJobs={[]} />,
+    );
+    expect(screen.getByRole("button", { name: /Install selected/i })).toBeTruthy();
+    expect(screen.getByLabelText(/Select KB9999999/i)).toBeTruthy();
+    expect(screen.getByLabelText(/Select Google.Chrome/i)).toBeTruthy();
+  });
+
   it("explains when winget is unavailable", () => {
     render(
       <UpdatesPanel
+        assetTag="PC1"
         patches={{
           ...SAMPLE,
           wingetAvailable: false,

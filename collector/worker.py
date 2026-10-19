@@ -477,6 +477,116 @@ def _drain_deploy(config: Config, tokens: "TokenCache", worker_id: str) -> None:
         _run_deploy_job(config, tokens, worker_id, job)
 
 
+def _claim_patch_install(config: Config, token: str, worker_id: str) -> dict | None:
+    """Claim one pending patch-install job (spec 31 phase 3), or None."""
+    resp = httpx.post(
+        f"{config.ingest_url}/api/patch-install/claim",
+        json={"workerId": worker_id},
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=30,
+    )
+    if resp.status_code == 204:
+        return None
+    if resp.status_code != 200:
+        raise RuntimeError(
+            f"patch-install claim failed ({resp.status_code}): {resp.text[:200]}"
+        )
+    return resp.json()
+
+
+def _post_patch_install_status(
+    config: Config,
+    token: str,
+    job_id: str,
+    worker_id: str,
+    claimed_at: str,
+    status: str,
+    *,
+    result: dict | None = None,
+    error: str | None = None,
+) -> bool:
+    """Report patch-install status, fenced by the claim (False on 409)."""
+    body: dict = {"workerId": worker_id, "claimedAt": claimed_at, "status": status}
+    if result is not None:
+        body["result"] = result
+    if error is not None:
+        body["error"] = error
+    resp = httpx.post(
+        f"{config.ingest_url}/api/patch-install/{job_id}/status",
+        json=body,
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=60,
+    )
+    if resp.status_code == 409:
+        console.print(
+            f"  [yellow]claim lost[/yellow] on patch-install {job_id}; dropping result."
+        )
+        return False
+    if resp.status_code != 200:
+        raise RuntimeError(
+            f"patch-install status failed ({resp.status_code}): {resp.text[:200]}"
+        )
+    return True
+
+
+def _run_patch_install_job(
+    config: Config, tokens: "TokenCache", worker_id: str, job: dict
+) -> None:
+    from patch_install import run_patch_install
+
+    job_id = job["id"]
+    claimed_at = job["claimedAt"]
+    sel = job.get("selection") or {}
+    target = job.get("assetTag") or job.get("targetIp")
+    n_os = len(sel.get("os") or [])
+    n_app = len(sel.get("apps") or [])
+    console.print(
+        f"[bold]Patch install[/bold] {job_id}: {n_os} OS + {n_app} app on {target} …"
+    )
+
+    if not _post_patch_install_status(
+        config, tokens.get(), job_id, worker_id, claimed_at, "running"
+    ):
+        return
+
+    try:
+        status, result = run_patch_install(config, job)
+    except Exception as e:  # noqa: BLE001 — worker-level error fails the job
+        console.print(f"  [red]patch-install failed:[/red] {e}")
+        _post_patch_install_status(
+            config,
+            tokens.get(),
+            job_id,
+            worker_id,
+            claimed_at,
+            "failed",
+            error=str(e)[:800],
+        )
+        return
+
+    for item in result.get("items", []):
+        tag = "green" if item.get("ok") else "red"
+        console.print(
+            f"    [{tag}]{'ok' if item.get('ok') else 'fail'}[/{tag}] "
+            f"{item.get('kind')} {item.get('id')} (exit {item.get('exitCode')})"
+        )
+
+    if _post_patch_install_status(
+        config, tokens.get(), job_id, worker_id, claimed_at, status, result=result
+    ):
+        reboot = " (reboot required)" if result.get("rebootRequired") else ""
+        console.print(f"  [green]done[/green] — {status}{reboot}.")
+
+
+def _drain_patch_install(config: Config, tokens: "TokenCache", worker_id: str) -> None:
+    """Process any pending patch-install jobs (spec 31 phase 3)."""
+    while True:
+        job = _claim_patch_install(config, tokens.get(), worker_id)
+        if job is None:
+            return
+        _run_patch_install_job(config, tokens, worker_id, job)
+
+
 def _claim_remote(config: Config, token: str, worker_id: str) -> dict | None:
     """Claim one pending remote terminal session (spec 24), or None."""
     resp = httpx.post(
@@ -582,8 +692,10 @@ def _build_scheduler(config: Config, tokens: "TokenCache"):
         # Prune old finished software deployments (spec 23).
         try:
             from software_deploy import prune_deployments
+            from patch_install import prune_patch_installs
 
             prune_deployments(config, tokens.get())
+            prune_patch_installs(config, tokens.get())
         except Exception as e:  # noqa: BLE001
             console.print(f"  [red]deployment retention error:[/red] {e}")
             tokens.invalidate()
@@ -863,6 +975,8 @@ def run_worker(args: argparse.Namespace) -> int:
                 if now - last_deploy >= deploy_poll:
                     last_deploy = now
                     _drain_deploy(config, tokens, worker_id)
+                    # Spec 31 phase 3: same poll cadence as software deploy.
+                    _drain_patch_install(config, tokens, worker_id)
                 if cutout_enabled and now - last_cutout >= cutout_poll:
                     last_cutout = now
                     _drain_cutout(config, tokens, worker_id)

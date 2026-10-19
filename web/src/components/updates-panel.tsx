@@ -1,12 +1,31 @@
-import { ArrowRight, Package, RefreshCw, ShieldAlert } from "lucide-react";
+"use client";
 
+import * as React from "react";
+import { useRouter } from "next/navigation";
+import { ArrowRight, Loader2, Package, RefreshCw, ShieldAlert } from "lucide-react";
+import { toast } from "sonner";
+
+import {
+  requestCancelPatchInstall,
+  requestPatchInstall,
+} from "@/app/(app)/patch-install-actions";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Dot, Panel, fmtDate, fmtDateTime } from "@/components/detail-ui";
 import type { ComputerPatches } from "@/db/patches";
+import type { PatchInstallListItem } from "@/db/patch-install";
 
 /**
- * Per-computer Updates tab (spec 31, AC-3): pending reboot, last-update age,
- * installed KBs, and available winget upgrades. Pure render over stored state.
+ * Per-computer Updates tab (spec 31): inventory + Missing + optional Install
+ * selected (phase 3, AC-18) for `software:deploy` admins.
  */
 
 function lastUpdateLabel(days: number | null | undefined): string {
@@ -16,7 +35,36 @@ function lastUpdateLabel(days: number | null | undefined): string {
   return `${days} days ago`;
 }
 
-export function UpdatesPanel({ patches }: { patches: ComputerPatches | null }) {
+const JOB_STATUS: Record<string, string> = {
+  pending: "Queued",
+  claimed: "Installing…",
+  running: "Installing…",
+  succeeded: "Succeeded",
+  failed: "Failed",
+  canceled: "Canceled",
+};
+
+export function UpdatesPanel({
+  patches,
+  assetTag,
+  canInstall = false,
+  patchJobs = [],
+}: {
+  patches: ComputerPatches | null;
+  assetTag: string;
+  canInstall?: boolean;
+  patchJobs?: PatchInstallListItem[];
+}) {
+  const router = useRouter();
+  const [osSel, setOsSel] = React.useState<Set<string>>(new Set());
+  const [appSel, setAppSel] = React.useState<Set<string>>(new Set());
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const [busy, startBusy] = React.useTransition();
+
+  const inflight = patchJobs.some((j) =>
+    j.status === "pending" || j.status === "claimed" || j.status === "running",
+  );
+
   if (!patches) {
     return (
       <Panel icon={<RefreshCw />} title="Updates">
@@ -36,6 +84,56 @@ export function UpdatesPanel({ patches }: { patches: ComputerPatches | null }) {
       : patches.wingetAvailable == null
         ? "App upgrade collect was skipped on the last scan."
         : null;
+
+  function toggleOs(id: string) {
+    setOsSel((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }
+  function toggleApp(id: string) {
+    setAppSel((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }
+
+  const selectedCount = osSel.size + appSel.size;
+
+  function doInstall() {
+    startBusy(async () => {
+      const res = await requestPatchInstall({
+        assetTag,
+        osKbIds: [...osSel],
+        packageIds: [...appSel],
+      });
+      setConfirmOpen(false);
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Patch install queued");
+      setOsSel(new Set());
+      setAppSel(new Set());
+      router.refresh();
+    });
+  }
+
+  function doCancel(jobId: string) {
+    startBusy(async () => {
+      const res = await requestCancelPatchInstall({ jobId, assetTag });
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Canceled");
+      router.refresh();
+    });
+  }
 
   return (
     <div className="flex flex-col gap-5">
@@ -84,6 +182,7 @@ export function UpdatesPanel({ patches }: { patches: ComputerPatches | null }) {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
+                      {canInstall && <th className="w-10 px-3 py-2" />}
                       <th className="px-3 py-2 font-medium">KB</th>
                       <th className="px-3 py-2 font-medium">Title</th>
                       <th className="px-3 py-2 font-medium">Severity</th>
@@ -92,6 +191,18 @@ export function UpdatesPanel({ patches }: { patches: ComputerPatches | null }) {
                   <tbody className="divide-y">
                     {patches.missing.map((m) => (
                       <tr key={m.kbId}>
+                        {canInstall && (
+                          <td className="px-3 py-2">
+                            <input
+                              type="checkbox"
+                              className="size-4 accent-primary"
+                              checked={osSel.has(m.kbId)}
+                              onChange={() => toggleOs(m.kbId)}
+                              disabled={inflight || busy}
+                              aria-label={`Select ${m.kbId}`}
+                            />
+                          </td>
+                        )}
                         <td className="px-3 py-2 font-mono text-xs">{m.kbId}</td>
                         <td className="px-3 py-2 text-muted-foreground">
                           {m.title}
@@ -157,6 +268,7 @@ export function UpdatesPanel({ patches }: { patches: ComputerPatches | null }) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
+                  {canInstall && <th className="w-10 px-3 py-2" />}
                   <th className="px-3 py-2 font-medium">Package</th>
                   <th className="px-3 py-2 font-medium">Current</th>
                   <th className="px-3 py-2 font-medium" />
@@ -167,6 +279,18 @@ export function UpdatesPanel({ patches }: { patches: ComputerPatches | null }) {
               <tbody className="divide-y">
                 {patches.appUpgrades.map((a) => (
                   <tr key={a.packageId}>
+                    {canInstall && (
+                      <td className="px-3 py-2">
+                        <input
+                          type="checkbox"
+                          className="size-4 accent-primary"
+                          checked={appSel.has(a.packageId)}
+                          onChange={() => toggleApp(a.packageId)}
+                          disabled={inflight || busy}
+                          aria-label={`Select ${a.packageId}`}
+                        />
+                      </td>
+                    )}
                     <td className="px-3 py-2">
                       <span className="font-medium">{a.name}</span>
                       <span className="mt-0.5 block font-mono text-[11px] text-muted-foreground">
@@ -192,6 +316,92 @@ export function UpdatesPanel({ patches }: { patches: ComputerPatches | null }) {
           </div>
         )}
       </Panel>
+
+      {canInstall && (
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            disabled={selectedCount === 0 || inflight || busy}
+            onClick={() => setConfirmOpen(true)}
+          >
+            {busy ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <RefreshCw className="size-4" />
+            )}
+            Install selected
+            {selectedCount > 0 ? ` (${selectedCount})` : ""}
+          </Button>
+          {inflight && (
+            <span className="text-sm text-muted-foreground">
+              A patch install is already in progress on this computer.
+            </span>
+          )}
+        </div>
+      )}
+
+      {canInstall && patchJobs.length > 0 && (
+        <Panel icon={<RefreshCw />} title="Install history">
+          <ul className="divide-y rounded-lg border">
+            {patchJobs.map((j) => (
+              <li
+                key={j.id}
+                className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
+              >
+                <div>
+                  <span className="font-medium">
+                    {JOB_STATUS[j.status] ?? j.status}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {" "}
+                    · {j.osCount} OS
+                    {j.appCount ? ` + ${j.appCount} app` : ""} · {j.requestedBy}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    {fmtDateTime(j.requestedAt)}
+                    {j.waitingForCollector ? " · waiting for collector" : ""}
+                    {j.error ? ` · ${j.error}` : ""}
+                  </span>
+                </div>
+                {(j.status === "pending" ||
+                  j.status === "claimed" ||
+                  j.status === "running") && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => doCancel(j.id)}
+                  >
+                    Cancel
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      )}
+
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Install selected updates?</DialogTitle>
+            <DialogDescription>
+              {osSel.size} OS update{osSel.size === 1 ? "" : "s"} and {appSel.size}{" "}
+              app upgrade{appSel.size === 1 ? "" : "s"} will be installed over
+              WinRM. The host will <strong>not</strong> be rebooted
+              automatically.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button disabled={busy} onClick={doInstall}>
+              {busy && <Loader2 className="size-4 animate-spin" />}
+              Install
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
