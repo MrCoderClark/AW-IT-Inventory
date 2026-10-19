@@ -106,6 +106,45 @@ def _search_one(ip: str, config: Config) -> dict | None:
     return None
 
 
+def _post_results(config: Config, token: str, results: list[dict]) -> int:
+    resp = httpx.post(
+        f"{config.ingest_url}/api/ingest/missing-updates",
+        json={"results": results},
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=60,
+    )
+    resp.raise_for_status()
+    return int(resp.json().get("recorded", 0))
+
+
+def search_one_host(
+    config: Config, token: str, *, asset_id: str, ip: str
+) -> tuple[bool, str | None]:
+    """Run Search for one computer and ingest (spec 31 AC-21).
+
+    Returns (ok, error). ok=False when Search failed/gapped (caller marks job failed).
+    """
+    data = _search_one(ip, config)
+    if data is None:
+        return False, "Search timed out or WinRM failed"
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    recorded = _post_results(
+        config,
+        token,
+        [
+            {
+                "assetId": asset_id,
+                "collected_at": now,
+                "count": data["count"],
+                "missing": data["missing"],
+            }
+        ],
+    )
+    if recorded < 1:
+        return False, "ingest did not record the result"
+    return True, None
+
+
 def sample_missing_updates(config: Config, token: str) -> None:
     """One missing-patch pass over every known Computer (spec 31 phase 2)."""
     targets = _fetch_computer_targets(config, token)
@@ -133,14 +172,7 @@ def sample_missing_updates(config: Config, token: str) -> None:
         console.print("[dim]missing-patches: no computers searched.[/dim]")
         return
 
-    resp = httpx.post(
-        f"{config.ingest_url}/api/ingest/missing-updates",
-        json={"results": results},
-        headers={"Authorization": f"Bearer {token}"},
-        timeout=60,
-    )
-    resp.raise_for_status()
-    recorded = resp.json().get("recorded", 0)
+    recorded = _post_results(config, token, results)
     console.print(
         f"[dim]missing-patches: searched {len(results)}/{len(targets)} computer(s), "
         f"recorded {recorded}.[/dim]"

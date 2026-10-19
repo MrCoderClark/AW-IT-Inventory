@@ -11,6 +11,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/app/(app)/patch-install-actions", () => ({
   requestPatchInstall: vi.fn(),
   requestCancelPatchInstall: vi.fn(),
+  requestMissingUpdateCheck: vi.fn(),
 }));
 
 const SAMPLE: ComputerPatches = {
@@ -68,11 +69,18 @@ describe("UpdatesPanel", () => {
     expect(screen.getByText(/9 days ago/i)).toBeTruthy();
   });
 
-  it("shows Install selected when canInstall", () => {
+  it("shows Install selected and Check for updates when canInstall", () => {
     render(
-      <UpdatesPanel patches={SAMPLE} assetTag="PC1" canInstall patchJobs={[]} />,
+      <UpdatesPanel
+        patches={SAMPLE}
+        assetTag="PC1"
+        canInstall
+        patchJobs={[]}
+        checkJobs={[]}
+      />,
     );
     expect(screen.getByRole("button", { name: /Install selected/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Check for updates/i })).toBeTruthy();
     expect(screen.getByLabelText(/Select KB9999999/i)).toBeTruthy();
     expect(screen.getByLabelText(/Select Google.Chrome/i)).toBeTruthy();
   });

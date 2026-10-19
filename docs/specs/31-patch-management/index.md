@@ -213,7 +213,7 @@ No new ingest route.
 - **`/patches`**: HeroHeader + tiles (pending reboot, stale OS, app upgrades
   waiting, winget missing) + table of computers. Nav under Manage, `asset:read`
   (no extra perm), like Compliance.
-- Computers table: optional later chip for pending reboot — not v1.
+- Computers table: pending-reboot badge when known (phase 4 / AC-22).
 
 ## Phases / build plan
 
@@ -221,10 +221,12 @@ No new ingest route.
    list), tables, ingest, Updates tab, `/patches`. **AC-1–9.** ✅ shipped.
 2. **OS missing** — dedicated daily WUA Search; Missing UI + `/patches` tile.
    **AC-10–14.** ✅ shipped.
-3. **Install (this branch)** — see **Phase 3** below. **AC-15–20.**
-4. **Later:** WSUS/target-group scoping; fold "pending reboot" / "N app upgrades"
-   into spec 30 as built-in rules; fleet `/patches` multi-install; optional
-   reboot-when-done; `.msu` via Software Library as an alternate OS path.
+3. **Install** — approve selected OS KBs + winget upgrades from Updates tab.
+   **AC-15–20.** ✅ shipped.
+4. **Closeout** — see **Phase 4** below. **AC-21–22.** (this branch)
+
+**v1 status: complete** once phase 4 ships — inventory → missing → install →
+one-host Check for updates + pending-reboot chip.
 
 ## Phase 2 — Missing OS updates (WUA Search)
 
@@ -240,8 +242,8 @@ with an IP, one time-boxed WinRM script that runs WUA
 `Search("IsInstalled=0")`, posts missing KBs + count. **Not** on `PS_COLLECT` /
 `PS_UPDATES`. Cadence is **daily** by default (`missing_patch_interval_hours: 24`,
 `0` = off) — Search talks to WSUS/WU and is expensive; hourly is wrong. Manual
-"Scan now" does **not** trigger Search in phase 2 (keeps Scan snappy); a later
-optional "Check for updates" button can enqueue one host.
+"Scan now" does **not** trigger Search (keeps Scan snappy). Phase 4 adds an
+optional one-host **Check for updates** button on the Updates tab.
 
 ### Requirements (phase 2)
 
@@ -383,6 +385,32 @@ post fenced status. Startup: no new schedule line (on-demand only).
   job history.
 - `/patches` unchanged (counts only) in phase 3.
 
+## Phase 4 — Closeout (v1 finish)
+
+Polish that closes the "Scan now stays fast / Search is separate" story and the
+fleet visibility gap called out in phase 1.
+
+### Requirements (phase 4)
+
+- **AC-21**: Updates tab **Check for updates** (`software:deploy`) enqueues a
+  one-host missing Search job (same `PS_MISSING_UPDATES` +
+  `/api/ingest/missing-updates` as the daily loop). Not on Scan now. Soft
+  one-in-flight-per-computer for checks. Worker claims via
+  `/api/missing-update-checks/claim` (`deploy:agent`); posts status then ingest.
+- **AC-22**: Computers table shows a compact **Pending reboot** badge next to
+  the name when `windows_update_state.pending_reboot` is true.
+
+### Out of scope / v2 (not this spec)
+
+Defer deliberately — do not block marking 31 complete:
+
+- Fleet multi-install from `/patches`
+- Optional "reboot when done" on install jobs
+- WSUS / target-group scoping
+- `.msu` install via Software Library (use spec 23 for packaged push)
+- Spec 30 built-in rules for pending reboot / missing / app-upgrade counts
+- Win10/11 DISM package list if QFE stays thin; `IsHidden=0` Search filter
+
 ## Consequences
 
 - One or two extra WinRM round-trips per computer scan (hotfixes always; winget
@@ -391,24 +419,18 @@ post fenced status. Startup: no new schedule line (on-demand only).
 - `/compliance` and `/patches` will overlap on "stale updates"; that is
   intentional (score vs inventory). Do not delete the compliance updates check.
 
-## Open questions
+## Decisions (closed)
 
-- **Install permission:** ✅ phase 3 — reuse `software:deploy` (no `patch:write`).
-- **Search cadence:** ✅ phase 2 — dedicated daily interval (not on computer sweep /
-  not on Scan now).
-- **Win10/11 QFE vs DISM packages:** if QFE is too thin on the fleet, a later
-  pass can switch the *installed* list to `Get-WindowsPackage -Online` (heavier).
-- **Auto-reboot after install:** ✅ phase 3 — **no** by default; explicit
-  "reboot when done" flag later.
-- **Winget bootstrap vs GPO:** some fleets block Store / App Installer. Fail
-  soft (AC-9) rather than fighting policy; `collect_app_upgrades: false` turns
-  the whole app path off.
-- **Search criteria:** start with `IsInstalled=0` only; add `IsHidden=0` /
-  exclude drivers if the fleet list is too noisy.
+- **Install permission:** reuse `software:deploy` (no `patch:write`).
+- **Search cadence:** dedicated daily interval; Scan now stays inventory-only;
+  AC-21 adds optional one-host Check.
+- **Auto-reboot after install:** no by default (v2 flag).
+- **Winget bootstrap vs GPO:** fail soft (AC-9);
+  `collect_app_upgrades: false` turns the app path off.
 
 ## Related
 
 - [28](../28-rmm-roadmap/index.md) roadmap · [21](../21-compliance/index.md)
   update age · [12](../12-scheduled-manual-scans/index.md) scan ·
   [23](../23-software-deployment/index.md) deploy · [15](../15-software-inventory/index.md)
-  programs · [30](../30-alert-rules/index.md) later reboot rule
+  programs · [30](../30-alert-rules/index.md) pending-reboot / missing alerts (v2)

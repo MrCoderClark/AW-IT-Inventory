@@ -50,6 +50,7 @@ import { PrinterInstallPanel } from "@/components/printer-install-panel";
 import { UpdatesPanel } from "@/components/updates-panel";
 import type { DeviceMetrics } from "@/db/metrics";
 import type { ComputerPatches } from "@/db/patches";
+import type { MissingCheckListItem } from "@/db/missing-update-checks";
 import type { PatchInstallListItem } from "@/db/patch-install";
 import type { CompliancePosture } from "@/lib/compliance-score";
 import type {
@@ -156,6 +157,7 @@ export function ComputerDetail({
   compliancePosture = null,
   patches = null,
   patchJobs = [],
+  checkJobs = [],
   deployPackages = [],
   deployHistory = [],
   metrics = { points: [], latest: null },
@@ -182,6 +184,7 @@ export function ComputerDetail({
   compliancePosture?: CompliancePosture | null;
   patches?: ComputerPatches | null;
   patchJobs?: PatchInstallListItem[];
+  checkJobs?: MissingCheckListItem[];
   deployPackages?: DeployPackageOption[];
   deployHistory?: DeployHistoryItem[];
   metrics?: DeviceMetrics;
@@ -719,6 +722,7 @@ export function ComputerDetail({
             assetTag={asset.id}
             canInstall={canDeploy}
             patchJobs={patchJobs}
+            checkJobs={checkJobs}
           />
         </TabsPanel>
 

@@ -60,6 +60,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/status-badge";
 import { ReachabilityBadge } from "@/components/reachability-badge";
 import { AssetImage } from "@/components/asset-image";
@@ -236,7 +237,14 @@ const nameColumn: ColumnDef<Asset> = {
         variant="thumb"
         className="size-8 shrink-0 overflow-hidden rounded-lg border"
       />
-      <span className="font-medium">{row.original.name}</span>
+      <span className="flex min-w-0 flex-wrap items-center gap-2">
+        <span className="font-medium">{row.original.name}</span>
+        {row.original.pendingReboot ? (
+          <Badge variant="destructive" className="text-[10px] font-medium">
+            Pending reboot
+          </Badge>
+        ) : null}
+      </span>
     </div>
   ),
 };

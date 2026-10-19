@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import {
   requestCancelPatchInstall,
+  requestMissingUpdateCheck,
   requestPatchInstall,
 } from "@/app/(app)/patch-install-actions";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { Dot, Panel, fmtDate, fmtDateTime } from "@/components/detail-ui";
 import type { ComputerPatches } from "@/db/patches";
+import type { MissingCheckListItem } from "@/db/missing-update-checks";
 import type { PatchInstallListItem } from "@/db/patch-install";
 
 /**
@@ -49,11 +51,13 @@ export function UpdatesPanel({
   assetTag,
   canInstall = false,
   patchJobs = [],
+  checkJobs = [],
 }: {
   patches: ComputerPatches | null;
   assetTag: string;
   canInstall?: boolean;
   patchJobs?: PatchInstallListItem[];
+  checkJobs?: MissingCheckListItem[];
 }) {
   const router = useRouter();
   const [osSel, setOsSel] = React.useState<Set<string>>(new Set());
@@ -61,8 +65,13 @@ export function UpdatesPanel({
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [busy, startBusy] = React.useTransition();
 
-  const inflight = patchJobs.some((j) =>
-    j.status === "pending" || j.status === "claimed" || j.status === "running",
+  const inflight = patchJobs.some(
+    (j) =>
+      j.status === "pending" || j.status === "claimed" || j.status === "running",
+  );
+  const checkInflight = checkJobs.some(
+    (j) =>
+      j.status === "pending" || j.status === "claimed" || j.status === "running",
   );
 
   if (!patches) {
@@ -135,6 +144,18 @@ export function UpdatesPanel({
     });
   }
 
+  function doCheck() {
+    startBusy(async () => {
+      const res = await requestMissingUpdateCheck({ assetTag });
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Check for updates queued");
+      router.refresh();
+    });
+  }
+
   return (
     <div className="flex flex-col gap-5">
       <Panel icon={<RefreshCw />} title="Windows updates">
@@ -163,6 +184,22 @@ export function UpdatesPanel({
           <span className="text-xs text-muted-foreground">
             Collected {fmtDateTime(patches.collectedAt)}
           </span>
+          {canInstall && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="ml-auto"
+              disabled={checkInflight || busy}
+              onClick={doCheck}
+            >
+              {checkInflight || busy ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="size-3.5" />
+              )}
+              {checkInflight ? "Checking…" : "Check for updates"}
+            </Button>
+          )}
         </div>
 
         {patches.missingCollectedAt != null && (

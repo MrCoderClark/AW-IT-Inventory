@@ -61,9 +61,10 @@ trend reporting). Numbers are indicative, not commitments.
    recipients (reuses the aw-auth notify path). Generalizes the spec-21/spec-12
    one-off alerts into a configurable engine; consumes spec-29 metrics + compliance.
    **High value, medium effort.**
-3. **Spec 31 — Patch management.** Read installed updates/missing patches at scan
-   (WinRM), surface per device + fleet; approve → deploy via the spec-23 pipeline →
-   report. **High value, medium-high effort.**
+3. **Spec 31 — Patch management.** ✅ **v1 shipped** — installed KBs + winget
+   upgrades, daily missing Search, approve/install from Updates, one-host Check
+   for updates. Fleet bulk / reboot-when-done / WSUS = v2 (see spec 31 out of
+   scope).
 4. **Spec 32 — Automation/script library.** Saved scripts (PowerShell), run
    on-demand / scheduled / on-alert against a device group via the spec-23/24 worker.
    **Medium value, medium effort.**

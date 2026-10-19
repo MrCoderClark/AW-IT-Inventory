@@ -126,3 +126,36 @@ def test_ps_missing_updates_is_search_not_install():
     assert "Installer" not in PS_MISSING_UPDATES
     enc = base64.b64encode(PS_MISSING_UPDATES.encode("utf-16-le"))
     assert len(enc) <= 8000, f"encoded length {len(enc)}"
+
+
+def test_search_one_host_posts_ingest(monkeypatch):
+    from collect_missing_updates import search_one_host
+    from config import Config
+
+    cfg = Config(ingest_url="http://web")
+    monkeypatch.setattr(
+        "collect_missing_updates._search_one",
+        lambda ip, c: {
+            "count": 1,
+            "missing": [{"kb": "KB1", "title": "T", "severity": None, "size_bytes": None}],
+        },
+    )
+    posted: dict = {}
+
+    class FakeResp:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"recorded": 1}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        posted["url"] = url
+        posted["json"] = json
+        return FakeResp()
+
+    monkeypatch.setattr("collect_missing_updates.httpx.post", fake_post)
+    ok, err = search_one_host(cfg, "tok", asset_id="a1", ip="10.0.0.1")
+    assert ok and err is None
+    assert posted["url"].endswith("/api/ingest/missing-updates")
+    assert posted["json"]["results"][0]["assetId"] == "a1"
