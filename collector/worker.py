@@ -616,6 +616,15 @@ def _build_scheduler(config: Config, tokens: "TokenCache"):
             console.print(f"  [red]report delivery job error:[/red] {e}")
             tokens.invalidate()
 
+    def metrics_job() -> None:
+        try:
+            from collect_metrics import sample_metrics
+
+            sample_metrics(config, tokens.get())
+        except Exception as e:  # noqa: BLE001 — must never kill the scheduler
+            console.print(f"  [red]metrics job error:[/red] {e}")
+            tokens.invalidate()
+
     scheduled: list[str] = []
     for t in config.schedule_times:
         try:
@@ -718,6 +727,21 @@ def _build_scheduler(config: Config, tokens: "TokenCache"):
         )
         delivery_scheduled = f"every {config.report_delivery_interval_minutes}m"
 
+    # Device metric sampling (spec 29): CPU/RAM/disk/uptime from every known computer
+    # on an interval, a light loop separate from the full scan. 0 = off.
+    metrics_scheduled = "off"
+    if config.metric_sample_interval_minutes > 0:
+        scheduler.add_job(
+            metrics_job,
+            IntervalTrigger(
+                minutes=config.metric_sample_interval_minutes, timezone=tz
+            ),
+            id="device-metrics",
+            replace_existing=True,
+            misfire_grace_time=300,
+        )
+        metrics_scheduled = f"every {config.metric_sample_interval_minutes}m"
+
     zone = config.schedule_timezone or "host local"
     console.print(
         f"[bold]Reachability schedule[/bold] ({zone}): "
@@ -725,7 +749,8 @@ def _build_scheduler(config: Config, tokens: "TokenCache"):
         f"counter report {report_scheduled} · "
         f"computer sweep {', '.join(sweep_scheduled) if sweep_scheduled else 'off'} · "
         f"warranty sweep {', '.join(warranty_scheduled) if warranty_scheduled else 'off'} · "
-        f"report delivery {delivery_scheduled}."
+        f"report delivery {delivery_scheduled} · "
+        f"metrics {metrics_scheduled}."
     )
     return scheduler
 

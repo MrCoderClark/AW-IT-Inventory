@@ -7,6 +7,7 @@ import { ThinAssetDetail } from "@/components/thin-detail";
 import { PagePlaceholder } from "@/components/page-placeholder";
 import { getAssetAssignmentHistory } from "@/db/assignments";
 import { getComplianceStatus } from "@/db/compliance";
+import { getDeviceMetrics } from "@/db/metrics";
 import { getPrinterCounters } from "@/db/counters";
 import { getInstalledSoftware } from "@/db/software";
 import {
@@ -101,6 +102,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
       deployHistoryRows,
       remoteSessions,
       monitors,
+      metrics,
     ] = await Promise.all([
       getMachineSummary(id),
       canWrite ? getAssetAssigneeId(id) : Promise.resolve(null),
@@ -118,6 +120,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
       canDeploy ? listDeploymentsForAssetTag(id) : Promise.resolve([]),
       canRemote ? listRemoteSessionsForAsset(id) : Promise.resolve([]),
       getConnectedMonitors(id),
+      getDeviceMetrics(id),
     ]);
     // Client-safe package options (no file paths / hashes).
     const installPackages = packages.map((p) => ({
@@ -185,6 +188,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
         compliancePosture={compliancePosture}
         deployPackages={deployPackages}
         deployHistory={deployHistory}
+        metrics={metrics}
       />
     );
   }

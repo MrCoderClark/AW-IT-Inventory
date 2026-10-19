@@ -665,6 +665,30 @@ export const printerCounters = pgTable(
   ],
 );
 
+// ── Device metric telemetry (spec 29) ───────────────────────────────────────
+// Lightweight time-series sampled by the worker on a cadence (CPU/RAM/disk/uptime
+// over WinRM), one wide row per (asset, sample). Retention-pruned daily like
+// printer_checks. A gauge the collector couldn't read is NULL (a gap), never 0.
+export const deviceMetrics = pgTable(
+  "device_metrics",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    sampledAt: timestamp("sampled_at", { withTimezone: true }).notNull(),
+    cpuPct: doublePrecision("cpu_pct"), // 0–100
+    memPct: doublePrecision("mem_pct"), // used %
+    diskPct: doublePrecision("disk_pct"), // system drive used %
+    uptimeSec: integer("uptime_sec"),
+  },
+  (t) => [
+    // Serves the per-device sparkline read and the retention prune.
+    index("device_metrics_asset_sampled_idx").on(t.assetId, t.sampledAt.desc()),
+  ],
+);
+export type DeviceMetricRow = typeof deviceMetrics.$inferSelect;
+
 // ── Software inventory (spec 15) ─────────────────────────────────────────────
 // A small, admin-managed watchlist of software titles (`tracked_software`) and
 // the current tracked-software matches per Computer asset (`installed_software`).

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { pruneCounters } from "@/db/counters";
+import { pruneMetrics } from "@/db/metrics";
 import { pruneNotifications } from "@/db/notifications";
 import { pruneChecks } from "@/db/reachability";
 import { bearerFrom, verifyServiceToken } from "@/lib/auth/service";
@@ -25,7 +26,7 @@ export async function POST(request: Request) {
     );
   }
 
-  let body: { retentionDays?: unknown } | null = null;
+  let body: { retentionDays?: unknown; metricRetentionDays?: unknown } | null = null;
   try {
     body = await request.json();
   } catch {
@@ -33,18 +34,24 @@ export async function POST(request: Request) {
   }
   const retentionDays =
     typeof body?.retentionDays === "number" ? body.retentionDays : 365;
+  // Metrics are high-frequency, so they keep a much shorter window (spec 29).
+  const metricRetentionDays =
+    typeof body?.metricRetentionDays === "number" ? body.metricRetentionDays : 30;
 
   // Notifications keep their own shorter retention (spec 19, AC-10) rather than
   // the long checks/counters window, so prune with the module default.
-  const [pruned, prunedCounters, prunedNotifications] = await Promise.all([
+  const [pruned, prunedCounters, prunedNotifications, prunedMetrics] =
+    await Promise.all([
     pruneChecks(retentionDays),
     pruneCounters(retentionDays),
     pruneNotifications(),
+    pruneMetrics(metricRetentionDays),
   ]);
   return NextResponse.json({
     ok: true,
     pruned,
     prunedCounters,
     prunedNotifications,
+    prunedMetrics,
   });
 }
