@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import {
   applyMetricTick,
   episodeAction,
+  formatCondition,
   gaugeOf,
   matchesThreshold,
   type MetricRule,
@@ -108,5 +109,14 @@ describe("gaugeOf", () => {
     expect(gaugeOf(sample, "mem_pct")).toBe(20);
     expect(gaugeOf(sample, "disk_pct")).toBeNull();
     expect(gaugeOf(sample, "uptime_sec")).toBe(400);
+  });
+});
+
+describe("formatCondition (AC-8)", () => {
+  it("shows N samples and the ~duration at a 15-minute cadence", () => {
+    expect(formatCondition(cpu90x2)).toBe(
+      "CPU ≥ 90% for 2 samples (~30 min)",
+    );
+    expect(formatCondition(disk90)).toBe("Disk ≥ 90% for 1 sample (~15 min)");
   });
 });

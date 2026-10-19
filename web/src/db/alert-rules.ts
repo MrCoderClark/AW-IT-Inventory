@@ -1,17 +1,19 @@
 import "server-only";
 
-import { and, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 
 import { db } from "./index";
 import { alertRules, alertRuleStates, assets } from "./schema";
 import { createNotification } from "./notifications";
 import type { MetricSample } from "./metrics";
+import type { AlertRuleInput } from "@/lib/alert-rule-schema";
 import {
   applyMetricTick,
   episodeAction,
   formatCondition,
   gaugeOf,
   SIGNAL_LABEL,
+  type AlertRuleRecord,
   type MetricOp,
   type MetricRule,
   type MetricSignal,
@@ -58,8 +60,113 @@ export const DEFAULT_ALERT_RULES = [
   },
 ];
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function toRecord(row: {
+  id: string;
+  name: string;
+  signal: MetricSignal;
+  op: MetricOp;
+  threshold: number;
+  consecutive: number;
+  severity: AlertRuleRecord["severity"];
+  enabled: boolean;
+}): AlertRuleRecord {
+  return {
+    id: row.id,
+    name: row.name,
+    signal: row.signal,
+    op: row.op,
+    threshold: row.threshold,
+    consecutive: row.consecutive,
+    severity: row.severity,
+    enabled: row.enabled,
+  };
+}
+
+/** Insert the three defaults only when the table is empty, so an admin delete
+    or disable survives the next ingest (AC-7). */
 export async function seedDefaultAlertRules(): Promise<void> {
-  await db.insert(alertRules).values(DEFAULT_ALERT_RULES).onConflictDoNothing();
+  const existing = await db
+    .select({ id: alertRules.id })
+    .from(alertRules)
+    .limit(1);
+  if (existing.length > 0) return;
+  await db.insert(alertRules).values(DEFAULT_ALERT_RULES);
+}
+
+/** Every rule, including disabled ones, for the admin table (AC-1). Seeds the
+    three defaults the first time an admin opens the page. */
+export async function listAlertRules(): Promise<AlertRuleRecord[]> {
+  await seedDefaultAlertRules();
+  const rows = await db
+    .select()
+    .from(alertRules)
+    .orderBy(asc(alertRules.name));
+  return rows.map(toRecord);
+}
+
+export async function createAlertRule(
+  input: AlertRuleInput,
+): Promise<AlertRuleRecord> {
+  const [row] = await db
+    .insert(alertRules)
+    .values({
+      name: input.name,
+      signal: input.signal,
+      op: input.op,
+      threshold: input.threshold,
+      consecutive: input.consecutive,
+      severity: input.severity,
+      enabled: true,
+    })
+    .returning();
+  if (!row) throw new Error("Failed to create alert rule");
+  return toRecord(row);
+}
+
+export async function updateAlertRule(
+  id: string,
+  input: AlertRuleInput,
+): Promise<AlertRuleRecord | null> {
+  if (!UUID_RE.test(id)) return null;
+  const [row] = await db
+    .update(alertRules)
+    .set({
+      name: input.name,
+      signal: input.signal,
+      op: input.op,
+      threshold: input.threshold,
+      consecutive: input.consecutive,
+      severity: input.severity,
+      updatedAt: new Date(),
+    })
+    .where(eq(alertRules.id, id))
+    .returning();
+  return row ? toRecord(row) : null;
+}
+
+export async function deleteAlertRule(id: string): Promise<boolean> {
+  if (!UUID_RE.test(id)) return false;
+  const deleted = await db
+    .delete(alertRules)
+    .where(eq(alertRules.id, id))
+    .returning({ id: alertRules.id });
+  return deleted.length > 0;
+}
+
+export async function setAlertRuleEnabled(
+  id: string,
+  enabled: boolean,
+): Promise<AlertRuleRecord | null> {
+  if (!UUID_RE.test(id)) return null;
+  const [row] = await db
+    .update(alertRules)
+    .set({ enabled, updatedAt: new Date() })
+    .where(eq(alertRules.id, id))
+    .returning();
+  return row ? toRecord(row) : null;
 }
 
 function latestByAsset(samples: MetricSample[]): Map<string, MetricSample> {

@@ -38,6 +38,24 @@ export const OP_LABEL: Record<MetricOp, string> = {
   lte: "≤",
 };
 
+export const SEVERITY_LABEL: Record<AlertSeverity, string> = {
+  info: "Info",
+  warning: "Warning",
+  critical: "Critical",
+};
+
+/** One `alert_rules` row, safe to pass into the admin table/dialog. */
+export interface AlertRuleRecord {
+  id: string;
+  name: string;
+  signal: MetricSignal;
+  op: MetricOp;
+  threshold: number;
+  consecutive: number;
+  severity: AlertSeverity;
+  enabled: boolean;
+}
+
 export function matchesThreshold(
   value: number,
   op: MetricOp,
