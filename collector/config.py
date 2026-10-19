@@ -180,6 +180,10 @@ class Config(BaseModel):
     # granularity). 0 = off. Default every 15 minutes.
     report_delivery_interval_minutes: int = 15
 
+    # Scheduled script runs (spec 32 v2): how often (minutes) to poll web for
+    # script_schedules that are due. Web materializes each into a batch. 0 = off.
+    script_schedule_interval_minutes: int = 15
+
     # Device metric sampling (spec 29): how often (minutes) to read CPU/RAM/disk/
     # uptime from every manually-entered computer over WinRM. A light, frequent loop
     # separate from the full scan. 0 = off. Default every 15 minutes.

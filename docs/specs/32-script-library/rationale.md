@@ -26,3 +26,15 @@ easy to add later if roles diverge; v1 avoids RBAC churn.
 
 Editing the library after Run must not change an in-flight job (same rule as
 packageSnapshot on deployments).
+
+## Why batch + per-host jobs (v2)?
+
+A mega-job that fans out inside the worker hides per-host status and fights the
+existing claim/reaper model. One `script_run_batches` row + N `script_run_jobs`
+keeps the v1 runner unchanged and lets history stay per computer.
+
+## Why schedules live in web (v2)?
+
+Same pattern as report delivery (spec 26): web owns `nextRunAt`, the worker only
+ticks. No cron DSL on the collector; daily/weekly wall-clock is enough for IT
+ops, and `computeNextRun` is already proven.

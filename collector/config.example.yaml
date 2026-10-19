@@ -176,6 +176,10 @@ notification_sweep_times: ["07:30"]
 # so this is just the check cadence (and the delivery granularity). 0 turns it off.
 report_delivery_interval_minutes: 15
 
+# Scheduled script runs (spec 32 v2): how often (minutes) to poll web for due
+# script_schedules. Web materializes each into a fan-out batch. 0 turns it off.
+script_schedule_interval_minutes: 15
+
 # Device metric sampling (spec 29): how often (minutes) to read CPU/RAM/disk/uptime
 # from every manually-entered computer over WinRM — a light loop separate from the
 # full scan, feeding the device Monitoring sparklines. 0 turns it off.

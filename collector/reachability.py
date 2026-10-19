@@ -288,6 +288,31 @@ def run_report_delivery(config: Config, token: str) -> None:
         console.print(f"  [yellow]report delivery failed:[/yellow] {e}")
 
 
+def run_script_schedules(config: Config, token: str) -> None:
+    """Trigger due script-schedule materialization (spec 32 v2).
+
+    Web holds schedules and nextRunAt; this POST materializes each due row into a
+    script_run_batches + per-host jobs. Poll cadence is
+    ``script_schedule_interval_minutes``. Uses deploy:agent (same as script-runs).
+    """
+    try:
+        resp = httpx.post(
+            f"{config.ingest_url}/api/script-schedules/due",
+            json={},
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=120,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if data.get("fired") or data.get("failed"):
+            console.print(
+                f"[dim]script schedules: {data.get('fired', 0)} fired · "
+                f"{data.get('failed', 0)} failed (of {data.get('due', 0)} due).[/dim]"
+            )
+    except Exception as e:  # noqa: BLE001 — must never kill the scheduler
+        console.print(f"  [yellow]script schedules failed:[/yellow] {e}")
+
+
 def run_retention_prune(config: Config, token: str) -> None:
     """Prune reachability history older than the retention window (AC-10)."""
     try:

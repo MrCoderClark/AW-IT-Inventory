@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Loader2, Play, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -10,6 +10,7 @@ import {
   saveScriptAction,
 } from "@/app/(app)/script-actions";
 import { fmtDateTime } from "@/components/detail-ui";
+import { ScriptRunOnDialog } from "@/components/script-run-on-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,8 +22,17 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import type { ScriptListItem } from "@/db/scripts";
+import type { LocationOption } from "@/lib/data";
 
-export function ScriptLibrary({ initial }: { initial: ScriptListItem[] }) {
+export function ScriptLibrary({
+  initial,
+  computers,
+  locations,
+}: {
+  initial: ScriptListItem[];
+  computers: Array<{ tag: string; name: string }>;
+  locations: LocationOption[];
+}) {
   const router = useRouter();
   const [rows, setRows] = React.useState(initial);
   React.useEffect(() => setRows(initial), [initial]);
@@ -34,6 +44,7 @@ export function ScriptLibrary({ initial }: { initial: ScriptListItem[] }) {
   const [body, setBody] = React.useState("");
   const [timeoutSeconds, setTimeoutSeconds] = React.useState(120);
   const [busy, startBusy] = React.useTransition();
+  const [runOn, setRunOn] = React.useState<ScriptListItem | null>(null);
 
   function openCreate() {
     setEditing(null);
@@ -140,6 +151,15 @@ export function ScriptLibrary({ initial }: { initial: ScriptListItem[] }) {
                       variant="ghost"
                       size="sm"
                       disabled={busy}
+                      onClick={() => setRunOn(r)}
+                      aria-label={`Run ${r.name} on…`}
+                    >
+                      <Play className="size-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={busy}
                       onClick={() => archive(r.id)}
                       aria-label={`Archive ${r.name}`}
                     >
@@ -203,6 +223,16 @@ export function ScriptLibrary({ initial }: { initial: ScriptListItem[] }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ScriptRunOnDialog
+        script={runOn}
+        computers={computers}
+        locations={locations}
+        open={runOn !== null}
+        onOpenChange={(o) => {
+          if (!o) setRunOn(null);
+        }}
+      />
     </div>
   );
 }
