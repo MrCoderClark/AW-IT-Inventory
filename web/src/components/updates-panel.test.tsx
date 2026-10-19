@@ -13,6 +13,8 @@ const SAMPLE: ComputerPatches = {
   appUpgradeCount: 1,
   collectedAt: "2026-10-19T16:00:00Z",
   updatesLastDays: 9,
+  missingCount: 1,
+  missingCollectedAt: "2026-10-19T17:00:00Z",
   hotfixes: [
     {
       hotfixId: "KB5034441",
@@ -29,6 +31,14 @@ const SAMPLE: ComputerPatches = {
       source: "winget",
     },
   ],
+  missing: [
+    {
+      kbId: "KB9999999",
+      title: "Cumulative Update",
+      severity: "Important",
+      sizeBytes: 1000,
+    },
+  ],
 };
 
 describe("UpdatesPanel", () => {
@@ -37,9 +47,12 @@ describe("UpdatesPanel", () => {
     expect(screen.getByText(/No patch inventory yet/i)).toBeTruthy();
   });
 
-  it("shows pending reboot, KBs, and app upgrades", () => {
+  it("shows pending reboot, missing KBs, installed KBs, and app upgrades", () => {
     render(<UpdatesPanel patches={SAMPLE} />);
     expect(screen.getByText(/Pending reboot/i)).toBeTruthy();
+    expect(screen.getByText(/1 missing/i)).toBeTruthy();
+    expect(screen.getByText("KB9999999")).toBeTruthy();
+    expect(screen.getByText("Cumulative Update")).toBeTruthy();
     expect(screen.getByText("KB5034441")).toBeTruthy();
     expect(screen.getByText("Google Chrome")).toBeTruthy();
     expect(screen.getByText("128.0")).toBeTruthy();

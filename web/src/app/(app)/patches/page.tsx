@@ -58,6 +58,7 @@ export default async function Page() {
   const rows = await getFleetPatches();
   const total = rows.length;
   const pendingReboot = rows.filter((r) => r.pendingReboot).length;
+  const osMissing = rows.reduce((n, r) => n + (r.missingCount > 0 ? 1 : 0), 0);
   const staleOs = rows.filter(
     (r) => r.updatesLastDays != null && r.updatesLastDays > 30,
   ).length;
@@ -69,16 +70,22 @@ export default async function Page() {
     <div className="mx-auto flex max-w-[1400px] flex-col gap-6">
       <HeroHeader
         title="Patches"
-        subtitle="Installed KBs, pending reboot, and available app upgrades — live from computer scans."
+        subtitle="Installed KBs, missing OS updates, pending reboot, and app upgrades — from scans and the daily Search job."
         icon={<RefreshCw />}
       />
 
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
         <StatTile
           label="Pending reboot"
           value={pendingReboot}
           tone={pendingReboot > 0 ? "danger" : "good"}
           hint={`of ${total} computers`}
+        />
+        <StatTile
+          label="OS updates missing"
+          value={osMissing}
+          tone={osMissing > 0 ? "danger" : "good"}
+          hint="computers with ≥1"
         />
         <StatTile
           label="OS update 30+ days"

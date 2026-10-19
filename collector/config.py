@@ -191,6 +191,11 @@ class Config(BaseModel):
     # Wall-clock cap (seconds) on the winget script. Bootstrap can download App
     # Installer, so this is longer than winrm_timeout. A hang is abandoned.
     app_upgrade_timeout: int = 60
+    # Missing OS updates via WUA Search (spec 31 phase 2). Dedicated worker loop —
+    # not on the full scan. Hours between passes; 0 = off. Default daily.
+    missing_patch_interval_hours: int = 24
+    # Wall-clock cap (seconds) per-host Search. WU/WSUS can be slow.
+    missing_patch_timeout: int = 120
 
     @property
     def profiles_by_id(self) -> dict[str, CredentialProfile]:

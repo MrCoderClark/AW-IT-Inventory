@@ -850,6 +850,9 @@ export const windowsUpdateState = pgTable("windows_update_state", {
   wingetDetail: text("winget_detail"),
   appUpgradeCount: integer("app_upgrade_count").notNull().default(0),
   collectedAt: timestamp("collected_at", { withTimezone: true }).notNull(),
+  // Spec 31 phase 2: WUA Search("IsInstalled=0") on the dedicated worker loop.
+  missingCount: integer("missing_count").notNull().default(0),
+  missingCollectedAt: timestamp("missing_collected_at", { withTimezone: true }),
 });
 
 export const windowsHotfixes = pgTable(
@@ -886,9 +889,29 @@ export const appUpgrades = pgTable(
   ],
 );
 
+// Missing OS updates from WUA Search (spec 31 phase 2). Replaced per asset on
+// each successful Search; kb_id is KBnnnnnn or the update Identity GUID.
+export const windowsMissingUpdates = pgTable(
+  "windows_missing_updates",
+  {
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    kbId: text("kb_id").notNull(),
+    title: text("title").notNull(),
+    severity: text("severity"),
+    sizeBytes: bigint("size_bytes", { mode: "number" }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.assetId, t.kbId] }),
+    index("windows_missing_updates_asset_idx").on(t.assetId),
+  ],
+);
+
 export type WindowsUpdateStateRow = typeof windowsUpdateState.$inferSelect;
 export type WindowsHotfixRow = typeof windowsHotfixes.$inferSelect;
 export type AppUpgradeRow = typeof appUpgrades.$inferSelect;
+export type WindowsMissingUpdateRow = typeof windowsMissingUpdates.$inferSelect;
 
 // ── Device assignment history (spec 16) ──────────────────────────────────────
 // The custody log: one row per assignment of a device to a person. A row opens

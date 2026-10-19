@@ -8,13 +8,13 @@ import {
   assets,
   complianceStatus,
   windowsHotfixes,
+  windowsMissingUpdates,
   windowsUpdateState,
 } from "./schema";
 
 /**
- * Windows patch inventory (spec 31). Collector posts pending reboot + installed
- * hotfixes (+ optional winget upgrades). Stored as current state per Computer —
- * replaced on each successful collect. Viewing is `asset:read` like /compliance.
+ * Windows patch inventory (spec 31). Phase 1: scan posts hotfixes / winget.
+ * Phase 2: dedicated Search posts missing OS updates + fills updates_pending.
  */
 
 function clean(value: string | null | undefined): string | null {
@@ -194,6 +194,87 @@ export async function upsertWindowsUpdates(
   });
 }
 
+export type PostedMissingUpdate = {
+  kb?: string | null;
+  title?: string | null;
+  severity?: string | null;
+  size_bytes?: number | null;
+};
+
+/**
+ * Replace missing OS updates from a successful WUA Search (AC-11). Also sets
+ * `compliance_status.updates_pending`. A gap (no Search result) never calls this.
+ */
+export async function replaceMissingUpdates(
+  assetId: string,
+  posted: PostedMissingUpdate[],
+  collectedAt: Date,
+): Promise<void> {
+  const seen = new Set<string>();
+  const rows = posted
+    .map((m) => {
+      const kbId = clean(m.kb);
+      const title = clean(m.title);
+      if (!kbId || !title || seen.has(kbId)) return null;
+      seen.add(kbId);
+      const size =
+        typeof m.size_bytes === "number" && Number.isFinite(m.size_bytes)
+          ? Math.trunc(m.size_bytes)
+          : null;
+      return {
+        assetId,
+        kbId,
+        title,
+        severity: clean(m.severity),
+        sizeBytes: size,
+      };
+    })
+    .filter((r): r is NonNullable<typeof r> => r != null);
+
+  await db.transaction(async (tx) => {
+    await tx
+      .insert(windowsUpdateState)
+      .values({
+        assetId,
+        pendingReboot: null,
+        hotfixCount: 0,
+        appUpgradeCount: 0,
+        collectedAt,
+        missingCount: rows.length,
+        missingCollectedAt: collectedAt,
+      })
+      .onConflictDoUpdate({
+        target: windowsUpdateState.assetId,
+        set: {
+          missingCount: rows.length,
+          missingCollectedAt: collectedAt,
+        },
+      });
+
+    await tx
+      .delete(windowsMissingUpdates)
+      .where(eq(windowsMissingUpdates.assetId, assetId));
+    if (rows.length) {
+      await tx.insert(windowsMissingUpdates).values(rows);
+    }
+
+    // Fill compliance pending count; create no posture row if none exists —
+    // only update when a compliance row is already there, OR upsert just the
+    // pending field via insert-on-conflict with assessedAt = collectedAt.
+    await tx
+      .insert(complianceStatus)
+      .values({
+        assetId,
+        updatesPending: rows.length,
+        assessedAt: collectedAt,
+      })
+      .onConflictDoUpdate({
+        target: complianceStatus.assetId,
+        set: { updatesPending: rows.length },
+      });
+  });
+}
+
 export type ComputerPatches = {
   pendingReboot: boolean | null;
   hotfixCount: number;
@@ -202,6 +283,8 @@ export type ComputerPatches = {
   appUpgradeCount: number;
   collectedAt: string;
   updatesLastDays: number | null;
+  missingCount: number;
+  missingCollectedAt: string | null;
   hotfixes: {
     hotfixId: string;
     description: string | null;
@@ -213,6 +296,12 @@ export type ComputerPatches = {
     version: string | null;
     available: string | null;
     source: string | null;
+  }[];
+  missing: {
+    kbId: string;
+    title: string;
+    severity: string | null;
+    sizeBytes: number | null;
   }[];
 };
 
@@ -228,6 +317,8 @@ export async function getComputerPatches(
       wingetDetail: windowsUpdateState.wingetDetail,
       appUpgradeCount: windowsUpdateState.appUpgradeCount,
       collectedAt: windowsUpdateState.collectedAt,
+      missingCount: windowsUpdateState.missingCount,
+      missingCollectedAt: windowsUpdateState.missingCollectedAt,
       updatesLastDays: complianceStatus.updatesLastDays,
     })
     .from(windowsUpdateState)
@@ -238,7 +329,7 @@ export async function getComputerPatches(
 
   if (!state) return null;
 
-  const [kbRows, appRows] = await Promise.all([
+  const [kbRows, appRows, missingRows] = await Promise.all([
     db
       .select({
         hotfixId: windowsHotfixes.hotfixId,
@@ -261,6 +352,17 @@ export async function getComputerPatches(
       .innerJoin(assets, eq(assets.id, appUpgrades.assetId))
       .where(eq(assets.tag, tag))
       .orderBy(asc(appUpgrades.name)),
+    db
+      .select({
+        kbId: windowsMissingUpdates.kbId,
+        title: windowsMissingUpdates.title,
+        severity: windowsMissingUpdates.severity,
+        sizeBytes: windowsMissingUpdates.sizeBytes,
+      })
+      .from(windowsMissingUpdates)
+      .innerJoin(assets, eq(assets.id, windowsMissingUpdates.assetId))
+      .where(eq(assets.tag, tag))
+      .orderBy(asc(windowsMissingUpdates.kbId)),
   ]);
 
   return {
@@ -271,6 +373,10 @@ export async function getComputerPatches(
     appUpgradeCount: state.appUpgradeCount,
     collectedAt: state.collectedAt.toISOString(),
     updatesLastDays: state.updatesLastDays,
+    missingCount: state.missingCount,
+    missingCollectedAt: state.missingCollectedAt
+      ? state.missingCollectedAt.toISOString()
+      : null,
     hotfixes: kbRows.map((r) => ({
       hotfixId: r.hotfixId,
       description: r.description,
@@ -283,6 +389,12 @@ export async function getComputerPatches(
       available: r.available,
       source: r.source,
     })),
+    missing: missingRows.map((r) => ({
+      kbId: r.kbId,
+      title: r.title,
+      severity: r.severity,
+      sizeBytes: r.sizeBytes,
+    })),
   };
 }
 
@@ -293,11 +405,12 @@ export type FleetPatchRow = {
   hotfixCount: number;
   wingetAvailable: boolean | null;
   appUpgradeCount: number;
+  missingCount: number;
   collectedAt: string | null;
   updatesLastDays: number | null;
 };
 
-/** Every Computer with its current patch summary for `/patches` (AC-4). */
+/** Every Computer with its current patch summary for `/patches` (AC-4 / AC-12). */
 export async function getFleetPatches(): Promise<FleetPatchRow[]> {
   const rows = await db
     .select({
@@ -307,6 +420,7 @@ export async function getFleetPatches(): Promise<FleetPatchRow[]> {
       hotfixCount: windowsUpdateState.hotfixCount,
       wingetAvailable: windowsUpdateState.wingetAvailable,
       appUpgradeCount: windowsUpdateState.appUpgradeCount,
+      missingCount: windowsUpdateState.missingCount,
       collectedAt: windowsUpdateState.collectedAt,
       updatesLastDays: complianceStatus.updatesLastDays,
     })
@@ -323,6 +437,7 @@ export async function getFleetPatches(): Promise<FleetPatchRow[]> {
     hotfixCount: r.hotfixCount ?? 0,
     wingetAvailable: r.wingetAvailable,
     appUpgradeCount: r.appUpgradeCount ?? 0,
+    missingCount: r.missingCount ?? 0,
     collectedAt: r.collectedAt ? r.collectedAt.toISOString() : null,
     updatesLastDays: r.updatesLastDays,
   }));

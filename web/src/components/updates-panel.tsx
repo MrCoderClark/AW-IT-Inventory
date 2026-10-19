@@ -51,6 +51,11 @@ export function UpdatesPanel({ patches }: { patches: ComputerPatches | null }) {
               <Dot color="var(--status-online)">No pending reboot</Dot>
             </Badge>
           ) : null}
+          {patches.missingCount > 0 && (
+            <Badge variant="destructive" className="gap-1.5">
+              {patches.missingCount} missing
+            </Badge>
+          )}
           <span className="text-sm text-muted-foreground">
             Last successful update:{" "}
             <span className="font-medium text-foreground">
@@ -62,6 +67,50 @@ export function UpdatesPanel({ patches }: { patches: ComputerPatches | null }) {
           </span>
         </div>
 
+        {patches.missingCollectedAt != null && (
+          <div className="mb-4">
+            <p className="mb-2 text-xs font-medium text-muted-foreground">
+              Missing OS updates
+              {patches.missingCollectedAt
+                ? ` · checked ${fmtDateTime(patches.missingCollectedAt)}`
+                : ""}
+            </p>
+            {patches.missing.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No missing OS updates on the last Search.
+              </p>
+            ) : (
+              <div className="overflow-x-auto rounded-lg border">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
+                      <th className="px-3 py-2 font-medium">KB</th>
+                      <th className="px-3 py-2 font-medium">Title</th>
+                      <th className="px-3 py-2 font-medium">Severity</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {patches.missing.map((m) => (
+                      <tr key={m.kbId}>
+                        <td className="px-3 py-2 font-mono text-xs">{m.kbId}</td>
+                        <td className="px-3 py-2 text-muted-foreground">
+                          {m.title}
+                        </td>
+                        <td className="px-3 py-2 text-xs text-muted-foreground">
+                          {m.severity || "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        <p className="mb-2 text-xs font-medium text-muted-foreground">
+          Installed hotfixes
+        </p>
         {patches.hotfixes.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No hotfixes reported on the last scan (QFE can be thin on modern

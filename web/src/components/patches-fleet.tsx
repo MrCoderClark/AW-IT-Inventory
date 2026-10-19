@@ -23,6 +23,7 @@ import type { FleetPatchRow } from "@/db/patches";
 function attentionScore(r: FleetPatchRow): number {
   let s = 0;
   if (r.pendingReboot) s += 100;
+  if (r.missingCount > 0) s += Math.min(40 + r.missingCount, 80);
   if (r.updatesLastDays != null && r.updatesLastDays > 30) s += 50;
   if (r.appUpgradeCount > 0) s += Math.min(r.appUpgradeCount, 20);
   if (r.wingetAvailable === false) s += 10;
@@ -47,6 +48,7 @@ export function PatchesFleet({ rows }: { rows: FleetPatchRow[] }) {
       r = r.filter(
         (x) =>
           x.pendingReboot ||
+          x.missingCount > 0 ||
           (x.updatesLastDays != null && x.updatesLastDays > 30) ||
           x.appUpgradeCount > 0 ||
           x.wingetAvailable === false ||
@@ -92,6 +94,7 @@ export function PatchesFleet({ rows }: { rows: FleetPatchRow[] }) {
                 </button>
               </TableHead>
               <TableHead>Pending reboot</TableHead>
+              <TableHead>OS missing</TableHead>
               <TableHead>Last update</TableHead>
               <TableHead>App upgrades</TableHead>
               <TableHead>Winget</TableHead>
@@ -102,7 +105,7 @@ export function PatchesFleet({ rows }: { rows: FleetPatchRow[] }) {
             {view.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={7}
+                  colSpan={8}
                   className="py-10 text-center text-sm text-muted-foreground"
                 >
                   No computers to show.
@@ -131,6 +134,15 @@ export function PatchesFleet({ rows }: { rows: FleetPatchRow[] }) {
                       <span className="text-sm text-muted-foreground">No</span>
                     ) : (
                       <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="tabular-nums text-sm">
+                    {r.missingCount > 0 ? (
+                      <span className="font-medium text-destructive">
+                        {r.missingCount}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">0</span>
                     )}
                   </TableCell>
                   <TableCell className="tabular-nums text-sm">
