@@ -6,6 +6,7 @@ import {
   Lock,
   Radar,
   Shield,
+  TriangleAlert,
   UserCog,
 } from "lucide-react";
 
@@ -57,7 +58,7 @@ export default async function Page() {
       <div>
         <h1 className="text-2xl font-extrabold tracking-tight">Admin</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Manage users, roles and what the collector discovers.
+          Manage users, roles, alert rules and what the collector discovers.
         </p>
       </div>
 
@@ -84,6 +85,29 @@ export default async function Page() {
             render={<Link href="/admin/roles" />}
           >
             <Shield className="size-4" /> View roles
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Metric-threshold rules (spec 30, AC-1). The page re-gates on
+          user:admin; asset:read viewers never see this card or the nav item. */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <TriangleAlert className="size-5 text-muted-foreground" />
+            <CardTitle>Alert rules</CardTitle>
+          </div>
+          <CardDescription>
+            Thresholds on CPU, memory, disk and uptime. When a condition holds
+            for enough samples, admins get a notification.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            nativeButton={false}
+            render={<Link href="/admin/alert-rules" />}
+          >
+            <TriangleAlert className="size-4" /> Manage alert rules
           </Button>
         </CardContent>
       </Card>

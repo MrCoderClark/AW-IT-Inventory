@@ -72,3 +72,44 @@ describe("sendPrinterAlert (spec 12)", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 });
+
+const RULE_PAYLOAD = {
+  computer: { name: "Reception PC", tag: "H2TECS-COMP-1" },
+  event: "firing" as const,
+  rule: {
+    name: "Disk almost full",
+    condition: "Disk ≥ 90% for 1 sample (~15 min)",
+    severity: "critical",
+  },
+  value: "91%",
+};
+
+describe("sendAlertRuleEmail (spec 30, AC-6)", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    process.env.H2TECS_WEB_CLIENT_ID = "cid";
+    process.env.H2TECS_WEB_CLIENT_SECRET = "sec";
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("posts to /v1/notify/alert-rule and returns true when sent", async () => {
+    const fetchMock = mockFetch({ ok: true, sent: true });
+    vi.stubGlobal("fetch", fetchMock);
+    const { sendAlertRuleEmail } = await import("./notify");
+    expect(await sendAlertRuleEmail(RULE_PAYLOAD)).toBe(true);
+    const urls = fetchMock.mock.calls.map((c) => String(c[0]));
+    expect(urls.some((u) => u.includes("/v1/notify/alert-rule"))).toBe(true);
+  });
+
+  it("returns false when aw-auth accepted but sent=false", async () => {
+    vi.stubGlobal("fetch", mockFetch({ ok: true, sent: false }));
+    const { sendAlertRuleEmail } = await import("./notify");
+    expect(await sendAlertRuleEmail(RULE_PAYLOAD)).toBe(false);
+  });
+});

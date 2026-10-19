@@ -84,6 +84,10 @@ describe("AppSidebar — permission gating (RBAC audit)", () => {
       screen.getByRole("link", { name: "Software Library" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Scans" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Alert rules" })).toHaveAttribute(
+      "href",
+      "/admin/alert-rules",
+    );
   });
 
   it("hides user:admin items from a non-admin", () => {
@@ -92,6 +96,7 @@ describe("AppSidebar — permission gating (RBAC audit)", () => {
     expect(screen.queryByRole("link", { name: "Admin" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Users" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Roles" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Alert rules" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Notifications" })).toBeNull();
     // Non-admin items the user still has stay visible.
     expect(

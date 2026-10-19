@@ -19,6 +19,7 @@ import {
   Images,
   Boxes,
   Bell,
+  TriangleAlert,
 } from "lucide-react";
 
 /* ---------------- Types ---------------- */
@@ -217,6 +218,8 @@ export type NotificationType =
   | "software-deploy-failed"
   | "compliance-at-risk"
   | "compliance-recovered"
+  | "metric-threshold"
+  | "metric-recovered"
   | "scan-failed"
   | "device-discovered"
   | "warranty-expiring";
@@ -436,6 +439,7 @@ export const NAV_MANAGE: NavItem[] = [
   { label: "Notifications", href: "/notifications", icon: Bell, perm: "user:admin" },
   { label: "Users", href: "/admin/users", icon: UserCog, perm: "user:admin" },
   { label: "Roles", href: "/admin/roles", icon: Shield, perm: "user:admin" },
+  { label: "Alert rules", href: "/admin/alert-rules", icon: TriangleAlert, perm: "user:admin" },
   { label: "Admin", href: "/admin", icon: Settings, perm: "user:admin" },
 ];
 

@@ -1,4 +1,5 @@
 import {
+  Activity,
   Bell,
   Boxes,
   Printer,
@@ -24,6 +25,8 @@ export const NOTIFICATION_ICON: Record<NotificationType, LucideIcon> = {
   "software-deploy-failed": Boxes,
   "compliance-at-risk": ShieldAlert,
   "compliance-recovered": ShieldCheck,
+  "metric-threshold": Activity,
+  "metric-recovered": Activity,
   "scan-failed": ScanLine,
   "device-discovered": Radar,
   "warranty-expiring": ShieldAlert,
@@ -40,6 +43,8 @@ export const NOTIFICATION_TYPE_LABEL: Record<NotificationType, string> = {
   "software-deploy-failed": "Software deploy failed",
   "compliance-at-risk": "Compliance at risk",
   "compliance-recovered": "Compliance recovered",
+  "metric-threshold": "Metric threshold",
+  "metric-recovered": "Metric recovered",
   "scan-failed": "Scan failed",
   "device-discovered": "Device discovered",
   "warranty-expiring": "Warranty",

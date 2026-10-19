@@ -7,17 +7,21 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
  * numeric gauges, and that a non-numeric gauge becomes null (a gap, never 0).
  */
 
-const { bearerFromMock, verifyMock, recordMock } = vi.hoisted(() => ({
-  bearerFromMock: vi.fn(),
-  verifyMock: vi.fn(),
-  recordMock: vi.fn(),
-}));
+const { bearerFromMock, verifyMock, recordMock, evaluateMock } = vi.hoisted(
+  () => ({
+    bearerFromMock: vi.fn(),
+    verifyMock: vi.fn(),
+    recordMock: vi.fn(),
+    evaluateMock: vi.fn(),
+  }),
+);
 
 vi.mock("@/lib/auth/service", () => ({
   bearerFrom: bearerFromMock,
   verifyServiceToken: verifyMock,
 }));
 vi.mock("@/db/metrics", () => ({ recordMetrics: recordMock }));
+vi.mock("@/db/alert-rules", () => ({ evaluateMetricAlerts: evaluateMock }));
 
 import { POST } from "./route";
 
@@ -86,5 +90,7 @@ describe("POST /api/ingest/metrics — parsing", () => {
       uptimeSec: 7200,
     });
     expect(batch[0].sampledAt).toBeInstanceOf(Date);
+    expect(evaluateMock).toHaveBeenCalledTimes(1);
+    expect(evaluateMock.mock.calls[0][0]).toEqual(batch);
   });
 });

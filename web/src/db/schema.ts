@@ -689,6 +689,50 @@ export const deviceMetrics = pgTable(
 );
 export type DeviceMetricRow = typeof deviceMetrics.$inferSelect;
 
+// ── Alert rules (spec 30) ───────────────────────────────────────────────────
+// Configurable metric-threshold rules evaluated at metric ingest. `alert_rules`
+// is the admin-edited catalog; `alert_rule_states` is the per-(rule, asset)
+// episode machine (consecutive streak + last notified state). Both additive and
+// brand new, so NOT NULL columns are safe. `signal`/`op`/`severity` are plain
+// text unions (not pg enums) so a future signal never needs an enum migration.
+export const alertRules = pgTable("alert_rules", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  signal: text("signal")
+    .$type<"cpu_pct" | "mem_pct" | "disk_pct" | "uptime_sec">()
+    .notNull(),
+  op: text("op").$type<"gt" | "gte" | "lt" | "lte">().notNull(),
+  threshold: doublePrecision("threshold").notNull(),
+  consecutive: integer("consecutive").notNull().default(1),
+  severity: text("severity").$type<"info" | "warning" | "critical">().notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+export const alertRuleStates = pgTable(
+  "alert_rule_states",
+  {
+    ruleId: uuid("rule_id")
+      .notNull()
+      .references(() => alertRules.id, { onDelete: "cascade" }),
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    consecutive: integer("consecutive").notNull().default(0),
+    alertedState: text("alerted_state").$type<"ok" | "firing">(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.ruleId, t.assetId] })],
+);
+export type AlertRuleRow = typeof alertRules.$inferSelect;
+export type AlertRuleStateRow = typeof alertRuleStates.$inferSelect;
+
 // ── Software inventory (spec 15) ─────────────────────────────────────────────
 // A small, admin-managed watchlist of software titles (`tracked_software`) and
 // the current tracked-software matches per Computer asset (`installed_software`).
@@ -862,6 +906,8 @@ export const notifications = pgTable(
         | "software-deploy-failed"
         | "compliance-at-risk"
         | "compliance-recovered"
+        | "metric-threshold"
+        | "metric-recovered"
         | "scan-failed"
         | "device-discovered"
         | "warranty-expiring"

@@ -180,6 +180,41 @@ def send_compliance_alert(computer: dict, event: str, checks: list[dict]) -> boo
     return _deliver(subject, body, label=f"compliance-alert ({event})")
 
 
+def send_alert_rule(
+    computer: dict, event: str, rule: dict, value: str
+) -> bool:
+    """Email every admin when a metric-threshold rule fires or recovers
+    (spec 30, AC-6). ``event`` is "firing" or "recovered". ``rule`` carries
+    ``name``, ``condition`` (readable, e.g. "Disk ≥ 90% for 1 sample (~15 min)"),
+    and ``severity``. ``value`` is the current reading already formatted
+    ("91%"). Returns True on a real send.
+
+    Called by web after a successful in-app notification. Best-effort for the
+    caller: a miss is logged and returned as False, never raised, and never
+    rolls back the in-app episode.
+    """
+    name = computer.get("name") or "Unknown computer"
+    rule_name = rule.get("name") or "Alert rule"
+    condition = rule.get("condition") or ""
+    reading = value or "n/a"
+    if event == "firing":
+        subject = f"[H2Tecs] {rule_name}: {name}"
+        extra = f"{condition}\n" if condition else ""
+        body = (
+            f"H2Tecs flagged '{name}' — {rule_name}.\n\n"
+            f"{extra}Current reading: {reading}\n\n"
+            "Open the computer in H2Tecs to see Monitoring. You'll get one more "
+            "email when it recovers."
+        )
+    else:  # recovered
+        subject = f"[H2Tecs] {rule_name} recovered: {name}"
+        body = (
+            f"H2Tecs reports '{name}' has recovered from {rule_name}.\n\n"
+            f"Latest reading: {reading}."
+        )
+    return _deliver(subject, body, label=f"alert-rule ({event})")
+
+
 def _fmt_total(total) -> str:
     return f"{total:,}" if isinstance(total, (int, float)) else "—"
 

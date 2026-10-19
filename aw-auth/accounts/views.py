@@ -18,6 +18,7 @@ from rbac.models import Role
 
 from .models import ServiceAccount
 from .notifications import (
+    send_alert_rule,
     send_compliance_alert,
     send_counter_report,
     send_printer_alert,
@@ -430,6 +431,44 @@ class ComplianceAlertView(APIView):
             )
 
         sent = send_compliance_alert(computer, event, checks)
+        return Response({"ok": True, "sent": sent})
+
+
+class AlertRuleView(APIView):
+    """Email the admins when a metric-threshold rule fires or recovers
+    (spec 30, AC-6).
+
+    Called by web (which detects the transition at metric ingest) with its
+    `h2tecs-web` service account. Requires a service token carrying
+    `notify:send`. aw-auth resolves the admins and sends via Resend; a send
+    failure is reported so web can log it (the in-app notification is the
+    durable record and is not rolled back).
+    """
+
+    authentication_classes: list = []  # machine caller; token verified by scope
+    permission_classes = [HasServiceScope]
+    required_scope = "notify:send"
+
+    @extend_schema(request=None, responses={200: None})
+    def post(self, request):
+        computer = request.data.get("computer") or {}
+        event = request.data.get("event")
+        rule = request.data.get("rule") or {}
+        value = request.data.get("value") or ""
+        if not isinstance(computer, dict) or event not in ("firing", "recovered"):
+            return Response(
+                {
+                    "detail": "computer{name} and event in {firing,recovered} are required"
+                },
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        if not isinstance(rule, dict) or not rule.get("name"):
+            return Response(
+                {"detail": "rule{name} is required"},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+
+        sent = send_alert_rule(computer, event, rule, str(value))
         return Response({"ok": True, "sent": sent})
 
 
