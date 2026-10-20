@@ -7,7 +7,7 @@
 > [33](../28-rmm-roadmap/index.md) (not yet specified).
 
 **Date**: 2026-10-20  
-**Status**: Accepted (v1 implementing on `feat/spec-34-ai-assist-v1`)
+**Status**: Accepted (v1 shipped; v2a design in [design-v2-async-assist.md](./design-v2-async-assist.md))
 
 ## Summary
 
@@ -136,12 +136,13 @@ Service accounts: **no** AI scopes in v1 (techs only).
 1. **v1 (this spec)** — AC-1–9: gateway, context pack, computer Assist,
    draft script handoff to spec 32, audit hash, free cloud OpenAI-compatible
    provider.
-2. **v2** — alert correlation across devices; internal KB article hints (when a
-   KB exists); recurring-issue / automation opportunity reports; optional
-   on-prem-only provider profile; richer PII controls; **async Assist jobs**
-   (enqueue + poll/history so long free-tier calls don’t tie the panel to an
-   open request).
-3. **Later** — ticket draft assist (after spec 33); streaming UI; admin prompt
+2. **v2a (next)** — [async Assist jobs](./design-v2-async-assist.md): enqueue +
+   `after()` processing, requester toast + bell on completion, Spec 19 audience
+   targeting, recent job history on the Assist panel.
+3. **v2+ (parked)** — fleet alert correlation; recurring-issue / automation
+   reports; on-prem provider profile + richer PII; internal KB article hints
+   (when a KB exists); generalize requester notifications to other worker jobs.
+4. **Later** — ticket draft assist (after spec 33); streaming UI; admin prompt
    retention opt-in.
 
 ## Out of scope / non-goals (v1)
