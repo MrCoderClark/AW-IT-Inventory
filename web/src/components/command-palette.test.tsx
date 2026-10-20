@@ -36,6 +36,7 @@ describe("command palette navigation gating", () => {
         "Scans",
         "People",
         "Media",
+        "Ticketing",
       ]),
     );
   });
@@ -58,6 +59,7 @@ describe("command palette navigation gating", () => {
       "Scan Jobs",
       "People",
       "Media",
+      "Ticketing",
     ]) {
       expect(l).not.toContain(hidden);
     }
