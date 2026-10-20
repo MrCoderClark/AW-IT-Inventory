@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, desc, eq, ilike, max, or } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, max, or } from "drizzle-orm";
 
 import { db } from "./index";
 import {
@@ -317,6 +317,29 @@ export async function addTicketComment(
     .where(eq(tickets.id, ticketId));
 
   return row?.id ?? null;
+}
+
+/** Map notification id → ticket id for notifications that already have a ticket. */
+export async function getTicketIdsByNotificationIds(
+  notificationIds: string[],
+): Promise<Record<string, string>> {
+  if (notificationIds.length === 0) return {};
+
+  const rows = await db
+    .select({
+      id: tickets.id,
+      sourceNotificationId: tickets.sourceNotificationId,
+    })
+    .from(tickets)
+    .where(inArray(tickets.sourceNotificationId, notificationIds));
+
+  const map: Record<string, string> = {};
+  for (const row of rows) {
+    if (row.sourceNotificationId) {
+      map[row.sourceNotificationId] = row.id;
+    }
+  }
+  return map;
 }
 
 export async function createTicketFromNotification(

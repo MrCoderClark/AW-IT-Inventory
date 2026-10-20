@@ -7,6 +7,7 @@ import {
   createTicket,
   createTicketFromNotification,
   getTicket,
+  getTicketIdsByNotificationIds,
   setTicketAutoCreateType,
   updateTicket,
 } from "@/db/tickets";
@@ -187,12 +188,37 @@ export async function createTicketFromNotificationAction(
   revalidateTickets();
   revalidatePath("/notifications");
   if ("existingId" in result) {
-    return { ok: true, message: "A ticket already exists for that notification." };
+    return {
+      ok: true,
+      message: "A ticket already exists for that notification.",
+      ticketId: result.existingId,
+    };
   }
   return {
     ok: true,
     message: `Created ${ticketNumberLabel(result.number)} from the notification.`,
+    ticketId: result.id,
   };
+}
+
+export async function lookupTicketIdsByNotificationIdsAction(
+  notificationIds: unknown,
+): Promise<
+  | { ok: true; map: Record<string, string> }
+  | { ok: false; error: string }
+> {
+  const user = await getCurrentUser();
+  if (!hasPermission(user, "user:admin")) {
+    return { ok: false, error: FORBIDDEN.error };
+  }
+  if (!Array.isArray(notificationIds)) {
+    return { ok: false, error: "Invalid notification list." };
+  }
+  const ids = notificationIds.filter(
+    (id): id is string => typeof id === "string" && id.length > 0,
+  );
+  const map = await getTicketIdsByNotificationIds(ids);
+  return { ok: true, map };
 }
 
 export async function setTicketAutoCreateTypeAction(

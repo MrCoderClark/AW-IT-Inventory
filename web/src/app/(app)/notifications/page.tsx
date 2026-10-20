@@ -3,6 +3,7 @@ import { Bell } from "lucide-react";
 import { HeroHeader } from "@/components/hero-header";
 import { NotificationsView } from "@/components/notifications-view";
 import { getUnreadCount, listNotifications } from "@/db/notifications";
+import { getTicketIdsByNotificationIds } from "@/db/tickets";
 import { hasPermission, requireUser } from "@/lib/auth/session";
 
 // The feed changes with every scan/sweep; always read fresh.
@@ -22,6 +23,10 @@ export default async function Page() {
     getUnreadCount(viewer),
   ]);
 
+  const ticketByNotificationId = isAdmin
+    ? await getTicketIdsByNotificationIds(items.map((x) => x.id))
+    : {};
+
   return (
     <div className="mx-auto flex max-w-[900px] flex-col gap-6">
       <HeroHeader
@@ -33,6 +38,8 @@ export default async function Page() {
         initialItems={items}
         initialNextBefore={nextBefore}
         initialUnread={unread}
+        initialTicketByNotificationId={ticketByNotificationId}
+        isAdmin={isAdmin}
       />
     </div>
   );

@@ -73,6 +73,7 @@ vi.mock("@/db/index", () => ({
 import {
   createTicket,
   createTicketFromNotification,
+  getTicketIdsByNotificationIds,
   maybeAutoCreateTicketFromNotification,
 } from "./tickets";
 
@@ -102,6 +103,27 @@ describe("createTicket", () => {
       ticketId: "ticket-1",
       body: "Ticket created",
       kind: "system",
+    });
+  });
+});
+
+describe("getTicketIdsByNotificationIds", () => {
+  it("returns an empty map for no ids", async () => {
+    await expect(getTicketIdsByNotificationIds([])).resolves.toEqual({});
+    expect(H.select).not.toHaveBeenCalled();
+  });
+
+  it("maps source notification ids to ticket ids", async () => {
+    H.selectQueue.push([
+      { id: "ticket-1", sourceNotificationId: "notif-a" },
+      { id: "ticket-2", sourceNotificationId: "notif-b" },
+    ]);
+
+    await expect(
+      getTicketIdsByNotificationIds(["notif-a", "notif-b", "notif-c"]),
+    ).resolves.toEqual({
+      "notif-a": "ticket-1",
+      "notif-b": "ticket-2",
     });
   });
 });
