@@ -146,8 +146,8 @@ Service accounts: **no** AI scopes in v1 (techs only).
 4. **v2+ (parked)** — fleet alert correlation; recurring-issue / automation
    reports; on-prem provider profile + richer PII; internal KB article hints
    (when a KB exists).
-5. **Later** — ticket draft assist (after spec 33); streaming UI; admin prompt
-   retention opt-in.
+5. **Later** — ticket draft assist (after [spec 33](../33-ticketing/index.md) v1);
+   streaming UI; admin prompt retention opt-in.
 
 ## Out of scope / non-goals (v1)
 

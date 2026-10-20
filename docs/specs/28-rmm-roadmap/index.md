@@ -68,9 +68,10 @@ trend reporting). Numbers are indicative, not commitments.
 4. **Spec 32 — Automation/script library.** Library + run-now (v1) + multi-target
    / daily·weekly schedules (v2). On-alert / parameters = later.
    **Medium value, medium effort.**
-5. **Spec 33 — Ticketing / helpdesk.** Tickets tied to assets/people, status/SLA,
-   threaded comments, email-in, optional auto-create from alerts. **High value, but
-   the largest single build** — can slot earlier if helpdesk is the priority.
+5. **Spec 33 — Ticketing / helpdesk.** ✅ **v1 specified** —
+   [33](../33-ticketing/index.md): IT-only tickets + comments, create from
+   notification, global auto-create by notification type. SLA / email-in /
+   end-user portal / AI triage = later. **High value; phased.**
 6. **Spec 34 — AI-assisted IT operations.** Optional technician assist (summaries,
    draft scripts for human approval). Pluggable providers; free cloud
    OpenAI-compatible first; app works with AI off. See
