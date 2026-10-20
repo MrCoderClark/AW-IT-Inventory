@@ -7,7 +7,7 @@
 > [33](../28-rmm-roadmap/index.md) (not yet specified).
 
 **Date**: 2026-10-20  
-**Status**: Draft (accepted design; not implemented)
+**Status**: Accepted (v1 implementing on `feat/spec-34-ai-assist-v1`)
 
 ## Summary
 
@@ -124,8 +124,9 @@ Service accounts: **no** AI scopes in v1 (techs only).
 
 ## UI
 
-- Computer detail: **Assist** panel (or Remote Actions sibling) with action
-  buttons + structured result view (Observed / Hypotheses / Recommendations).
+- Computer detail **Monitoring** tab: Metrics | **AI Assist** sub-tabs (Assist
+  hidden when AI is off) with action buttons + structured result view
+  (Observed / Hypotheses / Recommendations).
 - Draft script: primary CTA “Open in script editor” → existing New/Edit dialog
   with body filled; user must Save before it appears in the library.
 - Global: if AI off, no nav noise (no dead “AI” menu).
@@ -137,13 +138,16 @@ Service accounts: **no** AI scopes in v1 (techs only).
    provider.
 2. **v2** — alert correlation across devices; internal KB article hints (when a
    KB exists); recurring-issue / automation opportunity reports; optional
-   on-prem-only provider profile; richer PII controls.
+   on-prem-only provider profile; richer PII controls; **async Assist jobs**
+   (enqueue + poll/history so long free-tier calls don’t tie the panel to an
+   open request).
 3. **Later** — ticket draft assist (after spec 33); streaming UI; admin prompt
    retention opt-in.
 
 ## Out of scope / non-goals (v1)
 
 - Autonomous remediation or “AI agent” that runs tools without a click.
+- Background / queued Assist jobs (v2).
 - Sending full disk images, memory dumps, or entire event logs.
 - Training on customer data.
 - Replacing monitoring/alerting (29/30) with LLM polling.
