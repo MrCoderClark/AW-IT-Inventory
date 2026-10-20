@@ -22,6 +22,7 @@ import {
   TriangleAlert,
   RefreshCw,
   TerminalSquare,
+  Ticket,
 } from "lucide-react";
 
 /* ---------------- Types ---------------- */
@@ -252,6 +253,37 @@ export interface NotificationItem {
   read: boolean;
 }
 
+/* ---------------- Ticketing (spec 33) ---------------- */
+
+export type TicketStatus = "open" | "in_progress" | "resolved" | "closed";
+export type TicketPriority = "low" | "medium" | "high";
+
+export interface TicketListItem {
+  id: string;
+  number: number;
+  subject: string;
+  description: string;
+  status: TicketStatus;
+  priority: TicketPriority;
+  category: string;
+  assigneeEmail: string | null;
+  assetId: string | null;
+  assetTag: string | null;
+  assetName: string | null;
+  sourceNotificationId: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TicketCommentItem {
+  id: string;
+  authorEmail: string;
+  body: string;
+  kind: "user" | "system";
+  createdAt: string;
+}
+
 /* ---------------- People directory & assignments (spec 16) ---------------- */
 
 export type PersonStatus = "active" | "archived";
@@ -450,6 +482,7 @@ export const NAV_MANAGE: NavItem[] = [
   { label: "Scan Jobs", href: "/scans/jobs", icon: ListChecks, perm: "scan:read" },
   // Spec 34 v2a: any signed-in user has a filtered feed (ops broadcasts stay admin-only).
   { label: "Notifications", href: "/notifications", icon: Bell },
+  { label: "Ticketing", href: "/tickets", icon: Ticket, perm: "user:admin" },
   { label: "Users", href: "/admin/users", icon: UserCog, perm: "user:admin" },
   { label: "Roles", href: "/admin/roles", icon: Shield, perm: "user:admin" },
   { label: "Alert rules", href: "/admin/alert-rules", icon: TriangleAlert, perm: "user:admin" },
