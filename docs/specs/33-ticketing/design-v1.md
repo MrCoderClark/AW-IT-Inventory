@@ -1,7 +1,7 @@
 # Spec 33 v1 — Ticketing design
 
 **Date**: 2026-10-20  
-**Status**: Accepted (plan ready) — [plan](./plan-v1.md) · [index](./index.md)  
+**Status**: Accepted (implemented on feat/spec-33-ticketing-v1; pending merge) — [plan](./plan-v1.md) · [index](./index.md)  
 **UI mock**: [`docs/Design/ticketing-mock.png`](../../Design/ticketing-mock.png)
 
 ## Locked decisions

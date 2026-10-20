@@ -1,6 +1,6 @@
 # Spec 33 v1 — Ticketing Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Ship internal IT tickets (CRUD + comments), create-from-notification with dedupe, and admin-configurable auto-create by notification type, with a mock-guided `/tickets` UI gated on `user:admin`.
 
@@ -52,7 +52,7 @@
 **Interfaces:**
 - Produces: Drizzle tables `tickets`, `ticketComments`, `ticketAutoCreateTypes`; TS types `TicketStatus`, `TicketPriority`, `TicketListItem`
 
-- [ ] **Step 1: Add schema tables**
+- [x] **Step 1: Add schema tables**
 
 Append near other feature tables in `web/src/db/schema.ts` (import `notifications` already exists in file):
 
@@ -123,7 +123,7 @@ Add matching `export type TicketRow = …` aliases with the other row types.
 
 Ensure `integer` and `uniqueIndex` / `index` are imported from `drizzle-orm/pg-core` if not already.
 
-- [ ] **Step 2: Add client-safe types + nav**
+- [x] **Step 2: Add client-safe types + nav**
 
 In `web/src/lib/data.ts`:
 
@@ -166,7 +166,7 @@ In `NAV_MANAGE`, after Notifications (or near Compliance), add:
 
 Import `Ticket` from `lucide-react`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```powershell
 git add web/src/db/schema.ts web/src/lib/data.ts
@@ -240,7 +240,7 @@ Note for human: `cd web; npm run db:push` before runtime testing.
   }): Promise<void>
   ```
 
-- [ ] **Step 1: Write failing tests** for allocate number, create, dedupe by source notification, auto-create gate on/off, list filter.
+- [x] **Step 1: Write failing tests** for allocate number, create, dedupe by source notification, auto-create gate on/off, list filter.
 
 Create `web/src/db/tickets.test.ts` with the same DB mock style as `notifications.test.ts` / `alert-rules.test.ts` (hoisted select/insert queues). Minimum cases:
 
@@ -249,13 +249,13 @@ Create `web/src/db/tickets.test.ts` with the same DB mock style as `notification
 3. `maybeAutoCreateTicketFromNotification` no-ops when type not enabled  
 4. `maybeAutoCreateTicketFromNotification` creates when type enabled  
 
-- [ ] **Step 2: Run tests — expect FAIL**
+- [x] **Step 2: Run tests — expect FAIL**
 
 ```powershell
 cd web; npx vitest run src/db/tickets.test.ts --reporter=dot
 ```
 
-- [ ] **Step 3: Implement `web/src/db/tickets.ts`**
+- [x] **Step 3: Implement `web/src/db/tickets.ts`**
 
 Key behaviors:
 
@@ -272,13 +272,13 @@ Key behaviors:
 - `listTicketAutoCreateTypes`: join against the known `NotificationType` union list in code (export `ALL_NOTIFICATION_TYPES` from `data.ts` or tickets.ts); enabled only if row exists with `enabled=true`.  
 - `setTicketAutoCreateType`: upsert row; if `enabled=false`, either delete row or set enabled false (prefer upsert with enabled flag).
 
-- [ ] **Step 4: Run tests — expect PASS**
+- [x] **Step 4: Run tests — expect PASS**
 
 ```powershell
 cd web; npx vitest run src/db/tickets.test.ts --reporter=dot
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add web/src/db/tickets.ts web/src/db/tickets.test.ts
@@ -301,9 +301,9 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
 - Consumes: `maybeAutoCreateTicketFromNotification`
 - Produces: notifications that successfully insert may spawn tickets
 
-- [ ] **Step 1: Failing test** — after successful createNotification insert, `maybeAutoCreateTicketFromNotification` is awaited with the new row id/type/title/body/assetId. On conflict no-op (existing dedupe), it must **not** call auto-create.
+- [x] **Step 1: Failing test** — after successful createNotification insert, `maybeAutoCreateTicketFromNotification` is awaited with the new row id/type/title/body/assetId. On conflict no-op (existing dedupe), it must **not** call auto-create.
 
-- [ ] **Step 2: Implement**
+- [x] **Step 2: Implement**
 
 In `createNotification`, after `publishNotification` and before `return row.id`:
 
@@ -324,7 +324,7 @@ try {
 
 Dynamic import avoids circular init if tickets ever imports notifications helpers.
 
-- [ ] **Step 3: Tests PASS + commit**
+- [x] **Step 3: Tests PASS + commit**
 
 ```powershell
 cd web; npx vitest run src/db/notifications.test.ts src/db/tickets.test.ts --reporter=dot
@@ -348,9 +348,9 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
 **Interfaces:**
 - Actions: `createTicketAction`, `updateTicketAction`, `addTicketCommentAction`, `createTicketFromNotificationAction`, `setTicketAutoCreateTypeAction` — all require session + `user:admin`.
 
-- [ ] **Step 1: Implement actions** mirroring `alert-rule-actions.ts` / `notification-actions.ts` patterns (`getUser`, `hasPermission`, `revalidatePath`).
+- [x] **Step 1: Implement actions** mirroring `alert-rule-actions.ts` / `notification-actions.ts` patterns (`getUser`, `hasPermission`, `revalidatePath`).
 
-- [ ] **Step 2: Page**
+- [x] **Step 2: Page**
 
 ```tsx
 // web/src/app/(app)/tickets/page.tsx
@@ -364,9 +364,9 @@ export default async function TicketsPage() {
 
 Use the same auth helper other admin pages use (`getUser` + early return). Match `admin/alert-rules/page.tsx`.
 
-- [ ] **Step 3: Stub `TicketsView`** that renders title “Tickets”, subtitle without AI claim, and a simple list (full UI in Task 5) so the route compiles.
+- [x] **Step 3: Stub `TicketsView`** that renders title “Tickets”, subtitle without AI claim, and a simple list (full UI in Task 5) so the route compiles.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```powershell
 git add web/src/app/(app)/ticket-actions.ts "web/src/app/(app)/tickets/page.tsx" web/src/components/tickets-view.tsx web/src/components/app-sidebar.test.tsx web/src/components/command-palette.test.tsx
@@ -389,7 +389,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
 **Interfaces:**
 - Consumes: `TicketListItem`, ticket actions from Task 4
 
-- [ ] **Step 1: Build UI** matching mock structure without parked chrome:
+- [x] **Step 1: Build UI** matching mock structure without parked chrome:
 
   - Header: “Tickets” + short subtitle (“Service tickets linked to assets and alerts.”)  
   - Primary button **New Ticket**  
@@ -400,11 +400,11 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
 
   Follow existing table/dialog patterns (`asset-table`, `alert-rules-table`, Base UI `render=` triggers).
 
-- [ ] **Step 2: Wire New Ticket dialog** to `createTicketAction`; detail updates to `updateTicketAction` / `addTicketCommentAction`.
+- [x] **Step 2: Wire New Ticket dialog** to `createTicketAction`; detail updates to `updateTicketAction` / `addTicketCommentAction`.
 
-- [ ] **Step 3: Manual smoke note** in commit body; run any new component tests.
+- [x] **Step 3: Manual smoke note** in commit body; run any new component tests.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```powershell
 git add web/src/components/tickets-view.tsx web/src/components/ticket-*.tsx
@@ -425,7 +425,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
 - Create: `web/src/components/ticket-auto-create-toggles.tsx`
 - Tests: update notification UI tests if they snapshot actions
 
-- [ ] **Step 1: Notification UX**
+- [x] **Step 1: Notification UX**
 
 For each notification item when viewer is admin:
 
@@ -434,11 +434,11 @@ For each notification item when viewer is admin:
 
 Simplest v1 approach: on `/notifications` page and bell panel fetch, join tickets; or lazy action that returns existing. Prefer loading a `Map` in the notifications page RSC; for the bell, after create toast + navigate.
 
-- [ ] **Step 2: Admin toggles**
+- [x] **Step 2: Admin toggles**
 
 On `/admin` (user:admin section), card **Ticket auto-create** listing each `NotificationType` with a Switch. Bound to `listTicketAutoCreateTypes` / `setTicketAutoCreateTypeAction`. Default all off.
 
-- [ ] **Step 3: Tests + commit**
+- [x] **Step 3: Tests + commit**
 
 ```powershell
 cd web; npx vitest run src/db/tickets.test.ts src/db/notifications.test.ts --reporter=dot
@@ -459,9 +459,9 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
 - Modify: `docs/specs/33-ticketing/design-v1.md`
 - Modify: `docs/specs/33-ticketing/plan-v1.md` checkboxes when executing
 
-- [ ] **Step 1:** Mark status **Accepted (implementing on `feat/spec-33-ticketing-v1`)** at start of coding; after merge **shipped**.
+- [x] **Step 1:** Mark status **Accepted (implementing on `feat/spec-33-ticketing-v1`)** at start of coding; after merge **shipped**.
 
-- [ ] **Step 2: Commit docs** with the feature branch (or docs-only commit at end).
+- [x] **Step 2: Commit docs** with the feature branch (or docs-only commit at end).
 
 - [ ] **Step 3: Manual verify (user)**
 

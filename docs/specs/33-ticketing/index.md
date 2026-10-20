@@ -6,7 +6,7 @@
 > [spec 34](../34-ai-assisted-ops/index.md) (later).
 
 **Date**: 2026-10-20  
-**Status**: Accepted (plan ready; not yet implemented) — [design v1](./design-v1.md) · [plan v1](./plan-v1.md)  
+**Status**: Accepted (implemented on feat/spec-33-ticketing-v1; pending merge) — [design v1](./design-v1.md) · [plan v1](./plan-v1.md)  
 **UI reference**: [`docs/Design/ticketing-mock.png`](../../Design/ticketing-mock.png)
 
 ## Summary
