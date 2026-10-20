@@ -22,6 +22,7 @@ import {
   TriangleAlert,
   RefreshCw,
   TerminalSquare,
+  Ticket,
 } from "lucide-react";
 
 /* ---------------- Types ---------------- */
@@ -234,6 +235,29 @@ export type NotificationType =
   | "device-discovered"
   | "warranty-expiring";
 
+/** Every member of the `NotificationType` union (ticket auto-create matrix). */
+export const ALL_NOTIFICATION_TYPES = [
+  "printer-down",
+  "printer-recovery",
+  "printer-install",
+  "printer-install-failed",
+  "software-deploy",
+  "software-deploy-failed",
+  "patch-install",
+  "patch-install-failed",
+  "script-run",
+  "script-run-failed",
+  "ai-assist",
+  "ai-assist-failed",
+  "compliance-at-risk",
+  "compliance-recovered",
+  "metric-threshold",
+  "metric-recovered",
+  "scan-failed",
+  "device-discovered",
+  "warranty-expiring",
+] as const satisfies readonly NotificationType[];
+
 export type NotificationSeverity = "info" | "warning" | "critical";
 
 /** One notification as the bell and the /notifications page render it, carrying
@@ -250,6 +274,37 @@ export interface NotificationItem {
   meta: Record<string, unknown> | null;
   createdAt: string; // ISO
   read: boolean;
+}
+
+/* ---------------- Ticketing (spec 33) ---------------- */
+
+export type TicketStatus = "open" | "in_progress" | "resolved" | "closed";
+export type TicketPriority = "low" | "medium" | "high";
+
+export interface TicketListItem {
+  id: string;
+  number: number;
+  subject: string;
+  description: string;
+  status: TicketStatus;
+  priority: TicketPriority;
+  category: string;
+  assigneeEmail: string | null;
+  assetId: string | null;
+  assetTag: string | null;
+  assetName: string | null;
+  sourceNotificationId: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TicketCommentItem {
+  id: string;
+  authorEmail: string;
+  body: string;
+  kind: "user" | "system";
+  createdAt: string;
 }
 
 /* ---------------- People directory & assignments (spec 16) ---------------- */
@@ -381,7 +436,7 @@ export interface LinkAsset {
 
 /* Result of an inbox write action (link / create / ignore / restore). */
 export type ActionResult =
-  | { ok: true; message: string; tag?: string; jobId?: string }
+  | { ok: true; message: string; tag?: string; jobId?: string; ticketId?: string }
   | { ok: false; error: string };
 
 /* ---------------- Locations (the location tree) ---------------- */
@@ -450,6 +505,7 @@ export const NAV_MANAGE: NavItem[] = [
   { label: "Scan Jobs", href: "/scans/jobs", icon: ListChecks, perm: "scan:read" },
   // Spec 34 v2a: any signed-in user has a filtered feed (ops broadcasts stay admin-only).
   { label: "Notifications", href: "/notifications", icon: Bell },
+  { label: "Ticketing", href: "/tickets", icon: Ticket, perm: "user:admin" },
   { label: "Users", href: "/admin/users", icon: UserCog, perm: "user:admin" },
   { label: "Roles", href: "/admin/roles", icon: Shield, perm: "user:admin" },
   { label: "Alert rules", href: "/admin/alert-rules", icon: TriangleAlert, perm: "user:admin" },

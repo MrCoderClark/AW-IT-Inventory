@@ -11,6 +11,7 @@ const H = vi.hoisted(() => {
   const insertReturning: unknown[][] = [];
   const deleteReturning: unknown[][] = [];
   const publishMock = vi.fn();
+  const ticketAutoMock = vi.fn(async () => undefined);
   const executeMock = vi.fn(async () => undefined);
 
   const makeSelect = () => {
@@ -50,6 +51,7 @@ const H = vi.hoisted(() => {
     insertValues,
     deleteReturning,
     publishMock,
+    ticketAutoMock,
     executeMock,
     db: {
       select: vi.fn(() => makeSelect()),
@@ -63,6 +65,9 @@ const H = vi.hoisted(() => {
 vi.mock("server-only", () => ({}));
 vi.mock("@/db/index", () => ({ db: H.db }));
 vi.mock("@/lib/notification-bus", () => ({ publishNotification: H.publishMock }));
+vi.mock("./tickets", () => ({
+  maybeAutoCreateTicketFromNotification: H.ticketAutoMock,
+}));
 
 import {
   createNotification,
@@ -167,6 +172,39 @@ describe("createNotification", () => {
     });
     expect(id).toBeNull();
     expect(H.publishMock).not.toHaveBeenCalled();
+    expect(H.ticketAutoMock).not.toHaveBeenCalled();
+  });
+
+  it("after a successful insert, awaits ticket auto-create with the new row", async () => {
+    H.insertReturning.push([
+      {
+        id: "n-ticket",
+        type: "printer-down",
+        severity: "critical",
+        title: "Printer offline",
+        body: "Lobby Canon is down.",
+        href: "/assets/PR-1",
+        assetId: "asset-pr-1",
+        createdAt: new Date("2026-10-06T12:00:00Z"),
+      },
+    ]);
+    await createNotification({
+      type: "printer-down",
+      severity: "critical",
+      title: "Printer offline",
+      body: "Lobby Canon is down.",
+      href: "/assets/PR-1",
+      dedupeKey: "printer-down:pr-1",
+      assetId: "asset-pr-1",
+    });
+    expect(H.ticketAutoMock).toHaveBeenCalledTimes(1);
+    expect(H.ticketAutoMock).toHaveBeenCalledWith({
+      id: "n-ticket",
+      type: "printer-down",
+      title: "Printer offline",
+      body: "Lobby Canon is down.",
+      assetId: "asset-pr-1",
+    });
   });
 });
 

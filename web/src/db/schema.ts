@@ -1769,3 +1769,68 @@ export const aiAssistJobs = pgTable(
   ],
 );
 export type AiAssistJobRow = typeof aiAssistJobs.$inferSelect;
+
+export const tickets = pgTable(
+  "tickets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    number: integer("number").notNull().unique(),
+    subject: text("subject").notNull(),
+    description: text("description").notNull().default(""),
+    status: text("status")
+      .$type<"open" | "in_progress" | "resolved" | "closed">()
+      .notNull()
+      .default("open"),
+    priority: text("priority")
+      .$type<"low" | "medium" | "high">()
+      .notNull()
+      .default("medium"),
+    category: text("category").notNull().default(""),
+    assigneeEmail: text("assignee_email"),
+    assetId: uuid("asset_id").references(() => assets.id, {
+      onDelete: "set null",
+    }),
+    sourceNotificationId: uuid("source_notification_id").references(
+      () => notifications.id,
+      { onDelete: "set null" },
+    ),
+    createdBy: text("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    uniqueIndex("tickets_source_notification_id_uidx").on(t.sourceNotificationId),
+    index("tickets_status_updated_idx").on(t.status, t.updatedAt),
+    index("tickets_asset_id_idx").on(t.assetId),
+  ],
+);
+
+export const ticketComments = pgTable("ticket_comments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  ticketId: uuid("ticket_id")
+    .notNull()
+    .references(() => tickets.id, { onDelete: "cascade" }),
+  authorEmail: text("author_email").notNull(),
+  body: text("body").notNull(),
+  kind: text("kind").$type<"user" | "system">().notNull().default("user"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+/** Absent type = auto-create OFF (explicit enable required). */
+export const ticketAutoCreateTypes = pgTable("ticket_auto_create_types", {
+  type: text("type").primaryKey(),
+  enabled: boolean("enabled").notNull().default(true),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+export type TicketRow = typeof tickets.$inferSelect;
+export type TicketCommentRow = typeof ticketComments.$inferSelect;
+export type TicketAutoCreateTypeRow = typeof ticketAutoCreateTypes.$inferSelect;

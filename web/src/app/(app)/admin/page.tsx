@@ -6,6 +6,7 @@ import {
   Lock,
   Radar,
   Shield,
+  Ticket,
   TriangleAlert,
   UserCog,
 } from "lucide-react";
@@ -15,6 +16,7 @@ import { DiscoveryToggles } from "@/components/discovery-toggles";
 import { DashboardWidgetToggles } from "@/components/dashboard-widgets";
 import { PagePlaceholder } from "@/components/page-placeholder";
 import { SendCounterReport } from "@/components/send-counter-report";
+import { TicketAutoCreateToggles } from "@/components/ticket-auto-create-toggles";
 import { TrackedSoftwareCard } from "@/components/tracked-software-card";
 import {
   Card,
@@ -26,6 +28,7 @@ import {
 import { getDashboardWidgetSettings } from "@/db/dashboard";
 import { getDiscoverySettings } from "@/db/discovery";
 import { getTrackedSoftware } from "@/db/software";
+import { listTicketAutoCreateTypes } from "@/db/tickets";
 import { hasPermission, requireUser } from "@/lib/auth/session";
 
 // Read fresh: the switches are shared and an admin may have just flipped one.
@@ -47,11 +50,14 @@ export default async function Page() {
   }
 
   const canWrite = hasPermission(user, "scan:write");
-  const [settings, widgetSettings, trackedSoftware] = await Promise.all([
-    getDiscoverySettings(),
-    getDashboardWidgetSettings(),
-    canWrite ? getTrackedSoftware() : Promise.resolve([]),
-  ]);
+  const canManageTickets = hasPermission(user, "user:admin");
+  const [settings, widgetSettings, trackedSoftware, ticketAutoCreateTypes] =
+    await Promise.all([
+      getDiscoverySettings(),
+      getDashboardWidgetSettings(),
+      canWrite ? getTrackedSoftware() : Promise.resolve([]),
+      listTicketAutoCreateTypes(),
+    ]);
 
   return (
     <div className="mx-auto flex max-w-[900px] flex-col gap-6">
@@ -126,6 +132,26 @@ export default async function Page() {
         </CardHeader>
         <CardContent>
           <DiscoveryToggles settings={settings} canWrite={canWrite} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Ticket className="size-5 text-muted-foreground" />
+            <CardTitle>Ticket auto-create</CardTitle>
+          </div>
+          <CardDescription>
+            Choose which notification types automatically open an IT ticket. When
+            a type is off or not listed, no ticket is created until an admin
+            creates one from the notification.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <TicketAutoCreateToggles
+            types={ticketAutoCreateTypes}
+            canWrite={canManageTickets}
+          />
         </CardContent>
       </Card>
 
