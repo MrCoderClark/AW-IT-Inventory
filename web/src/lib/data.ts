@@ -224,6 +224,8 @@ export type NotificationType =
   | "patch-install-failed"
   | "script-run"
   | "script-run-failed"
+  | "ai-assist"
+  | "ai-assist-failed"
   | "compliance-at-risk"
   | "compliance-recovered"
   | "metric-threshold"
