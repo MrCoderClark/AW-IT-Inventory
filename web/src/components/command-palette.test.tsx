@@ -47,11 +47,11 @@ describe("command palette navigation gating", () => {
       expect.arrayContaining(["Dashboard", "Computers", "Compliance", "Reports"]),
     );
     // Gated destinations are gone (People & Media now need asset:write).
+    expect(l).toEqual(expect.arrayContaining(["Notifications"]));
     for (const hidden of [
       "Admin",
       "Users",
       "Roles",
-      "Notifications",
       "Software Library",
       "Scripts",
       "Scans",
