@@ -195,7 +195,9 @@ describe("claimNextPatchInstall (AC-17)", () => {
 
 describe("updatePatchInstallStatus — fenced (AC-17)", () => {
   it("notifies on success", async () => {
-    H.state.updateReturns = [[{ id: JID, assetId: "a1", selection: SEL }]];
+    H.state.updateReturns = [
+      [{ id: JID, assetId: "a1", selection: SEL, requestedBy: "me@x.com" }],
+    ];
     expect(
       await updatePatchInstallStatus(JID, { ...FENCE, status: "succeeded" }),
     ).toBe("ok");
@@ -205,6 +207,7 @@ describe("updatePatchInstallStatus — fenced (AC-17)", () => {
         status: "succeeded",
         osCount: 1,
         appCount: 1,
+        requestedBy: "me@x.com",
       }),
     );
   });

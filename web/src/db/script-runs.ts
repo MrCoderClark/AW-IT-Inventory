@@ -178,6 +178,7 @@ export async function updateScriptRunStatus(
       id: scriptRunJobs.id,
       assetId: scriptRunJobs.assetId,
       snapshot: scriptRunJobs.scriptSnapshot,
+      requestedBy: scriptRunJobs.requestedBy,
     });
 
   if (updated.length) {
@@ -189,6 +190,7 @@ export async function updateScriptRunStatus(
         assetId: row.assetId,
         scriptName: row.snapshot.name,
         error: u.error ?? null,
+        requestedBy: row.requestedBy,
       });
     }
     return "ok";

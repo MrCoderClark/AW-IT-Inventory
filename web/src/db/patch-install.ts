@@ -276,6 +276,7 @@ export async function updatePatchInstallStatus(
       id: patchInstallJobs.id,
       assetId: patchInstallJobs.assetId,
       selection: patchInstallJobs.selection,
+      requestedBy: patchInstallJobs.requestedBy,
     });
 
   if (updated.length) {
@@ -288,6 +289,7 @@ export async function updatePatchInstallStatus(
         osCount: row.selection.os.length,
         appCount: row.selection.apps.length,
         error: u.error ?? null,
+        requestedBy: row.requestedBy,
       });
     }
     return "ok";
