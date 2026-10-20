@@ -5,8 +5,8 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { NotificationBell } from "./notification-bell";
 
 /**
- * Bell (spec 19 / spec 34): shown for every signed-in user, pulses while unread,
- * and toasts each SSE notification (error when failed or warning/critical).
+ * Bell (spec 19 / spec 34): shown for every signed-in user, pings the unread
+ * badge, bursts attention on SSE, and toasts each notification.
  */
 
 const { toastError, toastSuccess, permsRef } = vi.hoisted(() => ({
@@ -92,7 +92,7 @@ describe("NotificationBell", () => {
     ).toBeInTheDocument();
   });
 
-  it("pulses the bell while there are unread notifications", async () => {
+  it("shows a pinging badge and primary icon while unread", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({
@@ -101,13 +101,15 @@ describe("NotificationBell", () => {
       })),
     );
     render(<NotificationBell />);
-    const button = await screen.findByRole("button", {
+    await screen.findByRole("button", {
       name: "Notifications, 2 unread",
     });
-    expect(button.className).toContain("animate-pulse");
+    const face = screen.getByTestId("notification-bell-face");
+    expect(face.className).toContain("text-primary");
+    expect(face.querySelector(".animate-ping")).toBeTruthy();
   });
 
-  it("toasts error for failures and warning/critical, success otherwise", async () => {
+  it("bursts attention and toasts on SSE notification", async () => {
     render(<NotificationBell />);
     await waitFor(() => expect(FakeEventSource.instances.length).toBe(1));
     const es = FakeEventSource.instances[0];
@@ -119,5 +121,10 @@ describe("NotificationBell", () => {
     expect(toastError).toHaveBeenCalledWith("Printer down");
     expect(toastError).toHaveBeenCalledWith("Warranty soon");
     expect(toastSuccess).toHaveBeenCalledWith("Printer recovered");
+    await waitFor(() => {
+      expect(screen.getByTestId("notification-bell-face").className).toContain(
+        "animate-notification-attention",
+      );
+    });
   });
 });
