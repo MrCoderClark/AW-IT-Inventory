@@ -7,7 +7,9 @@ import { hasPermission, requireUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
-export default async function TicketsPage() {
+export default async function TicketsPage({
+  searchParams,
+}: PageProps<"/tickets">) {
   const user = await requireUser();
 
   if (!hasPermission(user, "user:admin")) {
@@ -21,6 +23,15 @@ export default async function TicketsPage() {
   }
 
   const tickets = await listTickets();
+  const { id: rawId } = await searchParams;
+  const initialTicketId =
+    typeof rawId === "string" && rawId.length > 0 ? rawId : null;
 
-  return <TicketsView initialTickets={tickets} viewerEmail={user.email} />;
+  return (
+    <TicketsView
+      initialTickets={tickets}
+      viewerEmail={user.email}
+      initialTicketId={initialTicketId}
+    />
+  );
 }

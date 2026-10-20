@@ -11,6 +11,7 @@ const {
   addCommentMock,
   createFromNotifMock,
   setAutoCreateMock,
+  getTicketMock,
   getCurrentUserMock,
   hasPermissionMock,
   revalidateMock,
@@ -20,6 +21,7 @@ const {
   addCommentMock: vi.fn(),
   createFromNotifMock: vi.fn(),
   setAutoCreateMock: vi.fn(),
+  getTicketMock: vi.fn(),
   getCurrentUserMock: vi.fn(),
   hasPermissionMock: vi.fn(),
   revalidateMock: vi.fn(),
@@ -31,6 +33,7 @@ vi.mock("@/db/tickets", () => ({
   addTicketComment: addCommentMock,
   createTicketFromNotification: createFromNotifMock,
   setTicketAutoCreateType: setAutoCreateMock,
+  getTicket: getTicketMock,
 }));
 vi.mock("@/lib/auth/session", () => ({
   getCurrentUser: getCurrentUserMock,
@@ -42,6 +45,7 @@ import {
   addTicketCommentAction,
   createTicketAction,
   createTicketFromNotificationAction,
+  getTicketAction,
   setTicketAutoCreateTypeAction,
   updateTicketAction,
 } from "./ticket-actions";
@@ -86,6 +90,27 @@ describe("createTicketAction", () => {
     );
     expect(revalidateMock).toHaveBeenCalledWith("/tickets");
     expect(res.ok).toBe(true);
+  });
+});
+
+describe("getTicketAction", () => {
+  beforeEach(() => grant(true));
+
+  it("returns ticket with comments for admins", async () => {
+    getTicketMock.mockResolvedValue({
+      id: TICKET_ID,
+      number: 1,
+      comments: [],
+    });
+    const res = await getTicketAction(TICKET_ID);
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.ticket.id).toBe(TICKET_ID);
+  });
+
+  it("reports missing ticket", async () => {
+    getTicketMock.mockResolvedValue(null);
+    const res = await getTicketAction(TICKET_ID);
+    expect(res.ok).toBe(false);
   });
 });
 

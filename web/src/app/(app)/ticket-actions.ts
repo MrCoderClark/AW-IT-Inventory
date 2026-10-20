@@ -6,11 +6,17 @@ import {
   addTicketComment,
   createTicket,
   createTicketFromNotification,
+  getTicket,
   setTicketAutoCreateType,
   updateTicket,
 } from "@/db/tickets";
 import { getCurrentUser, hasPermission } from "@/lib/auth/session";
-import type { ActionResult, NotificationType } from "@/lib/data";
+import type {
+  ActionResult,
+  NotificationType,
+  TicketCommentItem,
+  TicketListItem,
+} from "@/lib/data";
 import { ALL_NOTIFICATION_TYPES } from "@/lib/data";
 import {
   addTicketCommentInputSchema,
@@ -72,12 +78,41 @@ export async function createTicketAction(
 
   revalidateTickets();
   if ("existingId" in result) {
-    return { ok: true, message: "That ticket already exists." };
+    return {
+      ok: true,
+      message: "That ticket already exists.",
+      ticketId: result.existingId,
+    };
   }
   return {
     ok: true,
     message: `Created ${ticketNumberLabel(result.number)}.`,
+    ticketId: result.id,
   };
+}
+
+export async function getTicketAction(id: unknown): Promise<
+  | {
+      ok: true;
+      ticket: TicketListItem & { comments: TicketCommentItem[] };
+    }
+  | { ok: false; error: string }
+> {
+  const user = await getCurrentUser();
+  if (!hasPermission(user, "user:admin")) {
+    return { ok: false, error: FORBIDDEN.error };
+  }
+
+  if (typeof id !== "string" || !id) {
+    return { ok: false, error: "Unknown ticket." };
+  }
+
+  const ticket = await getTicket(id);
+  if (!ticket) {
+    return { ok: false, error: "That ticket is no longer there." };
+  }
+
+  return { ok: true, ticket };
 }
 
 export async function updateTicketAction(

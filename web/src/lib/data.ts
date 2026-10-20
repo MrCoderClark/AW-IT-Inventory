@@ -436,7 +436,7 @@ export interface LinkAsset {
 
 /* Result of an inbox write action (link / create / ignore / restore). */
 export type ActionResult =
-  | { ok: true; message: string; tag?: string; jobId?: string }
+  | { ok: true; message: string; tag?: string; jobId?: string; ticketId?: string }
   | { ok: false; error: string };
 
 /* ---------------- Locations (the location tree) ---------------- */
