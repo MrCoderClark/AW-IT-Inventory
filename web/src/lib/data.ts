@@ -293,6 +293,7 @@ export interface TicketListItem {
   assetId: string | null;
   assetTag: string | null;
   assetName: string | null;
+  locationLabel: string | null;
   sourceNotificationId: string | null;
   createdBy: string;
   createdAt: string;

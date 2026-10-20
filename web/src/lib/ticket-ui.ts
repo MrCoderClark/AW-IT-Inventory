@@ -47,3 +47,16 @@ export function categoryLabel(category: string): string {
   const trimmed = category.trim();
   return trimmed || "General";
 }
+
+export function ticketKpiCounts(
+  rows: { status: TicketStatus }[],
+): { open: number; inProgress: number; closed: number; resolved: number } {
+  const out = { open: 0, inProgress: 0, closed: 0, resolved: 0 };
+  for (const r of rows) {
+    if (r.status === "open") out.open += 1;
+    else if (r.status === "in_progress") out.inProgress += 1;
+    else if (r.status === "closed") out.closed += 1;
+    else if (r.status === "resolved") out.resolved += 1;
+  }
+  return out;
+}

@@ -5,6 +5,7 @@ import { and, desc, eq, ilike, inArray, max, or } from "drizzle-orm";
 import { db } from "./index";
 import {
   assets,
+  locations,
   notifications,
   ticketAutoCreateTypes,
   ticketComments,
@@ -88,6 +89,7 @@ function toListItem(row: {
   updatedAt: Date;
   assetTag?: string | null;
   assetName?: string | null;
+  locationLabel?: string | null;
 }): TicketListItem {
   return {
     id: row.id,
@@ -101,6 +103,7 @@ function toListItem(row: {
     assetId: row.assetId,
     assetTag: row.assetTag ?? null,
     assetName: row.assetName ?? null,
+    locationLabel: row.locationLabel ?? null,
     sourceNotificationId: row.sourceNotificationId,
     createdBy: row.createdBy,
     createdAt: isoOf(row.createdAt),
@@ -212,9 +215,11 @@ export async function listTickets(filters?: {
       updatedAt: tickets.updatedAt,
       assetTag: assets.tag,
       assetName: assets.name,
+      locationLabel: locations.name,
     })
     .from(tickets)
     .leftJoin(assets, eq(tickets.assetId, assets.id))
+    .leftJoin(locations, eq(assets.locationId, locations.id))
     .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(desc(tickets.updatedAt));
 
@@ -241,9 +246,11 @@ export async function getTicket(
       updatedAt: tickets.updatedAt,
       assetTag: assets.tag,
       assetName: assets.name,
+      locationLabel: locations.name,
     })
     .from(tickets)
     .leftJoin(assets, eq(tickets.assetId, assets.id))
+    .leftJoin(locations, eq(assets.locationId, locations.id))
     .where(eq(tickets.id, id))
     .limit(1);
 
