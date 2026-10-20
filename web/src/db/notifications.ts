@@ -117,6 +117,18 @@ export async function createNotification(
       recipientEmail: row.recipientEmail ?? recipientEmail,
     };
     publishNotification(event);
+    try {
+      const { maybeAutoCreateTicketFromNotification } = await import("./tickets");
+      await maybeAutoCreateTicketFromNotification({
+        id: row.id,
+        type: row.type as NotificationType,
+        title: row.title,
+        body: row.body,
+        assetId: row.assetId,
+      });
+    } catch (e) {
+      console.error(`[notifications] ticket auto-create failed (${row.id}):`, e);
+    }
     return row.id;
   } catch (err) {
     console.error(`[notifications] create failed (${input.dedupeKey}):`, err);
