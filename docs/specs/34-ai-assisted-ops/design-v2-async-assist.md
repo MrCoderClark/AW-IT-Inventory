@@ -1,7 +1,7 @@
 # Spec 34 v2a — Async Assist jobs + requester notifications
 
 **Date**: 2026-10-20  
-**Status**: Design approved — implementation plan in [plan-v2a-async-assist.md](./plan-v2a-async-assist.md)  
+**Status**: Accepted (implemented on `feat/spec-34-v2a-async-assist`; awaiting merge) — [plan](./plan-v2a-async-assist.md)  
 **Parent**: [index.md](./index.md)  
 **Depends on**: Spec 34 v1 (merged), Spec 19 notifications
 

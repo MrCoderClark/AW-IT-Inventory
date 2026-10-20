@@ -7,7 +7,7 @@
 > [33](../28-rmm-roadmap/index.md) (not yet specified).
 
 **Date**: 2026-10-20  
-**Status**: Accepted (v1 shipped; v2a design in [design-v2-async-assist.md](./design-v2-async-assist.md))
+**Status**: Accepted (v1 shipped; v2a implemented on `feat/spec-34-v2a-async-assist`, pending merge — [design](./design-v2-async-assist.md), [plan](./plan-v2a-async-assist.md))
 
 ## Summary
 
@@ -136,7 +136,8 @@ Service accounts: **no** AI scopes in v1 (techs only).
 1. **v1 (this spec)** — AC-1–9: gateway, context pack, computer Assist,
    draft script handoff to spec 32, audit hash, free cloud OpenAI-compatible
    provider.
-2. **v2a (next)** — [async Assist jobs](./design-v2-async-assist.md): enqueue +
+2. **v2a** — [async Assist jobs](./design-v2-async-assist.md) ([plan](./plan-v2a-async-assist.md)):
+   implemented on `feat/spec-34-v2a-async-assist` (awaiting merge): enqueue +
    `after()` processing, requester toast + bell on completion, Spec 19 audience
    targeting, recent job history on the Assist panel.
 3. **v2+ (parked)** — fleet alert correlation; recurring-issue / automation
@@ -148,7 +149,7 @@ Service accounts: **no** AI scopes in v1 (techs only).
 ## Out of scope / non-goals (v1)
 
 - Autonomous remediation or “AI agent” that runs tools without a click.
-- Background / queued Assist jobs (v2).
+- Further AI slices beyond v1 + v2a (see Phases).
 - Sending full disk images, memory dumps, or entire event logs.
 - Training on customer data.
 - Replacing monitoring/alerting (29/30) with LLM polling.
