@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Play, Plus, Trash2 } from "lucide-react";
+import { Loader2, Play, Plus, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -23,6 +23,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import type { ScriptListItem } from "@/db/scripts";
 import type { LocationOption } from "@/lib/data";
+
+/** Keep in sync with `SCRIPT_BODY_MAX` in `db/scripts.ts`. */
+const SCRIPT_BODY_MAX = 64 * 1024;
 
 export function ScriptLibrary({
   initial,
@@ -45,6 +48,7 @@ export function ScriptLibrary({
   const [timeoutSeconds, setTimeoutSeconds] = React.useState(120);
   const [busy, startBusy] = React.useTransition();
   const [runOn, setRunOn] = React.useState<ScriptListItem | null>(null);
+  const fileRef = React.useRef<HTMLInputElement>(null);
 
   function openCreate() {
     setEditing(null);
@@ -93,6 +97,36 @@ export function ScriptLibrary({
       toast.success("Script archived");
       router.refresh();
     });
+  }
+
+  function onPickPs1(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!/\.ps1$/i.test(file.name)) {
+      toast.error("Choose a .ps1 file.");
+      return;
+    }
+    if (file.size > SCRIPT_BODY_MAX) {
+      toast.error("Script is too large (max 64 KB).");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      let text = String(reader.result ?? "");
+      if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
+      if (text.length > SCRIPT_BODY_MAX) {
+        toast.error("Script is too large (max 64 KB).");
+        return;
+      }
+      setBody(text);
+      if (!name.trim()) {
+        setName(file.name.replace(/\.ps1$/i, "").replace(/[-_]+/g, " "));
+      }
+      toast.success(`Loaded ${file.name}`);
+    };
+    reader.onerror = () => toast.error("Could not read that file.");
+    reader.readAsText(file);
   }
 
   return (
@@ -174,42 +208,72 @@ export function ScriptLibrary({
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
+        {/* sm:max-w-* must override DialogContent's default sm:max-w-sm */}
+        <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl">
+          <DialogHeader className="shrink-0 border-b px-4 py-3 pr-12">
             <DialogTitle>{editing ? "Edit script" : "New script"}</DialogTitle>
           </DialogHeader>
-          <div className="flex flex-col gap-3">
-            <Input
-              placeholder="Name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
+          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="min-w-[12rem] flex-1 text-xs text-muted-foreground">
+                Name
+                <Input
+                  className="mt-1"
+                  placeholder="Reset Print Spooler"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </label>
+              <label className="w-28 text-xs text-muted-foreground">
+                Timeout (s)
+                <Input
+                  type="number"
+                  min={30}
+                  max={600}
+                  className="mt-1"
+                  value={timeoutSeconds}
+                  onChange={(e) =>
+                    setTimeoutSeconds(Number(e.target.value) || 120)
+                  }
+                />
+              </label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                onClick={() => fileRef.current?.click()}
+              >
+                <Upload className="size-4" />
+                Upload .ps1
+              </Button>
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".ps1,text/plain"
+                className="hidden"
+                onChange={onPickPs1}
+              />
+            </div>
             <Input
               placeholder="Description (optional)"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
-            <label className="text-xs text-muted-foreground">
-              Timeout (seconds, 30–600)
-              <Input
-                type="number"
-                min={30}
-                max={600}
-                className="mt-1"
-                value={timeoutSeconds}
-                onChange={(e) =>
-                  setTimeoutSeconds(Number(e.target.value) || 120)
-                }
+            <label className="flex min-h-0 flex-1 flex-col text-xs text-muted-foreground">
+              PowerShell body
+              <Textarea
+                spellCheck={false}
+                autoCorrect="off"
+                autoCapitalize="off"
+                className="mt-1 min-h-[min(50vh,28rem)] flex-1 resize-y field-sizing-fixed whitespace-pre font-mono text-xs leading-5"
+                placeholder="Paste PowerShell, or upload a .ps1"
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
               />
             </label>
-            <Textarea
-              className="min-h-48 font-mono text-xs"
-              placeholder="PowerShell body"
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-            />
           </div>
-          <DialogFooter>
+          <DialogFooter className="shrink-0">
             <Button variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>

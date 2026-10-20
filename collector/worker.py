@@ -788,6 +788,11 @@ def _run_script_run_job(
         console.print(
             f"  [green]done[/green] — {status} (exit {result.get('exitCode')})."
         )
+        tail = (result.get("outputTail") or "").strip()
+        if status == "failed" and tail:
+            # Show why — exit code alone is useless for Stop-Service / ACL failures.
+            snippet = tail if len(tail) <= 600 else f"…{tail[-600:]}"
+            console.print(f"  [dim]{snippet}[/dim]")
 
 
 def _drain_script_runs(config: Config, tokens: "TokenCache", worker_id: str) -> None:

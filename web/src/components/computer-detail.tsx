@@ -133,6 +133,98 @@ function fmtField(field: TypeField, row: Record<string, unknown> | null): string
   return String(v);
 }
 
+/** Terminal + Scripts sub-tabs on Remote Actions (specs 24 + 32). */
+function RemoteActionsBody({
+  assetTag,
+  canRemote,
+  canDeploy,
+  remoteSessions,
+  scriptOptions,
+  scriptRuns,
+  hasIp,
+}: {
+  assetTag: string;
+  canRemote: boolean;
+  canDeploy: boolean;
+  remoteSessions: RemoteSessionHistoryItem[];
+  scriptOptions: ScriptOption[];
+  scriptRuns: ScriptRunListItem[];
+  hasIp: boolean;
+}) {
+  const defaultSub = canRemote ? "terminal" : "scripts";
+  const [sub, setSub] = React.useState(defaultSub);
+
+  // Only one capability → no inner tabs, just the panel.
+  if (canRemote && !canDeploy) {
+    return (
+      <>
+        <Panel icon={<TerminalSquare />} title="Remote Terminal">
+          <RemoteTerminal assetTag={assetTag} />
+        </Panel>
+        <RemoteSessionHistory sessions={remoteSessions} />
+      </>
+    );
+  }
+  if (canDeploy && !canRemote) {
+    return (
+      <ScriptRunPanel
+        assetTag={assetTag}
+        scripts={scriptOptions}
+        initialHistory={scriptRuns}
+        hasIp={hasIp}
+      />
+    );
+  }
+
+  // Plain buttons — nested <Tabs> would fight the page-level tab context.
+  return (
+    <div className="flex flex-col gap-4">
+      <div
+        className="flex gap-1 border-b"
+        role="tablist"
+        aria-label="Remote action type"
+      >
+        {(
+          [
+            ["terminal", "Remote Terminal"],
+            ["scripts", "Scripts"],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={sub === id}
+            className={
+              sub === id
+                ? "border-b-2 border-primary px-3 py-2 text-sm font-medium text-foreground"
+                : "border-b-2 border-transparent px-3 py-2 text-sm text-muted-foreground hover:text-foreground"
+            }
+            onClick={() => setSub(id)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {sub === "terminal" ? (
+        <div className="flex flex-col gap-5">
+          <Panel icon={<TerminalSquare />} title="Remote Terminal">
+            <RemoteTerminal assetTag={assetTag} />
+          </Panel>
+          <RemoteSessionHistory sessions={remoteSessions} />
+        </div>
+      ) : (
+        <ScriptRunPanel
+          assetTag={assetTag}
+          scripts={scriptOptions}
+          initialHistory={scriptRuns}
+          hasIp={hasIp}
+        />
+      )}
+    </div>
+  );
+}
+
 /**
  * The redesigned, tabbed computer detail page (spec 17.04). Reuses the shared
  * detail UI (`detail-ui`), the `Tabs` shell, and `AssignmentControls`; maps today's
@@ -363,7 +455,9 @@ export function ComputerDetail({
           <TabsTab value="updates">Updates</TabsTab>
           <TabsTab value="compliance">Compliance</TabsTab>
           <TabsTab value="printers">Printers</TabsTab>
-          {canRemote && <TabsTab value="remote">Remote Actions</TabsTab>}
+          {(canRemote || canDeploy) && (
+            <TabsTab value="remote">Remote Actions</TabsTab>
+          )}
           <TabsTab value="assignment">Assignment</TabsTab>
           <TabsTab value="activity">Activity</TabsTab>
         </TabsList>
@@ -722,20 +816,6 @@ export function ComputerDetail({
               initialHistory={deployHistory}
             />
           )}
-          {canDeploy && (
-            <ScriptRunPanel
-              assetTag={asset.id}
-              scripts={scriptOptions}
-              initialHistory={scriptRuns}
-              hasIp={
-                !!(
-                  details &&
-                  typeof details.ipAddress === "string" &&
-                  details.ipAddress
-                )
-              }
-            />
-          )}
         </TabsPanel>
 
         {/* -------- Updates (spec 31) -------- */}
@@ -769,13 +849,24 @@ export function ComputerDetail({
           />
         </TabsPanel>
 
-        {/* -------- Remote Actions (spec 24) -------- */}
-        {canRemote && (
+        {/* -------- Remote Actions: terminal (24) + scripts (32) -------- */}
+        {(canRemote || canDeploy) && (
           <TabsPanel value="remote" className="flex flex-col gap-5">
-            <Panel icon={<TerminalSquare />} title="Remote Terminal">
-              <RemoteTerminal assetTag={asset.id} />
-            </Panel>
-            <RemoteSessionHistory sessions={remoteSessions} />
+            <RemoteActionsBody
+              assetTag={asset.id}
+              canRemote={canRemote}
+              canDeploy={canDeploy}
+              remoteSessions={remoteSessions}
+              scriptOptions={scriptOptions}
+              scriptRuns={scriptRuns}
+              hasIp={
+                !!(
+                  details &&
+                  typeof details.ipAddress === "string" &&
+                  details.ipAddress
+                )
+              }
+            />
           </TabsPanel>
         )}
 
