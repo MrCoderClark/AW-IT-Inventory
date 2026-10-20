@@ -71,7 +71,12 @@ trend reporting). Numbers are indicative, not commitments.
 5. **Spec 33 — Ticketing / helpdesk.** Tickets tied to assets/people, status/SLA,
    threaded comments, email-in, optional auto-create from alerts. **High value, but
    the largest single build** — can slot earlier if helpdesk is the priority.
-6. **Later / optional:** license-expiry tracking, GUI remote access, mobile,
+6. **Spec 34 — AI-assisted IT operations.** Optional technician assist (summaries,
+   draft scripts for human approval). Pluggable providers; free cloud
+   OpenAI-compatible first; app works with AI off. See
+   [34](../34-ai-assisted-ops/index.md). **Medium value, medium effort; parallel
+   to 33.**
+7. **Later / optional:** license-expiry tracking, GUI remote access, mobile,
    network-topology mapping. **Fork B only:** multi-tenancy, customer portal, billing.
 
 ## How this maps to "do we need a new spec?"
