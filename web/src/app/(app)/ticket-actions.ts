@@ -31,8 +31,9 @@ const FORBIDDEN: ActionResult = {
   error: "You don't have permission to manage tickets.",
 };
 
-function revalidateTickets() {
+function revalidateTickets(ticketId?: string) {
   revalidatePath("/tickets");
+  if (ticketId) revalidatePath(`/tickets/${ticketId}`);
 }
 
 function revalidateAdminTickets() {
@@ -77,7 +78,7 @@ export async function createTicketAction(
     createdBy: user!.email,
   });
 
-  revalidateTickets();
+  revalidateTickets("existingId" in result ? result.existingId : result.id);
   if ("existingId" in result) {
     return {
       ok: true,
@@ -135,7 +136,7 @@ export async function updateTicketAction(
   const updated = await updateTicket(id, parsed.data);
   if (!updated) return { ok: false, error: "That ticket is no longer there." };
 
-  revalidateTickets();
+  revalidateTickets(id);
   return { ok: true, message: "Updated that ticket." };
 }
 
@@ -163,7 +164,7 @@ export async function addTicketCommentAction(
     return { ok: false, error: "That ticket is no longer there." };
   }
 
-  revalidateTickets();
+  revalidateTickets(ticketId);
   return { ok: true, message: "Comment added." };
 }
 
@@ -185,7 +186,7 @@ export async function createTicketFromNotificationAction(
     return { ok: false, error: "That notification is no longer there." };
   }
 
-  revalidateTickets();
+  revalidateTickets("existingId" in result ? result.existingId : result.id);
   revalidatePath("/notifications");
   if ("existingId" in result) {
     return {
