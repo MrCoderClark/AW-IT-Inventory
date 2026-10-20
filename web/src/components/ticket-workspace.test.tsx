@@ -161,4 +161,43 @@ describe("TicketWorkspace — details, assets, and actions", () => {
     });
     expect(refreshMock).toHaveBeenCalled();
   });
+
+  it("keeps dirty status when the ticket prop refreshes with new comments", async () => {
+    const user = userEvent.setup();
+    const ticket = makeTicket();
+    const { container, rerender } = render(<TicketWorkspace ticket={ticket} />);
+
+    const statusTrigger = container.querySelectorAll(
+      '[data-slot="select-trigger"]',
+    )[0];
+    expect(statusTrigger).toBeTruthy();
+    await user.click(statusTrigger!);
+    await user.click(screen.getByRole("option", { name: "In progress" }));
+
+    const update = screen.getByRole("button", { name: "Update" });
+    expect(update).toBeEnabled();
+
+    rerender(
+      <TicketWorkspace
+        ticket={makeTicket({
+          comments: [
+            ...ticket.comments,
+            {
+              id: "c-new",
+              authorEmail: "tech@example.com",
+              body: "Follow-up note.",
+              kind: "user",
+              createdAt: "2026-10-02T17:00:00.000Z",
+            },
+          ],
+        })}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Update" })).toBeEnabled();
+    expect(
+      container.querySelectorAll('[data-slot="select-trigger"]')[0],
+    ).toHaveTextContent(/in_progress/i);
+    expect(screen.getByText("Follow-up note.")).toBeInTheDocument();
+  });
 });

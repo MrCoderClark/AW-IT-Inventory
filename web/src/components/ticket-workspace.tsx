@@ -80,7 +80,7 @@ export function TicketWorkspace({ ticket }: { ticket: TicketDetail }) {
     setStatus(ticket.status);
     setPriority(ticket.priority);
     setAssigneeEmail(ticket.assigneeEmail ?? "");
-  }, [ticket]);
+  }, [ticket.id]);
 
   React.useEffect(() => {
     setCommentBody("");
