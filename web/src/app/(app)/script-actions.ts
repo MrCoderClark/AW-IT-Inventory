@@ -14,6 +14,7 @@ import {
   deleteScriptSchedule,
   updateScriptSchedule,
 } from "@/db/script-schedules";
+import { ensureStarterScripts } from "@/db/script-starters";
 import {
   archiveScript,
   createScript,
@@ -84,6 +85,17 @@ export async function archiveScriptAction(id: string): Promise<Ok | Err> {
     return { ok: false, error: "Script not found." };
   revalidatePath("/scripts");
   return { ok: true };
+}
+
+export async function addStarterScriptsAction(): Promise<
+  | { ok: true; added: string[]; skipped: string[] }
+  | Err
+> {
+  const user = await requireDeploy();
+  if (!user) return FORBIDDEN;
+  const res = await ensureStarterScripts(user.email);
+  revalidatePath("/scripts");
+  return { ok: true, added: res.added, skipped: res.skipped };
 }
 
 export async function runScriptAction(
