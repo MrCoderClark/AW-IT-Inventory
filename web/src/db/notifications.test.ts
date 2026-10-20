@@ -74,6 +74,43 @@ import {
   sweepWarrantyNotifications,
 } from "./notifications";
 
+/** Flatten a drizzle `sql` template (including nested fragments) to its source text. */
+function sqlSource(query: unknown): string {
+  if (!query || typeof query !== "object") return "";
+  const chunks = (query as { queryChunks?: unknown[] }).queryChunks;
+  if (!chunks) return "";
+  return chunks
+    .map((chunk) => {
+      if (
+        chunk &&
+        typeof chunk === "object" &&
+        Array.isArray((chunk as { value?: unknown }).value)
+      ) {
+        return ((chunk as { value: string[] }).value).join("");
+      }
+      if (chunk && typeof chunk === "object" && "queryChunks" in chunk) {
+        return sqlSource(chunk);
+      }
+      return "";
+    })
+    .join("");
+}
+
+/** Bound parameters of a drizzle `sql` template (nested fragments included). */
+function sqlParams(query: unknown, out: unknown[] = []): unknown[] {
+  if (!query || typeof query !== "object") return out;
+  const chunks = (query as { queryChunks?: unknown[] }).queryChunks;
+  if (!chunks) return out;
+  for (const chunk of chunks) {
+    if (typeof chunk === "string" || typeof chunk === "number" || typeof chunk === "boolean") {
+      out.push(chunk);
+    } else if (chunk && typeof chunk === "object" && "queryChunks" in chunk) {
+      sqlParams(chunk, out);
+    }
+  }
+  return out;
+}
+
 beforeEach(() => {
   H.selectQueue.length = 0;
   H.insertReturning.length = 0;
@@ -238,6 +275,27 @@ describe("unread + mark read", () => {
     const n = await markAllRead(viewer);
     expect(H.executeMock).toHaveBeenCalledTimes(1);
     expect(n).toBe(0);
+  });
+
+  it("markAllRead for an admin only covers broadcasts and that admin's user rows", async () => {
+    H.selectQueue.push([{ count: 0 }]);
+    await markAllRead(viewer);
+    const text = sqlSource(H.executeMock.mock.calls[0][0]).toLowerCase();
+    expect(text).toContain("n.audience = 'admins'");
+    expect(text).toContain("n.audience = 'user'");
+    expect(text).toContain("lower(n.recipient_email)");
+    expect(sqlParams(H.executeMock.mock.calls[0][0])).toContain("u1@x.com");
+  });
+
+  it("markAllRead for a non-admin never selects audience=admins rows", async () => {
+    H.selectQueue.push([{ count: 0 }]);
+    await markAllRead({ userKey: "u2", email: "Tech@x.com", isAdmin: false });
+    const query = H.executeMock.mock.calls[0][0];
+    const text = sqlSource(query).toLowerCase();
+    expect(text).toContain("n.audience = 'user'");
+    expect(text).toContain("lower(n.recipient_email)");
+    expect(text).not.toContain("admins");
+    expect(sqlParams(query)).toContain("Tech@x.com");
   });
 });
 

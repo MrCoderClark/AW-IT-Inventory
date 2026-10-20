@@ -1,7 +1,6 @@
-import { Bell, Lock } from "lucide-react";
+import { Bell } from "lucide-react";
 
 import { HeroHeader } from "@/components/hero-header";
-import { PagePlaceholder } from "@/components/page-placeholder";
 import { NotificationsView } from "@/components/notifications-view";
 import { getUnreadCount, listNotifications } from "@/db/notifications";
 import { hasPermission, requireUser } from "@/lib/auth/session";
@@ -11,22 +10,12 @@ export const dynamic = "force-dynamic";
 
 export default async function Page() {
   const user = await requireUser();
-
-  // Notifications are admin-only (spec 19, AC-6).
-  if (!hasPermission(user, "user:admin")) {
-    return (
-      <PagePlaceholder
-        title="Notifications"
-        description="Notifications are for administrators. Ask an admin for the user:admin role."
-        icon={Lock}
-      />
-    );
-  }
+  const isAdmin = hasPermission(user, "user:admin");
 
   const viewer = {
     userKey: user.id || user.email,
     email: user.email,
-    isAdmin: true,
+    isAdmin,
   };
   const [{ items, nextBefore }, unread] = await Promise.all([
     listNotifications(viewer, { limit: 30 }),

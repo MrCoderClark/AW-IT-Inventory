@@ -213,10 +213,19 @@ export async function markRead(
   return getUnreadCount(viewer);
 }
 
-/** Mark every currently-unread notification read for this user (one insert-select,
-   bounded by retention). Returns the new count (0). */
+/** Mark every currently-unread notification this viewer can see (same audience
+   rule as list/unread). A non-admin never stamps read on `audience=admins`
+   rows, and nobody stamps another person's user-targeted row. Returns the new
+   count. */
 export async function markAllRead(viewer: NotificationViewer): Promise<number> {
   const userKey = viewer.userKey;
+  const email = viewer.email;
+  const visible = viewer.isAdmin
+    ? sql`and (
+        n.audience = 'admins'
+        or (n.audience = 'user' and lower(n.recipient_email) = lower(${email}))
+      )`
+    : sql`and n.audience = 'user' and lower(n.recipient_email) = lower(${email})`;
   await db.execute(sql`
     insert into notification_reads (notification_id, user_key)
     select n.id, ${userKey}
@@ -225,6 +234,7 @@ export async function markAllRead(viewer: NotificationViewer): Promise<number> {
       select 1 from notification_reads r
       where r.notification_id = n.id and r.user_key = ${userKey}
     )
+    ${visible}
     on conflict do nothing
   `);
   return getUnreadCount(viewer);

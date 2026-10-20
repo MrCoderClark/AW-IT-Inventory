@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * Tests for GET /api/notifications (spec 19). Auth/session and the data layer are
- * mocked. Locks the admin gate (AC-6): a signed-out user gets 401, a non-admin
- * 403, an admin gets the feed + unread count.
+ * Tests for GET /api/notifications (spec 19 / spec 34). Auth/session and the data
+ * layer are mocked. Any signed-in user gets the feed; audience filtering happens
+ * in the data layer via the viewer. A signed-out user gets 401.
  */
 
 const { getUserMock, hasPermMock, listMock, countMock } = vi.hoisted(() => ({
@@ -45,11 +45,24 @@ it("401 when signed out", async () => {
   expect(listMock).not.toHaveBeenCalled();
 });
 
-it("403 for a non-admin", async () => {
+it("200 for a signed-in non-admin, with isAdmin false on the viewer", async () => {
   hasPermMock.mockReturnValue(false);
-  const res = await GET(req());
-  expect(res.status).toBe(403);
-  expect(listMock).not.toHaveBeenCalled();
+  const res = await GET(req("?limit=10"));
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({
+    items: [{ id: "n1" }],
+    nextBefore: null,
+    unread: 1,
+  });
+  expect(listMock).toHaveBeenCalledWith(
+    { userKey: "u1", email: "a@x.com", isAdmin: false },
+    { limit: 10, before: undefined, unreadOnly: false },
+  );
+  expect(countMock).toHaveBeenCalledWith({
+    userKey: "u1",
+    email: "a@x.com",
+    isAdmin: false,
+  });
 });
 
 it("returns the feed and unread count for an admin", async () => {

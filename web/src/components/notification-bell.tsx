@@ -5,13 +5,15 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Bell, CheckCheck } from "lucide-react";
 
+import { toast } from "sonner";
+
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useHasPermission } from "@/components/user-provider";
+import { useUser } from "@/components/user-provider";
 import {
   markAllNotificationsReadAction,
   markNotificationReadAction,
@@ -28,14 +30,15 @@ import { cn } from "@/lib/utils";
 const PANEL_LIMIT = 10;
 
 /**
- * The notification bell (spec 19). Renders only for `user:admin` (AC-6). Shows the
- * unread count and a panel of the most recent items; subscribes to the SSE stream
- * for a live count, and re-syncs via REST on mount / each panel open so a missed
+ * The notification bell (spec 19 / spec 34). Shown for every signed-in user
+ * (it only mounts inside the authenticated shell). Shows the unread count and a
+ * panel of the most recent items; subscribes to the SSE stream for a live count
+ * and a toast, and re-syncs via REST on mount / each panel open so a missed
  * stream event self-heals (AC-7). Clicking an item marks it read and opens its
- * target; "Mark all read" clears the count (AC-8).
+ * target; "Mark all read" clears the count (AC-8). The icon pulses while unread.
  */
 export function NotificationBell() {
-  const isAdmin = useHasPermission("user:admin");
+  const user = useUser();
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [items, setItems] = React.useState<NotificationItem[]>([]);
@@ -58,9 +61,9 @@ export function NotificationBell() {
     }
   }, []);
 
-  // Initial sync + live stream. Only an admin ever opens the stream.
+  // Initial sync + live stream for every signed-in user. The server drops
+  // events this viewer cannot see.
   React.useEffect(() => {
-    if (!isAdmin) return;
     load();
     const es = new EventSource("/api/notifications/stream");
     es.addEventListener("count", (e) => {
@@ -80,14 +83,18 @@ export function NotificationBell() {
             : [{ ...n, meta: null, read: false }, ...prev].slice(0, PANEL_LIMIT),
         );
         setUnread((u) => u + 1);
+        const alert =
+          n.type.endsWith("-failed") ||
+          n.severity === "warning" ||
+          n.severity === "critical";
+        if (alert) toast.error(n.title);
+        else toast.success(n.title);
       } catch {
         /* ignore malformed frame */
       }
     });
     return () => es.close();
-  }, [isAdmin, load]);
-
-  if (!isAdmin) return null;
+  }, [user.id, load]);
 
   const onOpenChange = (next: boolean) => {
     setOpen(next);
@@ -125,7 +132,7 @@ export function NotificationBell() {
             aria-label={
               unread > 0 ? `Notifications, ${unread} unread` : "Notifications"
             }
-            className="relative"
+            className={cn("relative", unread > 0 && "animate-pulse")}
           />
         }
       >

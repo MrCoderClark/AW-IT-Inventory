@@ -7,10 +7,11 @@ import { getUnreadCount, listNotifications } from "@/db/notifications";
 export const dynamic = "force-dynamic";
 
 /**
- * The notification feed for the current admin (spec 19). Cookie auth + the
- * existing `user:admin` permission (AC-6): a non-admin is refused. Returns the
- * page plus the user's unread count for the bell. Query: `limit`, `before` (ISO
- * keyset cursor), `unread=1`.
+ * The notification feed for the current user (spec 19 / spec 34). Cookie auth:
+ * any signed-in user may read. Audience filtering lives in the data layer, so a
+ * non-admin never receives `audience=admins` rows. Returns the page plus the
+ * user's unread count for the bell. Query: `limit`, `before` (ISO keyset
+ * cursor), `unread=1`.
  */
 export async function GET(request: Request) {
   const user = await getCurrentUser();
@@ -18,9 +19,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const isAdmin = hasPermission(user, "user:admin");
-  if (!isAdmin) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
 
   const viewer = {
     userKey: user.id || user.email,
