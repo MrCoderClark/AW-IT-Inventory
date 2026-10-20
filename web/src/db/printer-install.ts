@@ -164,6 +164,7 @@ export async function updateInstallJobStatus(
       assetId: printerInstallJobs.assetId,
       action: printerInstallJobs.action,
       printerName: printerInstallJobs.printerName,
+      requestedBy: printerInstallJobs.requestedBy,
     });
 
   if (updated.length) {
@@ -178,6 +179,7 @@ export async function updateInstallJobStatus(
         assetId: row.assetId,
         printerName: row.printerName,
         error: u.error ?? null,
+        requestedBy: row.requestedBy,
       });
     }
     return "ok";

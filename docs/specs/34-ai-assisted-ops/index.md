@@ -7,7 +7,7 @@
 > [33](../28-rmm-roadmap/index.md) (not yet specified).
 
 **Date**: 2026-10-20  
-**Status**: Accepted (v1 shipped; v2a implemented on `feat/spec-34-v2a-async-assist`, pending merge — [design](./design-v2-async-assist.md), [plan](./plan-v2a-async-assist.md))
+**Status**: Accepted (v1 + v2a shipped on `main` — [design](./design-v2-async-assist.md), [plan](./plan-v2a-async-assist.md); polish PR #106)
 
 ## Summary
 
@@ -137,13 +137,16 @@ Service accounts: **no** AI scopes in v1 (techs only).
    draft script handoff to spec 32, audit hash, free cloud OpenAI-compatible
    provider.
 2. **v2a** — [async Assist jobs](./design-v2-async-assist.md) ([plan](./plan-v2a-async-assist.md)):
-   implemented on `feat/spec-34-v2a-async-assist` (awaiting merge): enqueue +
-   `after()` processing, requester toast + bell on completion, Spec 19 audience
-   targeting, recent job history on the Assist panel.
-3. **v2+ (parked)** — fleet alert correlation; recurring-issue / automation
+   shipped: enqueue + `after()` processing, requester toast + bell on completion,
+   Spec 19 audience targeting, recent job history on the Assist panel.
+3. **v2b** — [requester notifications for worker jobs](./design-v2b-requester-job-notifications.md)
+   ([plan](./plan-v2b-requester-job-notifications.md)): shipped — script / patch /
+   deploy / printer-install completion bells target the requester; schedule/system
+   `requestedBy` stays admin broadcast.
+4. **v2+ (parked)** — fleet alert correlation; recurring-issue / automation
    reports; on-prem provider profile + richer PII; internal KB article hints
-   (when a KB exists); generalize requester notifications to other worker jobs.
-4. **Later** — ticket draft assist (after spec 33); streaming UI; admin prompt
+   (when a KB exists).
+5. **Later** — ticket draft assist (after spec 33); streaming UI; admin prompt
    retention opt-in.
 
 ## Out of scope / non-goals (v1)

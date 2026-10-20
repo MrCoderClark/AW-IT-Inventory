@@ -197,7 +197,9 @@ describe("updateDeploymentStatus — fenced (AC-3)", () => {
   });
 
   it("notifies on a successful finish", async () => {
-    H.state.updateReturns = [[{ id: DID, assetId: "a1", snapshot: SNAP }]];
+    H.state.updateReturns = [
+      [{ id: DID, assetId: "a1", snapshot: SNAP, requestedBy: "me@x.com" }],
+    ];
     expect(
       await updateDeploymentStatus(DID, { ...FENCE, status: "succeeded" }),
     ).toBe("ok");
@@ -206,6 +208,7 @@ describe("updateDeploymentStatus — fenced (AC-3)", () => {
         deploymentId: DID,
         status: "succeeded",
         packageName: "App",
+        requestedBy: "me@x.com",
       }),
     );
   });

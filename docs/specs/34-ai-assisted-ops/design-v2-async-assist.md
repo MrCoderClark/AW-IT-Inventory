@@ -1,7 +1,7 @@
 # Spec 34 v2a — Async Assist jobs + requester notifications
 
 **Date**: 2026-10-20  
-**Status**: Accepted (implemented on `feat/spec-34-v2a-async-assist`; awaiting merge) — [plan](./plan-v2a-async-assist.md)  
+**Status**: Accepted (shipped on `main`) — [plan](./plan-v2a-async-assist.md)  
 **Parent**: [index.md](./index.md)  
 **Depends on**: Spec 34 v1 (merged), Spec 19 notifications
 
@@ -29,8 +29,9 @@ unread completions — never while a job is still queued/running.
 - **C** — Recurring-issue / automation opportunity reports  
 - **D** — On-prem provider profile + richer PII controls  
 - **E** — Internal KB article hints (blocked until a KB exists)  
-- Retargeting **all** collector worker jobs (script/scan/deploy) to requester
-  notifications — Assist first; reuse the same toast/SSE hook later
+- ~~Retargeting collector worker jobs to requester notifications~~ →
+  [v2b design](./design-v2b-requester-job-notifications.md) (slice F; scan-failed
+  still out of scope)
 
 ## Architecture
 

@@ -223,6 +223,7 @@ export async function updateDeploymentStatus(
       id: softwareDeployments.id,
       assetId: softwareDeployments.assetId,
       snapshot: softwareDeployments.packageSnapshot,
+      requestedBy: softwareDeployments.requestedBy,
     });
 
   if (updated.length) {
@@ -237,6 +238,7 @@ export async function updateDeploymentStatus(
         packageName: row.snapshot.name,
         packageVersion: row.snapshot.version,
         error: u.error ?? null,
+        requestedBy: row.requestedBy,
       });
     }
     return "ok";

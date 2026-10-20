@@ -14,6 +14,7 @@ import {
   publishNotification,
   type NotificationEvent,
 } from "@/lib/notification-bus";
+import { resolveJobNotificationAudience } from "@/lib/job-notification-audience";
 import type { NotificationAudience } from "@/lib/notification-visibility";
 
 export type { NotificationItem, NotificationSeverity, NotificationType };
@@ -321,8 +322,11 @@ export async function notifyInstallResult(job: {
   assetId: string;
   printerName: string | null;
   error?: string | null;
+  requestedBy: string;
 }): Promise<void> {
   if (job.action === "list") return;
+
+  const { audience, recipientEmail } = resolveJobNotificationAudience(job.requestedBy);
 
   const [asset] = await db
     .select({ tag: assets.tag, name: assets.name })
@@ -351,6 +355,8 @@ export async function notifyInstallResult(job: {
     dedupeKey: `printer-install:${job.jobId}:${job.status}`,
     assetId: job.assetId,
     meta: { jobId: job.jobId, action: job.action, printerName: job.printerName },
+    audience,
+    recipientEmail,
   });
 }
 
@@ -366,7 +372,10 @@ export async function notifyDeployResult(job: {
   packageName: string;
   packageVersion: string;
   error?: string | null;
+  requestedBy: string;
 }): Promise<void> {
+  const { audience, recipientEmail } = resolveJobNotificationAudience(job.requestedBy);
+
   const [asset] = await db
     .select({ tag: assets.tag, name: assets.name })
     .from(assets)
@@ -394,6 +403,8 @@ export async function notifyDeployResult(job: {
       packageName: job.packageName,
       packageVersion: job.packageVersion,
     },
+    audience,
+    recipientEmail,
   });
 }
 
@@ -408,7 +419,10 @@ export async function notifyPatchInstallResult(job: {
   osCount: number;
   appCount: number;
   error?: string | null;
+  requestedBy: string;
 }): Promise<void> {
+  const { audience, recipientEmail } = resolveJobNotificationAudience(job.requestedBy);
+
   const [asset] = await db
     .select({ tag: assets.tag, name: assets.name })
     .from(assets)
@@ -440,6 +454,8 @@ export async function notifyPatchInstallResult(job: {
       osCount: job.osCount,
       appCount: job.appCount,
     },
+    audience,
+    recipientEmail,
   });
 }
 
@@ -483,7 +499,10 @@ export async function notifyScriptRunResult(job: {
   assetId: string;
   scriptName: string;
   error?: string | null;
+  requestedBy: string;
 }): Promise<void> {
+  const { audience, recipientEmail } = resolveJobNotificationAudience(job.requestedBy);
+
   const [asset] = await db
     .select({ tag: assets.tag, name: assets.name })
     .from(assets)
@@ -507,6 +526,8 @@ export async function notifyScriptRunResult(job: {
     dedupeKey: `script-run:${job.jobId}:${job.status}`,
     assetId: job.assetId,
     meta: { jobId: job.jobId, scriptName: job.scriptName },
+    audience,
+    recipientEmail,
   });
 }
 

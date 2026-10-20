@@ -69,7 +69,10 @@ import {
   getUnreadCount,
   markAllRead,
   markRead,
+  notifyDeployResult,
   notifyInstallResult,
+  notifyPatchInstallResult,
+  notifyScriptRunResult,
   pruneNotifications,
   sweepWarrantyNotifications,
 } from "./notifications";
@@ -192,6 +195,7 @@ describe("notifyInstallResult", () => {
       assetId: "a1",
       printerName: "Canon iR",
       error: null,
+      requestedBy: "tech@opus.local",
     });
     const v = H.insertValues.at(-1) as Record<string, unknown>;
     expect(v).toMatchObject({
@@ -201,6 +205,8 @@ describe("notifyInstallResult", () => {
       href: "/assets/PC-1",
       dedupeKey: "printer-install:j1:succeeded",
       assetId: "a1",
+      audience: "user",
+      recipientEmail: "tech@opus.local",
     });
     expect(v.body).toBe('"Canon iR" was installed on Reception PC.');
   });
@@ -215,6 +221,7 @@ describe("notifyInstallResult", () => {
       assetId: "a1",
       printerName: "Canon iR",
       error: "  publisher not trusted  ",
+      requestedBy: "tech@opus.local",
     });
     const v = H.insertValues.at(-1) as Record<string, unknown>;
     expect(v).toMatchObject({
@@ -236,6 +243,7 @@ describe("notifyInstallResult", () => {
       assetId: "a1",
       printerName: "Old HP",
       error: null,
+      requestedBy: "tech@opus.local",
     });
     const v = H.insertValues.at(-1) as Record<string, unknown>;
     expect(v.title).toBe("Printer removed");
@@ -249,9 +257,207 @@ describe("notifyInstallResult", () => {
       status: "succeeded",
       assetId: "a1",
       printerName: null,
+      requestedBy: "tech@opus.local",
     });
     expect(H.db.select).not.toHaveBeenCalled();
     expect(H.insertValues).toHaveLength(0);
+  });
+
+  it("schedule requestedBy keeps admin audience", async () => {
+    H.selectQueue.push(asset);
+    H.insertReturning.push(createdRow("printer-install"));
+    await notifyInstallResult({
+      jobId: "j5",
+      action: "install",
+      status: "succeeded",
+      assetId: "a1",
+      printerName: "Canon iR",
+      error: null,
+      requestedBy: "schedule:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+    });
+    const v = H.insertValues.at(-1) as Record<string, unknown>;
+    expect(v).toMatchObject({
+      audience: "admins",
+      recipientEmail: null,
+    });
+  });
+});
+
+describe("notifyScriptRunResult audience", () => {
+  const asset = [{ tag: "PC-1", name: "Reception PC" }];
+  it("email → user", async () => {
+    H.selectQueue.push(asset);
+    H.insertReturning.push([
+      {
+        id: "n1",
+        type: "script-run",
+        severity: "info",
+        title: "t",
+        body: "b",
+        href: "/assets/PC-1",
+        assetId: "a1",
+        createdAt: new Date("2026-10-06T12:00:00Z"),
+      },
+    ]);
+    await notifyScriptRunResult({
+      jobId: "s1",
+      status: "succeeded",
+      assetId: "a1",
+      scriptName: "DiskCleanup",
+      error: null,
+      requestedBy: "tech@opus.local",
+    });
+    expect(H.insertValues.at(-1)).toMatchObject({
+      audience: "user",
+      recipientEmail: "tech@opus.local",
+    });
+  });
+  it("schedule → admins", async () => {
+    H.selectQueue.push(asset);
+    H.insertReturning.push([
+      {
+        id: "n2",
+        type: "script-run",
+        severity: "info",
+        title: "t",
+        body: "b",
+        href: "/assets/PC-1",
+        assetId: "a1",
+        createdAt: new Date("2026-10-06T12:00:00Z"),
+      },
+    ]);
+    await notifyScriptRunResult({
+      jobId: "s2",
+      status: "succeeded",
+      assetId: "a1",
+      scriptName: "DiskCleanup",
+      error: null,
+      requestedBy: "schedule:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+    });
+    expect(H.insertValues.at(-1)).toMatchObject({
+      audience: "admins",
+      recipientEmail: null,
+    });
+  });
+});
+
+describe("notifyDeployResult audience", () => {
+  const asset = [{ tag: "PC-1", name: "Reception PC" }];
+  it("email → user", async () => {
+    H.selectQueue.push(asset);
+    H.insertReturning.push([
+      {
+        id: "n1",
+        type: "software-deploy",
+        severity: "info",
+        title: "t",
+        body: "b",
+        href: "/assets/PC-1",
+        assetId: "a1",
+        createdAt: new Date("2026-10-06T12:00:00Z"),
+      },
+    ]);
+    await notifyDeployResult({
+      deploymentId: "d1",
+      status: "succeeded",
+      assetId: "a1",
+      packageName: "7-Zip",
+      packageVersion: "24.0",
+      error: null,
+      requestedBy: "tech@opus.local",
+    });
+    expect(H.insertValues.at(-1)).toMatchObject({
+      audience: "user",
+      recipientEmail: "tech@opus.local",
+    });
+  });
+  it("schedule → admins", async () => {
+    H.selectQueue.push(asset);
+    H.insertReturning.push([
+      {
+        id: "n2",
+        type: "software-deploy",
+        severity: "info",
+        title: "t",
+        body: "b",
+        href: "/assets/PC-1",
+        assetId: "a1",
+        createdAt: new Date("2026-10-06T12:00:00Z"),
+      },
+    ]);
+    await notifyDeployResult({
+      deploymentId: "d2",
+      status: "succeeded",
+      assetId: "a1",
+      packageName: "7-Zip",
+      packageVersion: "24.0",
+      error: null,
+      requestedBy: "schedule:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+    });
+    expect(H.insertValues.at(-1)).toMatchObject({
+      audience: "admins",
+      recipientEmail: null,
+    });
+  });
+});
+
+describe("notifyPatchInstallResult audience", () => {
+  const asset = [{ tag: "PC-1", name: "Reception PC" }];
+  it("email → user", async () => {
+    H.selectQueue.push(asset);
+    H.insertReturning.push([
+      {
+        id: "n1",
+        type: "patch-install",
+        severity: "info",
+        title: "t",
+        body: "b",
+        href: "/assets/PC-1",
+        assetId: "a1",
+        createdAt: new Date("2026-10-06T12:00:00Z"),
+      },
+    ]);
+    await notifyPatchInstallResult({
+      jobId: "p1",
+      status: "succeeded",
+      assetId: "a1",
+      osCount: 1,
+      appCount: 0,
+      error: null,
+      requestedBy: "tech@opus.local",
+    });
+    expect(H.insertValues.at(-1)).toMatchObject({
+      audience: "user",
+      recipientEmail: "tech@opus.local",
+    });
+  });
+  it("schedule → admins", async () => {
+    H.selectQueue.push(asset);
+    H.insertReturning.push([
+      {
+        id: "n2",
+        type: "patch-install",
+        severity: "info",
+        title: "t",
+        body: "b",
+        href: "/assets/PC-1",
+        assetId: "a1",
+        createdAt: new Date("2026-10-06T12:00:00Z"),
+      },
+    ]);
+    await notifyPatchInstallResult({
+      jobId: "p2",
+      status: "succeeded",
+      assetId: "a1",
+      osCount: 1,
+      appCount: 0,
+      error: null,
+      requestedBy: "schedule:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+    });
+    expect(H.insertValues.at(-1)).toMatchObject({
+      audience: "admins",
+      recipientEmail: null,
+    });
   });
 });
 
