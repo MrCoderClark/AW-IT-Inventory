@@ -188,3 +188,20 @@
     font-variant-numeric: tabular-nums;
   }
 }
+
+/* Spec 19 — brief attention burst when a live notification arrives */
+@keyframes notification-attention {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--primary) 55%, transparent);
+  }
+  40% {
+    box-shadow: 0 0 0 6px color-mix(in oklch, var(--primary) 0%, transparent);
+  }
+}
+
+@layer utilities {
+  .animate-notification-attention {
+    animation: notification-attention 0.7s ease-out 3;
+  }
+}

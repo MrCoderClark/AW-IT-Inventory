@@ -39,21 +39,61 @@ export type RunAssistOutcome =
       error: string;
     };
 
-export async function runAssist(
+export type ExecuteAssistCoreResult =
+  | {
+      ok: true;
+      result: AssistResult;
+      provider: string;
+      model: string;
+      contextHash: string;
+      assetId: string | null;
+    }
+  | {
+      ok: false;
+      error: string;
+      code: "not_configured" | "not_found" | "provider_error";
+      provider: string;
+      model: string;
+      contextHash: string;
+      assetId: string | null;
+    };
+
+function coreFailure(
+  code: "not_configured" | "not_found" | "provider_error",
+  error: string,
+  extra?: Partial<
+    Pick<
+      ExecuteAssistCoreResult,
+      "provider" | "model" | "contextHash" | "assetId"
+    >
+  >,
+): ExecuteAssistCoreResult {
+  return {
+    ok: false,
+    code,
+    error,
+    provider: extra?.provider ?? "",
+    model: extra?.model ?? "",
+    contextHash: extra?.contextHash ?? "",
+    assetId: extra?.assetId ?? null,
+  };
+}
+
+/**
+ * Pack, provider, parse, and audit. Shared by the sync wrapper and the
+ * assist job processor. Does not write `ai_assist_jobs` or notify.
+ */
+export async function executeAssistCore(
   input: RunAssistInput,
-): Promise<RunAssistOutcome> {
+): Promise<ExecuteAssistCoreResult> {
   const cfg = loadAiConfig();
   if (!isAiConfigured(cfg)) {
-    return {
-      ok: false,
-      code: "not_configured",
-      error: "AI not configured",
-    };
+    return coreFailure("not_configured", "AI not configured");
   }
 
   const pack = await buildComputerContextPack(input.assetTag);
   if (!pack) {
-    return { ok: false, code: "not_found", error: "Computer not found" };
+    return coreFailure("not_found", "Computer not found");
   }
 
   const [assetRow] = await db
@@ -66,7 +106,7 @@ export async function runAssist(
   let jobExtra: unknown = null;
   if (input.action === "summarize_script_run") {
     if (!input.jobId || !assetId) {
-      return { ok: false, code: "not_found", error: "jobId required" };
+      return coreFailure("not_found", "jobId required", { assetId });
     }
     const [job] = await db
       .select({
@@ -85,7 +125,7 @@ export async function runAssist(
       )
       .limit(1);
     if (!job) {
-      return { ok: false, code: "not_found", error: "Script run not found" };
+      return coreFailure("not_found", "Script run not found", { assetId });
     }
     jobExtra = {
       id: job.id,
@@ -137,6 +177,8 @@ Separate observed facts (from context) from hypotheses.`;
       result,
       provider: provider.id,
       model: provider.model,
+      contextHash,
+      assetId,
     };
   } catch (e) {
     const msg =
@@ -145,21 +187,48 @@ Separate observed facts (from context) from hypotheses.`;
         : e instanceof Error
           ? e.message.slice(0, 500)
           : "provider error";
+    const model = provider.model || cfg.model || "unknown";
     await recordAssistEvent({
       actorEmail: input.actorEmail,
       assetId,
       action: input.action,
       provider: provider.id,
-      model: provider.model || cfg.model || "unknown",
+      model,
       contextHash,
       ok: false,
       error: msg,
     });
     if (e instanceof AiNotConfiguredError) {
-      return { ok: false, code: "not_configured", error: msg };
+      return coreFailure("not_configured", msg, {
+        provider: provider.id,
+        model,
+        contextHash,
+        assetId,
+      });
     }
-    return { ok: false, code: "provider_error", error: msg };
+    return coreFailure("provider_error", msg, {
+      provider: provider.id,
+      model,
+      contextHash,
+      assetId,
+    });
   }
+}
+
+/** Sync path kept for the current assist route until jobs own it. */
+export async function runAssist(
+  input: RunAssistInput,
+): Promise<RunAssistOutcome> {
+  const core = await executeAssistCore(input);
+  if (!core.ok) {
+    return { ok: false, code: core.code, error: core.error };
+  }
+  return {
+    ok: true,
+    result: core.result,
+    provider: core.provider,
+    model: core.model,
+  };
 }
 
 /** Best-effort audit — never mask the assist outcome if the table is missing. */

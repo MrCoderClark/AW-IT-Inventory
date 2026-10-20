@@ -98,7 +98,10 @@ export default async function DashboardPage() {
       getLocationMapPoints(),
       getDashboardWidgetSettings(),
       isAdmin
-        ? listNotifications(userKey, { limit: 5 })
+        ? listNotifications(
+            { userKey, email: user.email, isAdmin: true },
+            { limit: 5 },
+          )
         : Promise.resolve({ items: [], nextBefore: null }),
       isAdmin
         ? Promise.resolve([])

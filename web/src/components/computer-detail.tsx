@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Activity as ActivityIcon,
   ArrowLeft,
@@ -85,7 +85,10 @@ import {
   type ScriptOption,
 } from "@/components/script-run-panel";
 import type { ScriptRunListItem } from "@/db/script-runs";
-import { AiAssistPanel } from "@/components/ai-assist-panel";
+import {
+  AiAssistPanel,
+  type AssistJobView,
+} from "@/components/ai-assist-panel";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -141,14 +144,20 @@ function MonitoringBody({
   assetTag,
   canDeploy,
   latestScriptJobId,
+  recentAssistJobs = [],
+  assistJobId = null,
 }: {
   metrics: DeviceMetrics;
   aiEnabled: boolean;
   assetTag: string;
   canDeploy: boolean;
   latestScriptJobId?: string | null;
+  recentAssistJobs?: AssistJobView[];
+  assistJobId?: string | null;
 }) {
-  const [sub, setSub] = React.useState<"metrics" | "assist">("metrics");
+  const [sub, setSub] = React.useState<"metrics" | "assist">(
+    assistJobId ? "assist" : "metrics",
+  );
 
   if (!aiEnabled) {
     return <DeviceMonitoring metrics={metrics} />;
@@ -190,6 +199,8 @@ function MonitoringBody({
           assetTag={assetTag}
           canDeploy={canDeploy}
           latestScriptJobId={latestScriptJobId}
+          recentJobs={recentAssistJobs}
+          initialJobId={assistJobId}
         />
       )}
     </div>
@@ -324,6 +335,7 @@ export function ComputerDetail({
   scriptRuns = [],
   metrics = { points: [], latest: null },
   aiEnabled = false,
+  recentAssistJobs = [],
 }: {
   asset: Asset;
   machine?: MachineSummary;
@@ -355,9 +367,15 @@ export function ComputerDetail({
   metrics?: DeviceMetrics;
   /** Spec 34 — when false/off, Assist panel is not rendered. */
   aiEnabled?: boolean;
+  /** Newest assist jobs for this asset (spec 34 v2a). */
+  recentAssistJobs?: AssistJobView[];
 }) {
   const router = useRouter();
-  const [tab, setTab] = React.useState("overview");
+  const searchParams = useSearchParams();
+  const assistJobId = searchParams.get("assistJob");
+  const openMonitoring =
+    searchParams.get("tab") === "monitoring" || Boolean(assistJobId);
+  const [tab, setTab] = React.useState(openMonitoring ? "monitoring" : "overview");
   const [editOpen, setEditOpen] = React.useState(false);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [isDeleting, startDelete] = React.useTransition();
@@ -737,6 +755,8 @@ export function ComputerDetail({
             assetTag={asset.id}
             canDeploy={canDeploy}
             latestScriptJobId={scriptRuns[0]?.id ?? null}
+            recentAssistJobs={recentAssistJobs}
+            assistJobId={assistJobId}
           />
         </TabsPanel>
 

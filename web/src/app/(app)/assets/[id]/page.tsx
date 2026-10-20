@@ -2,7 +2,9 @@ import { notFound } from "next/navigation";
 import { Lock } from "lucide-react";
 
 import { ComputerDetail } from "@/components/computer-detail";
+import type { AssistJobView } from "@/components/ai-assist-panel";
 import { isAiConfigured } from "@/lib/ai/config";
+import { listAssistJobsForAssetTag } from "@/db/ai-assist-jobs";
 import { PrinterDetail } from "@/components/printer-detail";
 import { ThinAssetDetail } from "@/components/thin-detail";
 import { PagePlaceholder } from "@/components/page-placeholder";
@@ -91,6 +93,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
   // Computers get the redesigned, tabbed detail (spec 17.04): spec-10 fields, live
   // scan health, tracked software (spec 15), and assignment (spec 16) move into tabs.
   if (asset.type === "Computer") {
+    const aiEnabled = isAiConfigured();
     const [
       machine,
       assigneeId,
@@ -114,6 +117,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
       remoteSessions,
       monitors,
       metrics,
+      recentAssistRows,
     ] = await Promise.all([
       getMachineSummary(id),
       canWrite ? getAssetAssigneeId(id) : Promise.resolve(null),
@@ -137,7 +141,17 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
       canRemote ? listRemoteSessionsForAsset(id) : Promise.resolve([]),
       getConnectedMonitors(id),
       getDeviceMetrics(id),
+      aiEnabled ? listAssistJobsForAssetTag(id, 5) : Promise.resolve([]),
     ]);
+    const recentAssistJobs: AssistJobView[] = recentAssistRows.map((job) => ({
+      id: job.id,
+      status: job.status,
+      action: job.action,
+      result: job.result,
+      error: job.error,
+      createdAt: job.createdAt.toISOString(),
+      finishedAt: job.finishedAt ? job.finishedAt.toISOString() : null,
+    }));
     // Client-safe package options (no file paths / hashes).
     const installPackages = packages.map((p) => ({
       id: p.id,
@@ -214,7 +228,8 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
         }))}
         scriptRuns={scriptRunRows}
         metrics={metrics}
-        aiEnabled={isAiConfigured()}
+        aiEnabled={aiEnabled}
+        recentAssistJobs={recentAssistJobs}
       />
     );
   }

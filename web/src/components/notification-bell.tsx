@@ -5,13 +5,15 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Bell, CheckCheck } from "lucide-react";
 
+import { toast } from "sonner";
+
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useHasPermission } from "@/components/user-provider";
+import { useUser } from "@/components/user-provider";
 import {
   markAllNotificationsReadAction,
   markNotificationReadAction,
@@ -27,19 +29,33 @@ import { cn } from "@/lib/utils";
 
 const PANEL_LIMIT = 10;
 
+const ATTENTION_MS = 2200;
+
 /**
- * The notification bell (spec 19). Renders only for `user:admin` (AC-6). Shows the
- * unread count and a panel of the most recent items; subscribes to the SSE stream
- * for a live count, and re-syncs via REST on mount / each panel open so a missed
+ * The notification bell (spec 19 / spec 34). Shown for every signed-in user
+ * (it only mounts inside the authenticated shell). Shows the unread count and a
+ * panel of the most recent items; subscribes to the SSE stream for a live count
+ * and a toast, and re-syncs via REST on mount / each panel open so a missed
  * stream event self-heals (AC-7). Clicking an item marks it read and opens its
- * target; "Mark all read" clears the count (AC-8).
+ * target; "Mark all read" clears the count (AC-8). Unread shows a pinging badge
+ * and primary-colored icon; a new SSE event triggers a short attention burst.
  */
 export function NotificationBell() {
-  const isAdmin = useHasPermission("user:admin");
+  const user = useUser();
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [items, setItems] = React.useState<NotificationItem[]>([]);
   const [unread, setUnread] = React.useState(0);
+  const [attention, setAttention] = React.useState(false);
+  const attentionTimer = React.useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+
+  const flashAttention = React.useCallback(() => {
+    setAttention(true);
+    if (attentionTimer.current) clearTimeout(attentionTimer.current);
+    attentionTimer.current = setTimeout(() => setAttention(false), ATTENTION_MS);
+  }, []);
 
   const load = React.useCallback(async () => {
     try {
@@ -58,9 +74,9 @@ export function NotificationBell() {
     }
   }, []);
 
-  // Initial sync + live stream. Only an admin ever opens the stream.
+  // Initial sync + live stream for every signed-in user. The server drops
+  // events this viewer cannot see.
   React.useEffect(() => {
-    if (!isAdmin) return;
     load();
     const es = new EventSource("/api/notifications/stream");
     es.addEventListener("count", (e) => {
@@ -80,14 +96,22 @@ export function NotificationBell() {
             : [{ ...n, meta: null, read: false }, ...prev].slice(0, PANEL_LIMIT),
         );
         setUnread((u) => u + 1);
+        flashAttention();
+        const alert =
+          n.type.endsWith("-failed") ||
+          n.severity === "warning" ||
+          n.severity === "critical";
+        if (alert) toast.error(n.title);
+        else toast.success(n.title);
       } catch {
         /* ignore malformed frame */
       }
     });
-    return () => es.close();
-  }, [isAdmin, load]);
-
-  if (!isAdmin) return null;
+    return () => {
+      es.close();
+      if (attentionTimer.current) clearTimeout(attentionTimer.current);
+    };
+  }, [user.id, load, flashAttention]);
 
   const onOpenChange = (next: boolean) => {
     setOpen(next);
@@ -114,6 +138,7 @@ export function NotificationBell() {
   }
 
   const badge = unread > 9 ? "9+" : String(unread);
+  const hasUnread = unread > 0;
 
   return (
     <DropdownMenu open={open} onOpenChange={onOpenChange}>
@@ -123,18 +148,36 @@ export function NotificationBell() {
             variant="outline"
             size="icon"
             aria-label={
-              unread > 0 ? `Notifications, ${unread} unread` : "Notifications"
+              hasUnread
+                ? `Notifications, ${unread} unread`
+                : "Notifications"
             }
-            className="relative"
+            className="relative overflow-visible"
           />
         }
       >
-        <Bell className="size-[18px]" />
-        {unread > 0 && (
-          <span className="absolute -right-1 -top-1 grid min-h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
-            {badge}
-          </span>
-        )}
+        {/* Styles live on children so Base UI trigger remounts don't drop updates */}
+        <span
+          data-testid="notification-bell-face"
+          className={cn(
+            "relative grid size-full place-items-center rounded-[inherit]",
+            hasUnread && "text-primary",
+            attention && "animate-notification-attention",
+          )}
+        >
+          <Bell className="size-[18px] transition-colors" />
+          {hasUnread && (
+            <span className="absolute -right-1.5 -top-1.5">
+              <span
+                aria-hidden
+                className="absolute inset-0 animate-ping rounded-full bg-primary/70"
+              />
+              <span className="relative grid min-h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
+                {badge}
+              </span>
+            </span>
+          )}
+        </span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-80 p-0">
         <div className="flex items-center justify-between border-b px-3 py-2.5">

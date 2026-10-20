@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 
-import { runAssist, type AssistAction } from "@/db/ai-assist";
+import { enqueueAssistJob, processAssistJob } from "@/db/ai-assist-jobs";
 import { getCurrentUser, hasPermission } from "@/lib/auth/session";
+import type { AssistAction } from "@/lib/ai/types";
 
 export const runtime = "nodejs";
 
@@ -52,32 +53,26 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  const outcome = await runAssist({
+  const enq = await enqueueAssistJob({
     action,
     assetTag,
     actorEmail: user.email,
-    jobId: typeof body?.jobId === "string" ? body.jobId : undefined,
+    scriptRunJobId: typeof body?.jobId === "string" ? body.jobId : undefined,
     userPrompt:
       typeof body?.userPrompt === "string" ? body.userPrompt : undefined,
   });
 
-  if (!outcome.ok) {
-    if (outcome.code === "not_configured") {
+  if ("error" in enq) {
+    if (enq.error === "not_configured") {
       return NextResponse.json(
-        { error: outcome.error, code: "ai_not_configured" },
+        { error: "AI not configured", code: "ai_not_configured" },
         { status: 503 },
       );
     }
-    if (outcome.code === "not_found") {
-      return NextResponse.json({ error: outcome.error }, { status: 404 });
-    }
-    return NextResponse.json({ error: outcome.error }, { status: 502 });
+    return NextResponse.json({ error: "Computer not found" }, { status: 404 });
   }
 
-  return NextResponse.json({
-    ok: true,
-    provider: outcome.provider,
-    model: outcome.model,
-    result: outcome.result,
-  });
+  after(() => processAssistJob(enq.id));
+
+  return NextResponse.json({ jobId: enq.id }, { status: 202 });
 }

@@ -1,3 +1,4 @@
+import type { AssistResult } from "@/lib/ai/types";
 import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
@@ -986,6 +987,8 @@ export const notifications = pgTable(
         | "patch-install-failed"
         | "script-run"
         | "script-run-failed"
+        | "ai-assist"
+        | "ai-assist-failed"
         | "compliance-at-risk"
         | "compliance-recovered"
         | "metric-threshold"
@@ -1012,6 +1015,11 @@ export const notifications = pgTable(
     // key encodes the episode/date so a new episode or a changed date is new.
     dedupeKey: text("dedupe_key").notNull(),
     meta: jsonb("meta").$type<Record<string, unknown>>(),
+    audience: text("audience")
+      .$type<"admins" | "user">()
+      .notNull()
+      .default("admins"),
+    recipientEmail: text("recipient_email"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -1725,3 +1733,39 @@ export const aiAssistEvents = pgTable(
   ],
 );
 export type AiAssistEventRow = typeof aiAssistEvents.$inferSelect;
+
+export const aiAssistJobs = pgTable(
+  "ai_assist_jobs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    actorEmail: text("actor_email").notNull(),
+    assetId: uuid("asset_id").references(() => assets.id, {
+      onDelete: "set null",
+    }),
+    action: text("action").notNull(),
+    scriptRunJobId: uuid("script_run_job_id"),
+    userPrompt: text("user_prompt"),
+    status: text("status")
+      .$type<"pending" | "running" | "succeeded" | "failed">()
+      .notNull()
+      .default("pending"),
+    result: jsonb("result").$type<AssistResult>(),
+    error: text("error"),
+    contextHash: text("context_hash"),
+    provider: text("provider"),
+    model: text("model"),
+    notificationId: uuid("notification_id").references(() => notifications.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("ai_assist_jobs_asset_created_idx").on(t.assetId, t.createdAt),
+    index("ai_assist_jobs_status_started_idx").on(t.status, t.startedAt),
+  ],
+);
+export type AiAssistJobRow = typeof aiAssistJobs.$inferSelect;

@@ -7,21 +7,24 @@ import { getUnreadCount, listNotifications } from "@/db/notifications";
 export const dynamic = "force-dynamic";
 
 /**
- * The notification feed for the current admin (spec 19). Cookie auth + the
- * existing `user:admin` permission (AC-6): a non-admin is refused. Returns the
- * page plus the user's unread count for the bell. Query: `limit`, `before` (ISO
- * keyset cursor), `unread=1`.
+ * The notification feed for the current user (spec 19 / spec 34). Cookie auth:
+ * any signed-in user may read. Audience filtering lives in the data layer, so a
+ * non-admin never receives `audience=admins` rows. Returns the page plus the
+ * user's unread count for the bell. Query: `limit`, `before` (ISO keyset
+ * cursor), `unread=1`.
  */
 export async function GET(request: Request) {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  if (!hasPermission(user, "user:admin")) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  const isAdmin = hasPermission(user, "user:admin");
 
-  const userKey = user.id || user.email;
+  const viewer = {
+    userKey: user.id || user.email,
+    email: user.email,
+    isAdmin,
+  };
   const url = new URL(request.url);
   const limitRaw = Number(url.searchParams.get("limit"));
   const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : undefined;
@@ -29,8 +32,8 @@ export async function GET(request: Request) {
   const unreadOnly = url.searchParams.get("unread") === "1";
 
   const [{ items, nextBefore }, unread] = await Promise.all([
-    listNotifications(userKey, { limit, before, unreadOnly }),
-    getUnreadCount(userKey),
+    listNotifications(viewer, { limit, before, unreadOnly }),
+    getUnreadCount(viewer),
   ]);
 
   return NextResponse.json({ items, nextBefore, unread });

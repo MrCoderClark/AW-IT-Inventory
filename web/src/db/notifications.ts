@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, desc, eq, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 
 import { db } from "./index";
 import { assets, notifications, notificationReads } from "./schema";
@@ -14,16 +14,25 @@ import {
   publishNotification,
   type NotificationEvent,
 } from "@/lib/notification-bus";
+import type { NotificationAudience } from "@/lib/notification-visibility";
 
 export type { NotificationItem, NotificationSeverity, NotificationType };
 
 /* ================================================================
-   Notification center data layer (spec 19). Admin-only broadcast:
-   one row per event in `notifications`, per-user read state in
-   `notification_reads`. Creation is idempotent on `dedupeKey` and
+   Notification center data layer (spec 19 + spec 34 audience).
+   Ops events stay audience=admins (one row, per-user reads).
+   Requester-only events (AI Assist) use audience=user plus
+   recipientEmail. Creation is idempotent on `dedupeKey` and
    best-effort (a failure never bubbles into the host operation that
    detected the event). Everything here is server-only.
    ================================================================ */
+
+/** Who is reading the feed. `isAdmin` is `user:admin`; email matches user-targeted rows. */
+export interface NotificationViewer {
+  userKey: string;
+  email: string;
+  isAdmin: boolean;
+}
 
 export interface CreateNotificationInput {
   type: NotificationType;
@@ -35,6 +44,20 @@ export interface CreateNotificationInput {
   dedupeKey: string;
   assetId?: string | null;
   meta?: Record<string, unknown> | null;
+  /** Default `admins` (ops broadcast). `user` is requester-only. */
+  audience?: NotificationAudience;
+  /** Required when audience is `user`. */
+  recipientEmail?: string | null;
+}
+
+/** Rows this viewer may see: admin broadcasts, or a user-targeted row for their email. */
+function audienceWhere(viewer: NotificationViewer) {
+  const userMatch = and(
+    eq(notifications.audience, "user"),
+    sql`lower(${notifications.recipientEmail}) = lower(${viewer.email})`,
+  );
+  if (!viewer.isAdmin) return userMatch;
+  return or(eq(notifications.audience, "admins"), userMatch);
 }
 
 function isoOf(value: Date | string): string {
@@ -51,6 +74,15 @@ function isoOf(value: Date | string): string {
 export async function createNotification(
   input: CreateNotificationInput,
 ): Promise<string | null> {
+  const audience = input.audience ?? "admins";
+  const recipientEmail = input.recipientEmail ?? null;
+  if (audience === "user" && !recipientEmail) {
+    console.error(
+      `[notifications] user audience requires recipientEmail (${input.dedupeKey})`,
+    );
+    return null;
+  }
+
   try {
     const [row] = await db
       .insert(notifications)
@@ -63,6 +95,8 @@ export async function createNotification(
         dedupeKey: input.dedupeKey,
         assetId: input.assetId ?? null,
         meta: input.meta ?? null,
+        audience,
+        recipientEmail,
       })
       .onConflictDoNothing({ target: notifications.dedupeKey })
       .returning();
@@ -78,6 +112,8 @@ export async function createNotification(
       href: row.href,
       assetId: row.assetId,
       createdAt: isoOf(row.createdAt),
+      audience: row.audience ?? audience,
+      recipientEmail: row.recipientEmail ?? recipientEmail,
     };
     publishNotification(event);
     return row.id;
@@ -89,17 +125,20 @@ export async function createNotification(
 
 const DEFAULT_FEED_LIMIT = 30;
 
-/** The notification feed for one admin, newest first, each with a `read` flag
-   (left join on this user's reads). Keyset-paginated on `createdAt` via `before`
-   (an ISO string); `unreadOnly` narrows to items this user has not read. */
+/** The notification feed for one viewer, newest first, each with a `read` flag
+   (left join on this user's reads). Admin broadcasts only when `viewer.isAdmin`;
+   user-targeted rows only when the email matches (case-insensitive). Keyset-
+   paginated on `createdAt` via `before` (an ISO string); `unreadOnly` narrows to
+   items this user has not read. */
 export async function listNotifications(
-  userKey: string,
+  viewer: NotificationViewer,
   opts: { limit?: number; before?: string; unreadOnly?: boolean } = {},
 ): Promise<{ items: NotificationItem[]; nextBefore: string | null }> {
   const limit = Math.min(Math.max(opts.limit ?? DEFAULT_FEED_LIMIT, 1), 100);
 
-  const mine = eq(notificationReads.userKey, userKey);
+  const mine = eq(notificationReads.userKey, viewer.userKey);
   const conds = [
+    audienceWhere(viewer),
     opts.before ? lt(notifications.createdAt, new Date(opts.before)) : undefined,
     opts.unreadOnly ? isNull(notificationReads.notificationId) : undefined,
   ].filter(Boolean);
@@ -146,8 +185,8 @@ export async function listNotifications(
   return { items, nextBefore };
 }
 
-/** How many notifications this admin has not read (the bell badge). */
-export async function getUnreadCount(userKey: string): Promise<number> {
+/** How many notifications this viewer has not read (the bell badge). */
+export async function getUnreadCount(viewer: NotificationViewer): Promise<number> {
   const [row] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(notifications)
@@ -155,28 +194,38 @@ export async function getUnreadCount(userKey: string): Promise<number> {
       notificationReads,
       and(
         eq(notificationReads.notificationId, notifications.id),
-        eq(notificationReads.userKey, userKey),
+        eq(notificationReads.userKey, viewer.userKey),
       ),
     )
-    .where(isNull(notificationReads.notificationId));
+    .where(and(isNull(notificationReads.notificationId), audienceWhere(viewer)));
   return row?.count ?? 0;
 }
 
 /** Mark one notification read for this user (idempotent). Returns the new count. */
 export async function markRead(
-  userKey: string,
+  viewer: NotificationViewer,
   notificationId: string,
 ): Promise<number> {
   await db
     .insert(notificationReads)
-    .values({ notificationId, userKey })
+    .values({ notificationId, userKey: viewer.userKey })
     .onConflictDoNothing();
-  return getUnreadCount(userKey);
+  return getUnreadCount(viewer);
 }
 
-/** Mark every currently-unread notification read for this user (one insert-select,
-   bounded by retention). Returns the new count (0). */
-export async function markAllRead(userKey: string): Promise<number> {
+/** Mark every currently-unread notification this viewer can see (same audience
+   rule as list/unread). A non-admin never stamps read on `audience=admins`
+   rows, and nobody stamps another person's user-targeted row. Returns the new
+   count. */
+export async function markAllRead(viewer: NotificationViewer): Promise<number> {
+  const userKey = viewer.userKey;
+  const email = viewer.email;
+  const visible = viewer.isAdmin
+    ? sql`and (
+        n.audience = 'admins'
+        or (n.audience = 'user' and lower(n.recipient_email) = lower(${email}))
+      )`
+    : sql`and n.audience = 'user' and lower(n.recipient_email) = lower(${email})`;
   await db.execute(sql`
     insert into notification_reads (notification_id, user_key)
     select n.id, ${userKey}
@@ -185,9 +234,10 @@ export async function markAllRead(userKey: string): Promise<number> {
       select 1 from notification_reads r
       where r.notification_id = n.id and r.user_key = ${userKey}
     )
+    ${visible}
     on conflict do nothing
   `);
-  return getUnreadCount(userKey);
+  return getUnreadCount(viewer);
 }
 
 /* ---------------- Printer transitions (AC-2) ---------------- */
@@ -381,6 +431,37 @@ export async function notifyPatchInstallResult(job: {
       osCount: job.osCount,
       appCount: job.appCount,
     },
+  });
+}
+
+/**
+ * Tell the requester that an AI Assist job finished (spec 34). User-targeted
+ * only — ops broadcasts stay on the default audience. Idempotent per job and
+ * outcome (`ai-assist:<jobId>:ok|fail`).
+ */
+export async function notifyAiAssistResult(input: {
+  jobId: string;
+  actorEmail: string;
+  assetTag: string;
+  assetId: string | null;
+  action: string;
+  ok: boolean;
+  error?: string | null;
+}): Promise<string | null> {
+  const href = `/assets/${input.assetTag}?tab=monitoring&assistJob=${input.jobId}`;
+  return createNotification({
+    type: input.ok ? "ai-assist" : "ai-assist-failed",
+    severity: input.ok ? "info" : "warning",
+    title: input.ok ? "AI Assist finished" : "AI Assist failed",
+    body: input.ok
+      ? `Assist (${input.action}) is ready.`
+      : `Assist (${input.action}) failed${input.error ? `: ${input.error.slice(0, 200)}` : "."}`,
+    href,
+    dedupeKey: `ai-assist:${input.jobId}:${input.ok ? "ok" : "fail"}`,
+    assetId: input.assetId,
+    audience: "user",
+    recipientEmail: input.actorEmail,
+    meta: { jobId: input.jobId, action: input.action },
   });
 }
 
