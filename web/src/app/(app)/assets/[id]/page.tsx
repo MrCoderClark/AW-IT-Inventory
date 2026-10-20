@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { Lock } from "lucide-react";
 
 import { ComputerDetail } from "@/components/computer-detail";
+import { isAiConfigured } from "@/lib/ai/config";
 import { PrinterDetail } from "@/components/printer-detail";
 import { ThinAssetDetail } from "@/components/thin-detail";
 import { PagePlaceholder } from "@/components/page-placeholder";
@@ -213,6 +214,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
         }))}
         scriptRuns={scriptRunRows}
         metrics={metrics}
+        aiEnabled={isAiConfigured()}
       />
     );
   }

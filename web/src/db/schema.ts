@@ -1699,3 +1699,29 @@ export const reportSchedules = pgTable(
   ],
 );
 export type ReportScheduleRow = typeof reportSchedules.$inferSelect;
+
+// AI assist audit (spec 34). Hash of redacted context only — no prompt/completion store.
+export const aiAssistEvents = pgTable(
+  "ai_assist_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    actorEmail: text("actor_email").notNull(),
+    assetId: uuid("asset_id").references(() => assets.id, {
+      onDelete: "set null",
+    }),
+    action: text("action").notNull(),
+    provider: text("provider").notNull(),
+    model: text("model").notNull(),
+    contextHash: text("context_hash").notNull(),
+    ok: boolean("ok").notNull(),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("ai_assist_events_created_idx").on(t.createdAt),
+    index("ai_assist_events_asset_idx").on(t.assetId),
+  ],
+);
+export type AiAssistEventRow = typeof aiAssistEvents.$inferSelect;

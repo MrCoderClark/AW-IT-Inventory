@@ -46,6 +46,18 @@ vi.mock("@/app/(app)/software-deploy-actions", () => ({
   deploySoftwareAction: vi.fn(),
   cancelDeploymentAction: vi.fn(),
 }));
+vi.mock("@/app/(app)/patch-install-actions", () => ({
+  requestPatchInstall: vi.fn(),
+  requestCancelPatchInstall: vi.fn(),
+  requestMissingUpdateCheck: vi.fn(),
+}));
+vi.mock("@/app/(app)/script-actions", () => ({
+  runScriptAction: vi.fn(),
+  cancelScriptRunAction: vi.fn(),
+  saveScriptAction: vi.fn(),
+  archiveScriptAction: vi.fn(),
+  addStarterScriptsAction: vi.fn(),
+}));
 
 function makeAsset(overrides: Partial<Asset> = {}): Asset {
   return {
@@ -146,6 +158,33 @@ describe("ComputerDetail — tabs + content (AC-4.2, AC-4.3)", () => {
     renderDetail();
     expect(screen.getByText("Asset Information")).toBeInTheDocument();
     expect(screen.getAllByText("Dell Latitude 5520").length).toBeGreaterThan(0);
+  });
+
+  it("hides AI Assist when aiEnabled is false (spec 34 AC-2)", async () => {
+    const user = userEvent.setup();
+    renderDetail();
+    await user.click(screen.getByRole("tab", { name: "Monitoring" }));
+    expect(screen.queryByRole("tab", { name: "AI Assist" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Summarize health/i })).not.toBeInTheDocument();
+  });
+
+  it("puts AI Assist under Monitoring when aiEnabled is true", async () => {
+    const user = userEvent.setup();
+    render(
+      <ComputerDetail
+        asset={makeAsset()}
+        machine={machine}
+        software={software}
+        assignmentHistory={history}
+        canWrite
+        canScan
+        aiEnabled
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /Summarize health/i })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Monitoring" }));
+    await user.click(screen.getByRole("tab", { name: "AI Assist" }));
+    expect(screen.getByRole("button", { name: /Summarize health/i })).toBeInTheDocument();
   });
 
   it("Overview shows the logged-in user from the live scan", () => {

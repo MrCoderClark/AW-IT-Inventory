@@ -85,6 +85,7 @@ import {
   type ScriptOption,
 } from "@/components/script-run-panel";
 import type { ScriptRunListItem } from "@/db/script-runs";
+import { AiAssistPanel } from "@/components/ai-assist-panel";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -131,6 +132,68 @@ function fmtField(field: TypeField, row: Record<string, unknown> | null): string
   if (v == null || v === "") return "—";
   if (field.bool) return v === true ? "Yes" : v === false ? "No" : "—";
   return String(v);
+}
+
+/** Metrics + optional AI Assist under Monitoring (specs 29 + 34). */
+function MonitoringBody({
+  metrics,
+  aiEnabled,
+  assetTag,
+  canDeploy,
+  latestScriptJobId,
+}: {
+  metrics: DeviceMetrics;
+  aiEnabled: boolean;
+  assetTag: string;
+  canDeploy: boolean;
+  latestScriptJobId?: string | null;
+}) {
+  const [sub, setSub] = React.useState<"metrics" | "assist">("metrics");
+
+  if (!aiEnabled) {
+    return <DeviceMonitoring metrics={metrics} />;
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div
+        className="flex gap-1 border-b"
+        role="tablist"
+        aria-label="Monitoring view"
+      >
+        {(
+          [
+            ["metrics", "Metrics"],
+            ["assist", "AI Assist"],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={sub === id}
+            className={
+              sub === id
+                ? "border-b-2 border-primary px-3 py-2 text-sm font-medium text-foreground"
+                : "border-b-2 border-transparent px-3 py-2 text-sm text-muted-foreground hover:text-foreground"
+            }
+            onClick={() => setSub(id)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {sub === "metrics" ? (
+        <DeviceMonitoring metrics={metrics} />
+      ) : (
+        <AiAssistPanel
+          assetTag={assetTag}
+          canDeploy={canDeploy}
+          latestScriptJobId={latestScriptJobId}
+        />
+      )}
+    </div>
+  );
 }
 
 /** Terminal + Scripts sub-tabs on Remote Actions (specs 24 + 32). */
@@ -260,6 +323,7 @@ export function ComputerDetail({
   scriptOptions = [],
   scriptRuns = [],
   metrics = { points: [], latest: null },
+  aiEnabled = false,
 }: {
   asset: Asset;
   machine?: MachineSummary;
@@ -289,6 +353,8 @@ export function ComputerDetail({
   scriptOptions?: ScriptOption[];
   scriptRuns?: ScriptRunListItem[];
   metrics?: DeviceMetrics;
+  /** Spec 34 — when false/off, Assist panel is not rendered. */
+  aiEnabled?: boolean;
 }) {
   const router = useRouter();
   const [tab, setTab] = React.useState("overview");
@@ -663,9 +729,15 @@ export function ComputerDetail({
           </Panel>
         </TabsPanel>
 
-        {/* -------- Live scan -------- */}
+        {/* -------- Monitoring: metrics (29) + Assist (34) -------- */}
         <TabsPanel value="monitoring" className="flex flex-col gap-5">
-          <DeviceMonitoring metrics={metrics} />
+          <MonitoringBody
+            metrics={metrics}
+            aiEnabled={aiEnabled}
+            assetTag={asset.id}
+            canDeploy={canDeploy}
+            latestScriptJobId={scriptRuns[0]?.id ?? null}
+          />
         </TabsPanel>
 
         <TabsPanel value="livescan" className="flex flex-col gap-5">

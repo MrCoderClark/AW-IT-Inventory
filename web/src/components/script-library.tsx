@@ -10,6 +10,7 @@ import {
   archiveScriptAction,
   saveScriptAction,
 } from "@/app/(app)/script-actions";
+import { AI_DRAFT_STORAGE_KEY } from "@/components/ai-assist-panel";
 import { fmtDateTime } from "@/components/detail-ui";
 import { ScriptRunOnDialog } from "@/components/script-run-on-dialog";
 import { Button } from "@/components/ui/button";
@@ -50,6 +51,36 @@ export function ScriptLibrary({
   const [busy, startBusy] = React.useTransition();
   const [runOn, setRunOn] = React.useState<ScriptListItem | null>(null);
   const fileRef = React.useRef<HTMLInputElement>(null);
+  const consumedAiDraft = React.useRef(false);
+
+  // Spec 34 — open New script dialog prefilled from Assist draft handoff.
+  React.useEffect(() => {
+    if (consumedAiDraft.current) return;
+    consumedAiDraft.current = true;
+    try {
+      const raw = sessionStorage.getItem(AI_DRAFT_STORAGE_KEY);
+      if (!raw) return;
+      sessionStorage.removeItem(AI_DRAFT_STORAGE_KEY);
+      const draft = JSON.parse(raw) as {
+        name?: string;
+        body?: string;
+        notes?: string;
+      };
+      if (!draft.body?.trim()) return;
+      setEditing(null);
+      setName(draft.name?.trim() || "AI draft");
+      setDescription(draft.notes?.trim() || "");
+      setBody(draft.body.slice(0, SCRIPT_BODY_MAX));
+      setTimeoutSeconds(120);
+      setOpen(true);
+      toast.message("AI draft loaded — review, then Save before running.");
+      if (typeof window !== "undefined" && window.location.search.includes("aiDraft")) {
+        router.replace("/scripts", { scroll: false });
+      }
+    } catch {
+      /* ignore corrupt draft */
+    }
+  }, [router]);
 
   function openCreate() {
     setEditing(null);
