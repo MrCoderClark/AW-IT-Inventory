@@ -90,6 +90,15 @@ describe("GET /api/ai/assist/[jobId]", () => {
     });
   });
 
+  it("200 for the requester when email casing differs", async () => {
+    getUserMock.mockResolvedValue({
+      ...requester,
+      email: "Me@Opus.Local",
+    });
+    const res = await GET(req(), ctx());
+    expect(res.status).toBe(200);
+  });
+
   it("200 for an admin who did not request the job", async () => {
     const admin = { ...requester, email: "admin@opus.local" };
     getUserMock.mockResolvedValue(admin);

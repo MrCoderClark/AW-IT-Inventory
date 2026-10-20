@@ -19,7 +19,9 @@ export async function GET(_request: Request, context: Context) {
   if (!job) {
     return NextResponse.json({ error: "job not found" }, { status: 404 });
   }
-  if (job.actorEmail !== user.email && !hasPermission(user, "user:admin")) {
+  const isRequester =
+    job.actorEmail.toLowerCase() === user.email.toLowerCase();
+  if (!isRequester && !hasPermission(user, "user:admin")) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 

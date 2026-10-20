@@ -448,7 +448,8 @@ export const NAV_MANAGE: NavItem[] = [
   { label: "Reports", href: "/reports", icon: FileText },
   { label: "Scans", href: "/scans", icon: ScanLine, perm: "scan:read" },
   { label: "Scan Jobs", href: "/scans/jobs", icon: ListChecks, perm: "scan:read" },
-  { label: "Notifications", href: "/notifications", icon: Bell, perm: "user:admin" },
+  // Spec 34 v2a: any signed-in user has a filtered feed (ops broadcasts stay admin-only).
+  { label: "Notifications", href: "/notifications", icon: Bell },
   { label: "Users", href: "/admin/users", icon: UserCog, perm: "user:admin" },
   { label: "Roles", href: "/admin/roles", icon: Shield, perm: "user:admin" },
   { label: "Alert rules", href: "/admin/alert-rules", icon: TriangleAlert, perm: "user:admin" },

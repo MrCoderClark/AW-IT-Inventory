@@ -201,11 +201,20 @@ export async function getUnreadCount(viewer: NotificationViewer): Promise<number
   return row?.count ?? 0;
 }
 
-/** Mark one notification read for this user (idempotent). Returns the new count. */
+/** Mark one notification read for this user (idempotent). Returns the new count.
+   No-ops (without inserting a read row) when the notification is not visible to
+   this viewer — same audience rule as list/unread/mark-all. */
 export async function markRead(
   viewer: NotificationViewer,
   notificationId: string,
 ): Promise<number> {
+  const [visible] = await db
+    .select({ id: notifications.id })
+    .from(notifications)
+    .where(and(eq(notifications.id, notificationId), audienceWhere(viewer)))
+    .limit(1);
+  if (!visible) return getUnreadCount(viewer);
+
   await db
     .insert(notificationReads)
     .values({ notificationId, userKey: viewer.userKey })

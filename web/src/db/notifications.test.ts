@@ -263,11 +263,23 @@ describe("unread + mark read", () => {
     expect(await getUnreadCount(viewer)).toBe(3);
   });
 
-  it("markRead inserts a read row then returns the new count", async () => {
+  it("markRead inserts a read row then returns the new count when visible", async () => {
+    H.selectQueue.push([{ id: "n1" }]); // visibility check
     H.selectQueue.push([{ count: 2 }]); // getUnreadCount after the insert
     const n = await markRead(viewer, "n1");
     expect(H.db.insert).toHaveBeenCalled();
     expect(n).toBe(2);
+  });
+
+  it("markRead skips the insert when the notification is not visible", async () => {
+    H.selectQueue.push([]); // visibility check → empty
+    H.selectQueue.push([{ count: 3 }]); // getUnreadCount only
+    const n = await markRead(
+      { userKey: "u2", email: "tech@x.com", isAdmin: false },
+      "admin-only-n",
+    );
+    expect(H.db.insert).not.toHaveBeenCalled();
+    expect(n).toBe(3);
   });
 
   it("markAllRead runs the insert-select then returns 0", async () => {

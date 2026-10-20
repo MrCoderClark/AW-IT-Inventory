@@ -98,7 +98,8 @@ describe("AppSidebar — permission gating (RBAC audit)", () => {
     expect(screen.queryByRole("link", { name: "Users" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Roles" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Alert rules" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Notifications" })).toBeNull();
+    // Notifications feed is available to every signed-in user (filtered).
+    expect(screen.getByRole("link", { name: "Notifications" })).toBeInTheDocument();
     // Non-admin items the user still has stay visible.
     expect(
       screen.getByRole("link", { name: "Software Library" }),
@@ -118,6 +119,7 @@ describe("AppSidebar — permission gating (RBAC audit)", () => {
     expect(screen.queryByRole("link", { name: "Scan Jobs" })).toBeNull();
     // Baseline (asset:read) Manage items the viewer keeps.
     expect(screen.getByRole("link", { name: "Compliance" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Notifications" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Patches" })).toHaveAttribute(
       "href",
       "/patches",
