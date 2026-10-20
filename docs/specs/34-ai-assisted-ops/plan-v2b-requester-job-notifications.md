@@ -63,7 +63,7 @@
   ```
 - Consumes: existing `createNotification` / `NotificationAudience`
 
-- [ ] **Step 1: Write failing resolver tests**
+- [x] **Step 1: Write failing resolver tests**
 
 Create `web/src/lib/job-notification-audience.test.ts`:
 
@@ -105,7 +105,7 @@ describe("resolveJobNotificationAudience", () => {
 });
 ```
 
-- [ ] **Step 2: Run resolver tests — expect FAIL**
+- [x] **Step 2: Run resolver tests — expect FAIL**
 
 ```powershell
 cd web; npx vitest run src/lib/job-notification-audience.test.ts --reporter=dot
@@ -113,7 +113,7 @@ cd web; npx vitest run src/lib/job-notification-audience.test.ts --reporter=dot
 
 Expected: FAIL (module not found / export missing).
 
-- [ ] **Step 3: Implement resolver**
+- [x] **Step 3: Implement resolver**
 
 Create `web/src/lib/job-notification-audience.ts`:
 
@@ -137,7 +137,7 @@ export function resolveJobNotificationAudience(
 }
 ```
 
-- [ ] **Step 4: Run resolver tests — expect PASS**
+- [x] **Step 4: Run resolver tests — expect PASS**
 
 ```powershell
 cd web; npx vitest run src/lib/job-notification-audience.test.ts --reporter=dot
@@ -145,7 +145,7 @@ cd web; npx vitest run src/lib/job-notification-audience.test.ts --reporter=dot
 
 Expected: PASS.
 
-- [ ] **Step 5: Extend notify helper tests (failing on missing `requestedBy` / audience)**
+- [x] **Step 5: Extend notify helper tests (failing on missing `requestedBy` / audience)**
 
 In `web/src/db/notifications.test.ts`:
 
@@ -216,7 +216,7 @@ describe("notifyScriptRunResult audience", () => {
 });
 ```
 
-- [ ] **Step 6: Run notifications tests — expect FAIL**
+- [x] **Step 6: Run notifications tests — expect FAIL**
 
 ```powershell
 cd web; npx vitest run src/db/notifications.test.ts --reporter=dot
@@ -224,7 +224,7 @@ cd web; npx vitest run src/db/notifications.test.ts --reporter=dot
 
 Expected: FAIL (missing `requestedBy` / audience not set).
 
-- [ ] **Step 7: Update the four notify helpers**
+- [x] **Step 7: Update the four notify helpers**
 
 In `web/src/db/notifications.ts`:
 
@@ -257,7 +257,7 @@ await createNotification({
 
 For `notifyInstallResult`, resolve after the `list` early-return (list stays silent and does not need audience).
 
-- [ ] **Step 8: Run notifications + resolver tests — expect PASS**
+- [x] **Step 8: Run notifications + resolver tests — expect PASS**
 
 ```powershell
 cd web; npx vitest run src/lib/job-notification-audience.test.ts src/db/notifications.test.ts --reporter=dot
@@ -265,7 +265,7 @@ cd web; npx vitest run src/lib/job-notification-audience.test.ts src/db/notifica
 
 Expected: all PASS.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```powershell
 git add web/src/lib/job-notification-audience.ts web/src/lib/job-notification-audience.test.ts web/src/db/notifications.ts web/src/db/notifications.test.ts
@@ -292,7 +292,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
 - Consumes: `notify*(…, requestedBy: string)` from Task 1
 - Produces: status updaters forward job row `requestedBy` unchanged
 
-- [ ] **Step 1: Update failing status-updater expectations**
+- [x] **Step 1: Update failing status-updater expectations**
 
 In `web/src/db/patch-install.test.ts` “notifies on success”:
 
@@ -329,7 +329,7 @@ expect(H.notifyMock).toHaveBeenCalledWith(
 );
 ```
 
-- [ ] **Step 2: Run those two test files — expect FAIL**
+- [x] **Step 2: Run those two test files — expect FAIL**
 
 ```powershell
 cd web; npx vitest run src/db/patch-install.test.ts src/db/software-deploy.test.ts --reporter=dot
@@ -337,7 +337,7 @@ cd web; npx vitest run src/db/patch-install.test.ts src/db/software-deploy.test.
 
 Expected: FAIL (`requestedBy` missing on notify args).
 
-- [ ] **Step 3: Wire `requestedBy` in all four status updaters**
+- [x] **Step 3: Wire `requestedBy` in all four status updaters**
 
 **script-runs.ts** — extend `.returning` and notify:
 
@@ -365,7 +365,7 @@ await notifyScriptRunResult({
 
 **printer-install.ts** — `printerInstallJobs.requestedBy` → `notifyInstallResult`.
 
-- [ ] **Step 4: Run related tests — expect PASS**
+- [x] **Step 4: Run related tests — expect PASS**
 
 ```powershell
 cd web; npx vitest run src/db/notifications.test.ts src/db/patch-install.test.ts src/db/software-deploy.test.ts src/db/script-runs.test.ts src/lib/job-notification-audience.test.ts --reporter=dot
@@ -373,7 +373,7 @@ cd web; npx vitest run src/db/notifications.test.ts src/db/patch-install.test.ts
 
 Expected: all PASS. (Typecheck: if `script-runs` / printer compile errors surface in IDE, fix before commit.)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add web/src/db/script-runs.ts web/src/db/patch-install.ts web/src/db/software-deploy.ts web/src/db/printer-install.ts web/src/db/patch-install.test.ts web/src/db/software-deploy.test.ts
@@ -393,7 +393,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
 - Modify: `docs/specs/34-ai-assisted-ops/index.md` (v2b phase line → shipped)
 - Modify: `docs/specs/34-ai-assisted-ops/plan-v2b-requester-job-notifications.md` (checkboxes as completed when executing)
 
-- [ ] **Step 1: Mark design + index shipped**
+- [x] **Step 1: Mark design + index shipped**
 
 Design header:
 
@@ -410,7 +410,7 @@ Index phase 3:
    `requestedBy` stays admin broadcast.
 ```
 
-- [ ] **Step 2: Commit docs**
+- [x] **Step 2: Commit docs**
 
 ```powershell
 git add docs/specs/34-ai-assisted-ops/

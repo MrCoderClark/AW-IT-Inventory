@@ -1,7 +1,7 @@
 # Spec 34 v2b — Requester notifications for worker jobs
 
 **Date**: 2026-10-20  
-**Status**: Accepted (plan ready; not yet implemented) — [plan](./plan-v2b-requester-job-notifications.md)  
+**Status**: Accepted (shipped on `main`) — [plan](./plan-v2b-requester-job-notifications.md)  
 **Parent**: [index.md](./index.md)  
 **Depends on**: Spec 34 v2a (audience + SSE toast), Spec 19 notifications  
 **Slice**: **F** from the v2a parked list (generalize requester notify beyond Assist)

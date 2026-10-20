@@ -140,8 +140,9 @@ Service accounts: **no** AI scopes in v1 (techs only).
    shipped: enqueue + `after()` processing, requester toast + bell on completion,
    Spec 19 audience targeting, recent job history on the Assist panel.
 3. **v2b** — [requester notifications for worker jobs](./design-v2b-requester-job-notifications.md)
-   (slice F): retarget script / patch / deploy / printer-install completion
-   bells to the requester (schedule/system → admins fallback). Design draft.
+   ([plan](./plan-v2b-requester-job-notifications.md)): shipped — script / patch /
+   deploy / printer-install completion bells target the requester; schedule/system
+   `requestedBy` stays admin broadcast.
 4. **v2+ (parked)** — fleet alert correlation; recurring-issue / automation
    reports; on-prem provider profile + richer PII; internal KB article hints
    (when a KB exists).
