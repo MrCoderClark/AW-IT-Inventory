@@ -7,7 +7,7 @@
 
 **Date**: 2026-10-20  
 **Status**: Accepted (v1 merged) — [design v1](./design-v1.md) · [plan v1](./plan-v1.md)  
-**UI polish (draft)**: [helpdesk list + full detail](../../superpowers/specs/2026-10-20-ticketing-helpdesk-ui-design.md)  
+**UI polish (Accepted)**: [helpdesk list + full detail](../../superpowers/specs/2026-10-20-ticketing-helpdesk-ui-design.md)  
 **UI references**: helpdesk mock (user) · [`docs/Design/ticketing-mock.png`](../../Design/ticketing-mock.png)
 
 ## Summary
