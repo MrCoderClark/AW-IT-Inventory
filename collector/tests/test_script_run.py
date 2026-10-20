@@ -25,6 +25,9 @@ def test_wrap_body_embeds_script_as_base64():
     assert "[scriptblock]::Create" in wrapped
     assert "Invoke-Expression" not in wrapped
     assert "$__prevEap" in wrapped
+    # Head+tail truncation (keeps summary when failure lists are long).
+    assert "$__headN = 1500" in wrapped
+    assert "$__tailN = 2500" in wrapped
     start = wrapped.index("FromBase64String('") + len("FromBase64String('")
     end = wrapped.index("')", start)
     raw = base64.b64decode(wrapped[start:end]).decode("utf-16-le")

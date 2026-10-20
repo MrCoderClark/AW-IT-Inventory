@@ -6,6 +6,7 @@ import { Loader2, Play, Plus, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 import {
+  addStarterScriptsAction,
   archiveScriptAction,
   saveScriptAction,
 } from "@/app/(app)/script-actions";
@@ -129,9 +130,30 @@ export function ScriptLibrary({
     reader.readAsText(file);
   }
 
+  function addStarters() {
+    startBusy(async () => {
+      const res = await addStarterScriptsAction();
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      if (res.added.length === 0) {
+        toast.message("Starter scripts already present");
+      } else {
+        toast.success(
+          `Added ${res.added.length}: ${res.added.join(", ")}`,
+        );
+      }
+      router.refresh();
+    });
+  }
+
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex justify-end">
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button variant="outline" disabled={busy} onClick={addStarters}>
+          Add starter scripts
+        </Button>
         <Button onClick={openCreate}>
           <Plus className="size-4" /> New script
         </Button>
@@ -271,6 +293,13 @@ export function ScriptLibrary({
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
               />
+              <span className="mt-1.5 leading-snug">
+                Avoid <code className="text-[11px]">exit</code> — it can break
+                result capture. Prefer{" "}
+                <code className="text-[11px]">Write-Output</code> for messages
+                and <code className="text-[11px]">throw</code> on failure. Put
+                summaries at the end of long scripts.
+              </span>
             </label>
           </div>
           <DialogFooter className="shrink-0">

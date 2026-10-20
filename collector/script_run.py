@@ -96,8 +96,15 @@ def _runner_core(load_line: str) -> str:
             "} finally {",
             "  $ErrorActionPreference = $__prevEap",
             "}",
-            "$__tail = ($__lines -join [Environment]::NewLine).Trim()",
-            "if ($__tail.Length -gt 4000) { $__tail = $__tail.Substring($__tail.Length - 4000) }",
+            # Keep head + tail so long failure lists don't bury the summary.
+            "$__all = ($__lines -join [Environment]::NewLine).Trim()",
+            "$__headN = 1500; $__tailN = 2500",
+            "if ($__all.Length -le ($__headN + $__tailN)) {",
+            "  $__tail = $__all",
+            "} else {",
+            "  $__tail = $__all.Substring(0, $__headN) + \"`n…`n\" + "
+            + "$__all.Substring($__all.Length - $__tailN)",
+            "}",
             "[ordered]@{ exitCode = [int]$__code; outputTail = $__tail } | ConvertTo-Json -Compress",
         ]
     )
