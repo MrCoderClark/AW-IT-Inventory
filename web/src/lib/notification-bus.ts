@@ -2,6 +2,8 @@ import "server-only";
 
 import { EventEmitter } from "node:events";
 
+import type { NotificationAudience } from "./notification-visibility";
+
 /**
  * In-process pub/sub for live notifications (spec 19). Every creator
  * (`createNotification`) and the SSE stream route run in the same web server
@@ -25,6 +27,8 @@ export interface NotificationEvent {
   href: string;
   assetId: string | null;
   createdAt: string; // ISO
+  audience: NotificationAudience;
+  recipientEmail: string | null;
 }
 
 const CHANNEL = "notification";

@@ -61,9 +61,17 @@ it("returns the feed and unread count for an admin", async () => {
     unread: 1,
   });
   expect(hasPermMock).toHaveBeenCalledWith(admin, "user:admin");
-  expect(listMock).toHaveBeenCalledWith("u1", {
-    limit: 10,
-    before: undefined,
-    unreadOnly: false,
+  expect(listMock).toHaveBeenCalledWith(
+    { userKey: "u1", email: "a@x.com", isAdmin: true },
+    {
+      limit: 10,
+      before: undefined,
+      unreadOnly: false,
+    },
+  );
+  expect(countMock).toHaveBeenCalledWith({
+    userKey: "u1",
+    email: "a@x.com",
+    isAdmin: true,
   });
 });

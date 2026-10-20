@@ -219,21 +219,23 @@ describe("notifyInstallResult", () => {
 });
 
 describe("unread + mark read", () => {
+  const viewer = { userKey: "u1", email: "u1@x.com", isAdmin: true };
+
   it("getUnreadCount returns the counted rows", async () => {
     H.selectQueue.push([{ count: 3 }]);
-    expect(await getUnreadCount("u1")).toBe(3);
+    expect(await getUnreadCount(viewer)).toBe(3);
   });
 
   it("markRead inserts a read row then returns the new count", async () => {
     H.selectQueue.push([{ count: 2 }]); // getUnreadCount after the insert
-    const n = await markRead("u1", "n1");
+    const n = await markRead(viewer, "n1");
     expect(H.db.insert).toHaveBeenCalled();
     expect(n).toBe(2);
   });
 
   it("markAllRead runs the insert-select then returns 0", async () => {
     H.selectQueue.push([{ count: 0 }]);
-    const n = await markAllRead("u1");
+    const n = await markAllRead(viewer);
     expect(H.executeMock).toHaveBeenCalledTimes(1);
     expect(n).toBe(0);
   });

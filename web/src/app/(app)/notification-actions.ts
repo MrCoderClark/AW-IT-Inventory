@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { getCurrentUser, hasPermission } from "@/lib/auth/session";
-import { markAllRead, markRead } from "@/db/notifications";
+import { markAllRead, markRead, type NotificationViewer } from "@/db/notifications";
 
 export interface NotificationActionResult {
   ok: boolean;
@@ -16,33 +16,37 @@ const FORBIDDEN: NotificationActionResult = {
   error: "You don't have permission to manage notifications.",
 };
 
-/** Notifications are admin-only (spec 19, AC-6); the stable per-user key is the
-   user id, falling back to email. Returns null when the caller isn't an admin. */
-async function requireAdminKey(): Promise<string | null> {
+/** Notifications stay admin-gated here. The viewer carries the stable per-user
+   key (id, else email) plus email so the unread count is audience-filtered. */
+async function requireAdminViewer(): Promise<NotificationViewer | null> {
   const user = await getCurrentUser();
   if (!hasPermission(user, "user:admin")) return null;
-  return user!.id || user!.email;
+  return {
+    userKey: user!.id || user!.email,
+    email: user!.email,
+    isAdmin: true,
+  };
 }
 
 /** Mark one notification read for the current admin; returns the new unread count. */
 export async function markNotificationReadAction(
   id: unknown,
 ): Promise<NotificationActionResult> {
-  const userKey = await requireAdminKey();
-  if (!userKey) return FORBIDDEN;
+  const viewer = await requireAdminViewer();
+  if (!viewer) return FORBIDDEN;
   if (typeof id !== "string" || !id) {
     return { ok: false, error: "Missing notification id." };
   }
-  const unread = await markRead(userKey, id);
+  const unread = await markRead(viewer, id);
   revalidatePath("/notifications");
   return { ok: true, unread };
 }
 
 /** Mark every unread notification read for the current admin. */
 export async function markAllNotificationsReadAction(): Promise<NotificationActionResult> {
-  const userKey = await requireAdminKey();
-  if (!userKey) return FORBIDDEN;
-  const unread = await markAllRead(userKey);
+  const viewer = await requireAdminViewer();
+  if (!viewer) return FORBIDDEN;
+  const unread = await markAllRead(viewer);
   revalidatePath("/notifications");
   return { ok: true, unread };
 }

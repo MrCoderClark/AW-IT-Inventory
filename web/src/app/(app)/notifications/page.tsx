@@ -23,10 +23,14 @@ export default async function Page() {
     );
   }
 
-  const userKey = user.id || user.email;
+  const viewer = {
+    userKey: user.id || user.email,
+    email: user.email,
+    isAdmin: true,
+  };
   const [{ items, nextBefore }, unread] = await Promise.all([
-    listNotifications(userKey, { limit: 30 }),
-    getUnreadCount(userKey),
+    listNotifications(viewer, { limit: 30 }),
+    getUnreadCount(viewer),
   ]);
 
   return (

@@ -20,11 +20,16 @@ const HEARTBEAT_MS = 25_000;
 export async function GET(request: Request) {
   const user = await getCurrentUser();
   if (!user) return new Response("unauthorized", { status: 401 });
-  if (!hasPermission(user, "user:admin")) {
+  const isAdmin = hasPermission(user, "user:admin");
+  if (!isAdmin) {
     return new Response("forbidden", { status: 403 });
   }
 
-  const userKey = user.id || user.email;
+  const viewer = {
+    userKey: user.id || user.email,
+    email: user.email,
+    isAdmin,
+  };
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream<Uint8Array>({
@@ -42,7 +47,7 @@ export async function GET(request: Request) {
         send(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 
       // Initial count so the badge is correct the moment the stream opens.
-      const unread = await getUnreadCount(userKey).catch(() => 0);
+      const unread = await getUnreadCount(viewer).catch(() => 0);
       sendEvent("count", { unread });
 
       // Push every newly-created notification (admin-broadcast → all streams).
