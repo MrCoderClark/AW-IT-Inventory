@@ -235,6 +235,29 @@ export type NotificationType =
   | "device-discovered"
   | "warranty-expiring";
 
+/** Every member of the `NotificationType` union (ticket auto-create matrix). */
+export const ALL_NOTIFICATION_TYPES = [
+  "printer-down",
+  "printer-recovery",
+  "printer-install",
+  "printer-install-failed",
+  "software-deploy",
+  "software-deploy-failed",
+  "patch-install",
+  "patch-install-failed",
+  "script-run",
+  "script-run-failed",
+  "ai-assist",
+  "ai-assist-failed",
+  "compliance-at-risk",
+  "compliance-recovered",
+  "metric-threshold",
+  "metric-recovered",
+  "scan-failed",
+  "device-discovered",
+  "warranty-expiring",
+] as const satisfies readonly NotificationType[];
+
 export type NotificationSeverity = "info" | "warning" | "critical";
 
 /** One notification as the bell and the /notifications page render it, carrying
