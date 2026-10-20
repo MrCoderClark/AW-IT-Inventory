@@ -3,8 +3,10 @@ import { Lock, TerminalSquare } from "lucide-react";
 import { HeroHeader } from "@/components/hero-header";
 import { PagePlaceholder } from "@/components/page-placeholder";
 import { ScriptLibrary } from "@/components/script-library";
+import { ScriptRecentRuns } from "@/components/script-recent-runs";
 import { ScriptSchedulesPanel } from "@/components/script-schedules-panel";
 import { getLocationOptions } from "@/db/queries";
+import { listRecentScriptRuns } from "@/db/script-runs";
 import { listScriptSchedules } from "@/db/script-schedules";
 import { listComputerPickerOptions } from "@/db/script-targets";
 import { listScripts } from "@/db/scripts";
@@ -25,12 +27,14 @@ export default async function Page() {
     );
   }
 
-  const [scripts, schedules, computers, locations] = await Promise.all([
-    listScripts(),
-    listScriptSchedules(),
-    listComputerPickerOptions(),
-    getLocationOptions(),
-  ]);
+  const [scripts, schedules, computers, locations, recentRuns] =
+    await Promise.all([
+      listScripts(),
+      listScriptSchedules(),
+      listComputerPickerOptions(),
+      getLocationOptions(),
+      listRecentScriptRuns(30),
+    ]);
 
   return (
     <div className="mx-auto flex max-w-[1100px] flex-col gap-8">
@@ -44,6 +48,7 @@ export default async function Page() {
         computers={computers}
         locations={locations}
       />
+      <ScriptRecentRuns initial={recentRuns} />
       <ScriptSchedulesPanel
         schedules={schedules}
         scripts={scripts}

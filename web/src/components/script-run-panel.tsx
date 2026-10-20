@@ -10,6 +10,7 @@ import {
   runScriptAction,
 } from "@/app/(app)/script-actions";
 import { fmtDateTime, Panel } from "@/components/detail-ui";
+import { ScriptRunOutput } from "@/components/script-run-output";
 import { Button } from "@/components/ui/button";
 import type { ScriptRunListItem } from "@/db/script-runs";
 
@@ -44,6 +45,12 @@ export function ScriptRunPanel({
     (j) =>
       j.status === "pending" || j.status === "claimed" || j.status === "running",
   );
+
+  React.useEffect(() => {
+    if (!inflight) return;
+    const t = setInterval(() => router.refresh(), 3000);
+    return () => clearInterval(t);
+  }, [inflight, router]);
 
   function run() {
     if (!scriptId) return;
@@ -138,11 +145,11 @@ export function ScriptRunPanel({
                   </Button>
                 )}
               </div>
-              {j.result?.outputTail ? (
-                <pre className="mt-2 max-h-40 overflow-auto rounded-md bg-muted/50 p-2 font-mono text-[11px] whitespace-pre-wrap">
-                  {j.result.outputTail}
-                </pre>
-              ) : null}
+              {(j.status === "succeeded" ||
+                j.status === "failed" ||
+                j.status === "canceled") && (
+                <ScriptRunOutput result={j.result} error={j.error} />
+              )}
             </li>
           ))}
         </ul>

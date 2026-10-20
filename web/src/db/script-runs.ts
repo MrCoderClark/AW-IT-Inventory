@@ -276,3 +276,46 @@ export async function listScriptRunsForAssetTag(
     waitingForCollector: r.status === "pending" && !workerLive,
   }));
 }
+
+export type ScriptRunFleetItem = ScriptRunListItem & {
+  assetTag: string;
+  assetName: string;
+};
+
+/** Recent runs across the fleet — for the /scripts library page. */
+export async function listRecentScriptRuns(
+  limit = 30,
+): Promise<ScriptRunFleetItem[]> {
+  const rows = await db
+    .select({
+      id: scriptRunJobs.id,
+      snapshot: scriptRunJobs.scriptSnapshot,
+      status: scriptRunJobs.status,
+      result: scriptRunJobs.result,
+      requestedBy: scriptRunJobs.requestedBy,
+      error: scriptRunJobs.error,
+      requestedAt: scriptRunJobs.requestedAt,
+      finishedAt: scriptRunJobs.finishedAt,
+      assetTag: assets.tag,
+      assetName: assets.name,
+    })
+    .from(scriptRunJobs)
+    .innerJoin(assets, eq(assets.id, scriptRunJobs.assetId))
+    .orderBy(desc(scriptRunJobs.requestedAt))
+    .limit(limit);
+
+  const workerLive = await isWorkerLive();
+  return rows.map((r) => ({
+    id: r.id,
+    scriptName: r.snapshot.name,
+    status: r.status,
+    result: r.result ?? null,
+    requestedBy: r.requestedBy,
+    error: r.error,
+    requestedAt: r.requestedAt.toISOString(),
+    finishedAt: r.finishedAt ? r.finishedAt.toISOString() : null,
+    waitingForCollector: r.status === "pending" && !workerLive,
+    assetTag: r.assetTag,
+    assetName: r.assetName,
+  }));
+}
