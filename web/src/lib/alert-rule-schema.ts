@@ -4,6 +4,7 @@ import type {
   AlertSeverity,
   MetricOp,
   MetricSignal,
+  TicketAutoCreateMode,
 } from "@/lib/alert-rules";
 
 /**
@@ -26,6 +27,12 @@ export const ALERT_SEVERITIES = [
   "warning",
   "critical",
 ] as const satisfies readonly AlertSeverity[];
+
+export const TICKET_AUTO_CREATE_MODES = [
+  "inherit",
+  "on",
+  "off",
+] as const satisfies readonly TicketAutoCreateMode[];
 
 function finiteNumber(label: string, min?: number, max?: number) {
   let schema = z
@@ -56,6 +63,9 @@ export const alertRuleInputSchema = z.object({
     Math.floor(v),
   ),
   severity: z.enum(ALERT_SEVERITIES, { error: "Choose a severity" }),
+  ticketAutoCreate: z.enum(TICKET_AUTO_CREATE_MODES, {
+    error: "Choose ticket auto-create",
+  }),
 });
 
 export type AlertRuleInput = z.output<typeof alertRuleInputSchema>;
@@ -67,6 +77,7 @@ export interface AlertRuleFormValues {
   threshold: string;
   consecutive: string;
   severity: AlertSeverity;
+  ticketAutoCreate: TicketAutoCreateMode;
 }
 
 export const EMPTY_ALERT_RULE_FORM: AlertRuleFormValues = {
@@ -76,6 +87,7 @@ export const EMPTY_ALERT_RULE_FORM: AlertRuleFormValues = {
   threshold: "90",
   consecutive: "1",
   severity: "warning",
+  ticketAutoCreate: "inherit",
 };
 
 export function fieldErrors<T extends string>(

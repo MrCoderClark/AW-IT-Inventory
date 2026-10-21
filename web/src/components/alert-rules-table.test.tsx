@@ -43,6 +43,7 @@ const RULES: AlertRuleRecord[] = [
     consecutive: 2,
     severity: "warning",
     enabled: true,
+    ticketAutoCreate: "inherit",
   },
   {
     id: "a3000000-0000-4000-8000-000000000003",
@@ -53,6 +54,7 @@ const RULES: AlertRuleRecord[] = [
     consecutive: 1,
     severity: "critical",
     enabled: true,
+    ticketAutoCreate: "inherit",
   },
 ];
 

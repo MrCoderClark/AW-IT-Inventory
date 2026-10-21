@@ -49,6 +49,7 @@ function valuesFrom(rule: AlertRuleRecord | null): AlertRuleFormValues {
     threshold: String(rule.threshold),
     consecutive: String(rule.consecutive),
     severity: rule.severity,
+    ticketAutoCreate: rule.ticketAutoCreate,
   };
 }
 

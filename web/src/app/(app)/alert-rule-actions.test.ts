@@ -50,6 +50,7 @@ const VALID = {
   threshold: 90,
   consecutive: 2,
   severity: "warning",
+  ticketAutoCreate: "inherit" as const,
 };
 
 const RULE_ID = "a3000000-0000-4000-8000-000000000001";
