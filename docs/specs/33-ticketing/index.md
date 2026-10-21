@@ -98,8 +98,10 @@ List KPI strip: **Open / In Progress / Waiting / Resolved** (`waiting` =
 3. **v2.5 — outbound ticket email** — [design](../../superpowers/specs/2026-10-21-outbound-ticket-email-design.md):
    assignee notified on assign / user comment / status via aw-auth + Resend
    (shipped #116).
-4. **v3 — email-in** — in progress on `feat/spec-33-ticket-email-in` (slice TBD).
-5. **Later** — end-user portal.
+4. **v3 — email-in (reply-only)** — [design](../../superpowers/specs/2026-10-21-ticket-email-in-design.md):
+   Resend webhook → comment when From is assignee/requester; no create-from-mail
+   (in progress on `feat/spec-33-ticket-email-in`).
+5. **Later** — create-from-mail; attachments; end-user portal.
 
 ## Out of scope / non-goals (v1)
 

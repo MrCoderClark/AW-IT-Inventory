@@ -9,8 +9,8 @@ via a feature branch + PR.
 
 ## 🚧 Spec 33: Ticket email-in (`feat/spec-33-ticket-email-in`)
 
-Inbound mail → ticket comments / create (design in progress). Builds on outbound
-(#116). Email-in is large — first slice TBD in brainstorming.
+Reply-only: Resend inbound → comment on existing ticket (assignee/requester).
+Design: `docs/superpowers/specs/2026-10-21-ticket-email-in-design.md`.
 
 ## Shipped ✅ — Spec 33: Outbound ticket email (merged #116)
 
