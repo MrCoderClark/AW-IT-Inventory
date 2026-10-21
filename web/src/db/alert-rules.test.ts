@@ -123,6 +123,7 @@ const DISK = {
   consecutive: 1,
   severity: "critical",
   enabled: true,
+  ticketAutoCreate: "inherit" as const,
 };
 const CPU = {
   id: "rule-cpu",
@@ -133,6 +134,7 @@ const CPU = {
   consecutive: 2,
   severity: "warning",
   enabled: true,
+  ticketAutoCreate: "inherit" as const,
 };
 const ASSET = { id: "a1", tag: "H2TECS-COMP-1", name: "Reception PC" };
 
@@ -281,6 +283,7 @@ const RULE_INPUT = {
   threshold: 90,
   consecutive: 2,
   severity: "warning" as const,
+  ticketAutoCreate: "inherit" as const,
 };
 
 const RULE_ID = "a3000000-0000-4000-8000-000000000001";
