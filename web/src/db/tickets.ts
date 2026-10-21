@@ -25,7 +25,10 @@ import {
 /**
  * Internal IT tickets (spec 33). CRUD, comments, create-from-notification with
  * dedupe on `sourceNotificationId`, and admin-configurable auto-create by
- * notification type. Auto-create is best-effort and never throws.
+ * notification type. Auto-create is best-effort and never throws, and never
+ * asks for an AI draft. `{ useAi: true }` (manual create only) fills fields
+ * from a draft and falls back to the notification when that draft is missing
+ * or fails.
  */
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -381,6 +384,7 @@ export async function getTicketIdsByNotificationIds(
 export async function createTicketFromNotification(
   notificationId: string,
   createdBy: string,
+  opts?: { useAi?: boolean },
 ): Promise<{ id: string; number: number } | { existingId: string } | null> {
   const [notif] = await db
     .select({
@@ -396,12 +400,33 @@ export async function createTicketFromNotification(
 
   if (!notif) return null;
 
+  let subject = notif.title;
+  let description = notif.body;
+  let category = categoryFromNotificationType(notif.type);
+  let priority: TicketPriority | undefined;
+
+  if (opts?.useAi) {
+    try {
+      const { draftTicketFieldsFromNotification } = await import("./ai-ticket-draft");
+      const draft = await draftTicketFieldsFromNotification(notificationId, createdBy);
+      if (draft) {
+        subject = draft.subject;
+        description = draft.description;
+        if (draft.category) category = draft.category;
+        if (draft.priority) priority = draft.priority;
+      }
+    } catch {
+      // A draft failure must not block creating the ticket from the notification.
+    }
+  }
+
   return createTicket({
-    subject: notif.title,
-    description: notif.body,
+    subject,
+    description,
     assetId: notif.assetId,
     sourceNotificationId: notif.id,
-    category: categoryFromNotificationType(notif.type),
+    category,
+    ...(priority !== undefined ? { priority } : {}),
     createdBy,
   });
 }

@@ -51,6 +51,8 @@ const H = vi.hoisted(() => {
 
   const transaction = vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx));
 
+  const draftTicketFieldsFromNotification = vi.fn();
+
   return {
     selectQueue,
     insertReturning,
@@ -58,6 +60,7 @@ const H = vi.hoisted(() => {
     select,
     insert,
     transaction,
+    draftTicketFieldsFromNotification,
   };
 });
 
@@ -68,6 +71,9 @@ vi.mock("@/db/index", () => ({
     insert: H.insert,
     transaction: H.transaction,
   },
+}));
+vi.mock("./ai-ticket-draft", () => ({
+  draftTicketFieldsFromNotification: H.draftTicketFieldsFromNotification,
 }));
 
 import {
@@ -84,6 +90,7 @@ beforeEach(() => {
   H.select.mockClear();
   H.insert.mockClear();
   H.transaction.mockClear();
+  H.draftTicketFieldsFromNotification.mockReset();
 });
 
 describe("createTicket", () => {
@@ -153,6 +160,92 @@ describe("createTicketFromNotification", () => {
     expect(second).toEqual({ existingId: "ticket-a" });
     expect(H.insertValues).toHaveLength(2);
   });
+
+  function primeCreate() {
+    H.selectQueue.push([notif]);
+    H.selectQueue.push([]);
+    H.selectQueue.push([{ m: 6 }]);
+    H.insertReturning.push([{ id: "ticket-ai", number: 7 }]);
+  }
+
+  it("does not call AI draft when useAi is omitted (auto-create path)", async () => {
+    primeCreate();
+
+    const result = await createTicketFromNotification("notif-1", "admin@example.com");
+
+    expect(result).toEqual({ id: "ticket-ai", number: 7 });
+    expect(H.draftTicketFieldsFromNotification).not.toHaveBeenCalled();
+    expect(H.insertValues[0]).toMatchObject({
+      subject: notif.title,
+      description: notif.body,
+      category: "Alert",
+      priority: "medium",
+    });
+  });
+
+  it("applies AI draft when useAi true and draft returns fields", async () => {
+    primeCreate();
+    H.draftTicketFieldsFromNotification.mockResolvedValue({
+      subject: "Replace the down printer",
+      description: "LaserJet on floor 2 is unreachable after two probes.",
+      category: "Printer",
+      priority: "high",
+    });
+
+    const result = await createTicketFromNotification("notif-1", "admin@example.com", {
+      useAi: true,
+    });
+
+    expect(result).toEqual({ id: "ticket-ai", number: 7 });
+    expect(H.draftTicketFieldsFromNotification).toHaveBeenCalledWith(
+      "notif-1",
+      "admin@example.com",
+    );
+    expect(H.insertValues[0]).toMatchObject({
+      subject: "Replace the down printer",
+      description: "LaserJet on floor 2 is unreachable after two probes.",
+      category: "Printer",
+      priority: "high",
+      sourceNotificationId: "notif-1",
+      createdBy: "admin@example.com",
+    });
+  });
+
+  it("falls back to notification title/body when draft returns null", async () => {
+    primeCreate();
+    H.draftTicketFieldsFromNotification.mockResolvedValue(null);
+
+    const result = await createTicketFromNotification("notif-1", "admin@example.com", {
+      useAi: true,
+    });
+
+    expect(result).toEqual({ id: "ticket-ai", number: 7 });
+    expect(H.draftTicketFieldsFromNotification).toHaveBeenCalledOnce();
+    expect(H.insertValues[0]).toMatchObject({
+      subject: notif.title,
+      description: notif.body,
+      category: "Alert",
+      priority: "medium",
+    });
+  });
+
+  it("falls back to notification title/body when the draft throws", async () => {
+    primeCreate();
+    H.draftTicketFieldsFromNotification.mockRejectedValue(new Error("provider down"));
+
+    const result = await createTicketFromNotification("notif-1", "admin@example.com", {
+      useAi: true,
+    });
+
+    expect(result).toEqual({ id: "ticket-ai", number: 7 });
+    expect(H.draftTicketFieldsFromNotification).toHaveBeenCalledOnce();
+    expect(H.insertValues[0]).toMatchObject({
+      subject: notif.title,
+      description: notif.body,
+      category: "Alert",
+      priority: "medium",
+    });
+  });
 });
 
 describe("maybeAutoCreateTicketFromNotification", () => {
@@ -191,6 +284,7 @@ describe("maybeAutoCreateTicketFromNotification", () => {
     await maybeAutoCreateTicketFromNotification(row);
 
     expect(H.transaction).toHaveBeenCalledTimes(1);
+    expect(H.draftTicketFieldsFromNotification).not.toHaveBeenCalled();
     expect(H.insertValues[0]).toMatchObject({
       subject: row.title,
       description: row.body,

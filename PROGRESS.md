@@ -7,6 +7,12 @@ via a feature branch + PR.
 
 ---
 
+## 🚧 Spec 34 v2c: Ticket draft assist (`feat/spec-34-ticket-draft-assist`)
+
+Manual **Create ticket** from a notification uses Spec 34 `draft_ticket` when AI is
+configured; auto-create stays raw notification fields. Design:
+`docs/superpowers/specs/2026-10-21-ticket-draft-assist-design.md`.
+
 ## Shipped ✅ — Spec 33 v2 ticketing (merged #110–#113)
 
 Completes Spec 33 phase 2 on `main`:
@@ -17,7 +23,7 @@ Completes Spec 33 phase 2 on `main`:
 - **Per-alert-rule auto-create** (#113) — tri-state Inherit/On/Off on Spec 30 rules;
   `meta.alertRuleId` on metric notifications. **Needs `npm run db:push`** if not done.
 
-Later (not started): email-in, end-user portal, Spec 34 ticket-draft assist.
+Later (not started): email-in, end-user portal.
 
 ## Shipped ✅ — Reporting engine (spec 26, merged #84–#87)
 

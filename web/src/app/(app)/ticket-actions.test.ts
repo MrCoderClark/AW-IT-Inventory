@@ -150,6 +150,14 @@ describe("addTicketCommentAction / createTicketFromNotificationAction", () => {
     expect(res.ok).toBe(true);
   });
 
+  it("asks for an AI draft on manual create from notification", async () => {
+    createFromNotifMock.mockResolvedValue({ id: TICKET_ID, number: 1 });
+    await createTicketFromNotificationAction(NOTIF_ID);
+    expect(createFromNotifMock).toHaveBeenCalledWith(NOTIF_ID, "admin@example.com", {
+      useAi: true,
+    });
+  });
+
   it("creates from notification or reports missing notification", async () => {
     createFromNotifMock.mockResolvedValue(null);
     expect((await createTicketFromNotificationAction(NOTIF_ID)).ok).toBe(false);

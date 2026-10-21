@@ -2,8 +2,9 @@
 
 > Fifth RMM-core capability after the [roadmap](../28-rmm-roadmap/index.md)
 > (decision **A**). Builds on [spec 19](../19-notifications/index.md) notifications
-> and inventory assets/people. Optional AI ticket-draft assist stays in
-> [spec 34](../34-ai-assisted-ops/index.md) (later).
+> and inventory assets/people. Manual **Create ticket** from a notification may
+> use [spec 34](../34-ai-assisted-ops/index.md) v2c AI draft when configured;
+> auto-create stays raw.
 
 **Date**: 2026-10-20  
 **Status**: Accepted (v1 merged) — [design v1](./design-v1.md) · [plan v1](./plan-v1.md)  
@@ -58,8 +59,10 @@ layout; those features are parked for later phases.
   cannot access `/tickets` or ticket mutations.
 - **AC-4**: Manual **New Ticket** and **Create ticket from notification**
   (prefill from notification title/body/asset; set `source_notification_id`).
-  Creating again for the same notification is a no-op or returns the existing
-  ticket (dedupe).
+  When AI is configured (Spec 34), manual create-from-notification may draft
+  subject/description (and valid category/priority) before insert; auto-create
+  keeps raw notification fields. Creating again for the same notification is a
+  no-op or returns the existing ticket (dedupe).
 - **AC-5**: Admin settings list Spec 19 `NotificationType`s with toggles for
   **auto-create ticket**. On successful `createNotification`, if the type is
   enabled and no ticket exists for that notification id, insert a ticket
@@ -92,7 +95,7 @@ List KPI strip: **Open / In Progress / Waiting / Resolved** (`waiting` =
    toggles.
 2. **v2** — waiting status; CSV export; simple SLA; **per-alert-rule ticket
    auto-create override** (shipped).
-3. **Later** — email-in; end-user portal; Spec 34 ticket-draft assist.
+3. **Later** — email-in; end-user portal.
 
 ## Out of scope / non-goals (v1)
 

@@ -38,6 +38,25 @@ export function parseAssistResult(raw: string): AssistResult {
       };
     }
   }
+  const td = o.ticketDraft;
+  if (td && typeof td === "object") {
+    const d = td as Record<string, unknown>;
+    const subject = typeof d.subject === "string" ? d.subject.trim() : "";
+    const description =
+      typeof d.description === "string" ? d.description.trim() : "";
+    if (subject && description) {
+      const priority =
+        d.priority === "low" || d.priority === "medium" || d.priority === "high"
+          ? d.priority
+          : undefined;
+      result.ticketDraft = {
+        subject,
+        description,
+        category: typeof d.category === "string" ? d.category.trim() : undefined,
+        priority,
+      };
+    }
+  }
   return result;
 }
 

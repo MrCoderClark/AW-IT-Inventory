@@ -182,6 +182,7 @@ export async function createTicketFromNotificationAction(
   const result = await createTicketFromNotification(
     notificationId,
     user!.email,
+    { useAi: true },
   );
   if (result === null) {
     return { ok: false, error: "That notification is no longer there." };
