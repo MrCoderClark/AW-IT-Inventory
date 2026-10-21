@@ -15,7 +15,7 @@
 - Branch from `main` as `feat/spec-33-ticketing-helpdesk-ui` before application code; never commit feature code on `main`.
 - `user:admin` only; no new RBAC permission.
 - No SLA, AI triage, Export, Tags, Related tickets, Critical priority, or real On Hold status.
-- KPI “On Hold” slot = **Closed** count; no % / vs-prior deltas.
+- KPI “On Hold” slot = **Waiting** (`waiting_on_user`); no % / vs-prior deltas.
 - Pagination page size **10** (client-side).
 - Location = linked asset’s `locations.name` (or —); Assignee remains a list filter (not Location filter).
 - User runs servers / `db:push` if needed; agent provides commands. No schema migration required if only joining existing tables.
@@ -57,7 +57,7 @@
 
 **Interfaces:**
 - Produces: `TicketListItem.locationLabel: string | null`
-- Produces: `ticketKpiCounts(tickets: { status: TicketStatus }[]): { open: number; inProgress: number; closed: number; resolved: number }`
+- Produces: `ticketKpiCounts(tickets: { status: TicketStatus }[]): { open: number; inProgress: number; waiting: number; resolved: number }`
 
 - [ ] **Step 1: Create branch**
 
@@ -81,11 +81,12 @@ it("counts KPI buckets", () => {
       { status: "open" },
       { status: "open" },
       { status: "in_progress" },
+      { status: "waiting_on_user" },
+      { status: "resolved" },
+      { status: "resolved" },
       { status: "closed" },
-      { status: "resolved" },
-      { status: "resolved" },
     ]),
-  ).toEqual({ open: 2, inProgress: 1, closed: 1, resolved: 2 });
+  ).toEqual({ open: 2, inProgress: 1, waiting: 1, resolved: 2 });
 });
 ```
 
@@ -107,12 +108,17 @@ import type { TicketStatus } from "@/lib/data";
 
 export function ticketKpiCounts(
   rows: { status: TicketStatus }[],
-): { open: number; inProgress: number; closed: number; resolved: number } {
-  const out = { open: 0, inProgress: 0, closed: 0, resolved: 0 };
+): {
+  open: number;
+  inProgress: number;
+  waiting: number;
+  resolved: number;
+} {
+  const out = { open: 0, inProgress: 0, waiting: 0, resolved: 0 };
   for (const r of rows) {
     if (r.status === "open") out.open += 1;
     else if (r.status === "in_progress") out.inProgress += 1;
-    else if (r.status === "closed") out.closed += 1;
+    else if (r.status === "waiting_on_user") out.waiting += 1;
     else if (r.status === "resolved") out.resolved += 1;
   }
   return out;
@@ -187,7 +193,7 @@ export function TicketKpiStrip({ tickets }: { tickets: TicketListItem[] }) {
   const cards = [
     { label: "Open", value: c.open, accent: "text-blue-600" },
     { label: "In Progress", value: c.inProgress, accent: "text-sky-600" },
-    { label: "Closed", value: c.closed, accent: "text-amber-600" },
+    { label: "Waiting", value: c.waiting, accent: "text-amber-600" },
     { label: "Resolved", value: c.resolved, accent: "text-emerald-600" },
   ] as const;
 
@@ -410,7 +416,7 @@ git commit -m "docs(spec 33): retarget ticket links and accept helpdesk UI desig
 | AC-UI-2 detail structure | Task 3 |
 | AC-UI-3 create / notif / deep links | Tasks 2–4 |
 | AC-UI-4 CRUD + admin gate | Task 3 (reuse actions) |
-| AC-UI-5 Closed for On Hold; no fake % | Tasks 1–2 |
+| AC-UI-5 Waiting for On Hold; no fake % | Tasks 1–2 |
 | `locationLabel` | Task 1 |
 
 ## Manual smoke checklist (user)

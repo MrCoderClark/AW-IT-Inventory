@@ -47,7 +47,13 @@ const ALL = "__all__";
 const UNASSIGNED = "__unassigned__";
 const PAGE = 10;
 
-const STATUSES: TicketStatus[] = ["open", "in_progress", "resolved", "closed"];
+const STATUSES: TicketStatus[] = [
+  "open",
+  "in_progress",
+  "waiting_on_user",
+  "resolved",
+  "closed",
+];
 const PRIORITIES: TicketPriority[] = ["low", "medium", "high"];
 
 function filterTickets(

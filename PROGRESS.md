@@ -7,6 +7,13 @@ via a feature branch + PR.
 
 ---
 
+## 🚧 Ticketing: Waiting on user status (spec 33 v2, `feat/spec-33-waiting-status`)
+
+Adds real status `waiting_on_user` (label **Waiting on user**) across schema types,
+Zod, list/detail status selects, and the list KPI strip (**Waiting** replaces the
+Closed stand-in for the mock On Hold slot). `closed` remains a valid ticket status
+but is no longer a KPI card. Docs: `docs/specs/33-ticketing/index.md`.
+
 ## 🚧 Reporting engine (spec 26, `feat/spec-26-reporting`)
 
 A custom **report builder** over live data, replacing the four hardcoded `/reports`

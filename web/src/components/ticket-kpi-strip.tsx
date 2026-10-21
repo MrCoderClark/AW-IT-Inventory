@@ -9,7 +9,7 @@ export function TicketKpiStrip({ tickets }: { tickets: TicketListItem[] }) {
   const cards = [
     { label: "Open", value: c.open, accent: "text-blue-600" },
     { label: "In Progress", value: c.inProgress, accent: "text-sky-600" },
-    { label: "Closed", value: c.closed, accent: "text-amber-600" },
+    { label: "Waiting", value: c.waiting, accent: "text-amber-600" },
     { label: "Resolved", value: c.resolved, accent: "text-emerald-600" },
   ] as const;
 

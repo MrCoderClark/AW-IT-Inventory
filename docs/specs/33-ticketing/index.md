@@ -78,13 +78,20 @@ not an external helpdesk webhook. Auto-create is a **global type matrix**
 (admin settings), not per Spec 30 alert rule in v1. RBAC reuses **`user:admin`**
 (no new permission in v1).
 
+## Statuses
+
+`open` · `in_progress` · `waiting_on_user` · `resolved` · `closed`
+
+List KPI strip: **Open / In Progress / Waiting / Resolved** (`waiting` =
+`waiting_on_user`; `closed` stays available on the ticket but is not a KPI card).
+
 ## Phases
 
 1. **v1 (this spec)** — AC-1–7: schema, CRUD, comments, manual + auto from
    notifications, `/tickets` UI (mock-guided, SLA/AI stripped), admin type
    toggles.
-2. **v2** — SLA timers / breach KPIs; richer statuses (e.g. waiting on user);
-   export; per-alert-rule auto-create override.
+2. **v2 (partial)** — `waiting_on_user` status + Waiting KPI (shipped). Still
+   open: SLA timers / breach KPIs; export; per-alert-rule auto-create override.
 3. **Later** — email-in; end-user portal; Spec 34 ticket-draft assist.
 
 ## Out of scope / non-goals (v1)

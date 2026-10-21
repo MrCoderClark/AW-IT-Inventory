@@ -278,7 +278,12 @@ export interface NotificationItem {
 
 /* ---------------- Ticketing (spec 33) ---------------- */
 
-export type TicketStatus = "open" | "in_progress" | "resolved" | "closed";
+export type TicketStatus =
+  | "open"
+  | "in_progress"
+  | "waiting_on_user"
+  | "resolved"
+  | "closed";
 export type TicketPriority = "low" | "medium" | "high";
 
 export interface TicketListItem {
