@@ -352,3 +352,58 @@ export async function sendAlertRuleEmail(
     return false;
   }
 }
+
+/** Outbound helpdesk ticket email (spec 33). */
+export type TicketEmailPayload = {
+  event: "assigned" | "comment" | "status";
+  ticket: {
+    id: string;
+    number: number;
+    subject: string;
+    status: string;
+    priority?: string;
+    assigneeEmail?: string | null;
+  };
+  recipients: string[];
+  detail: string;
+  actorEmail?: string;
+  ticketUrl?: string;
+};
+
+/**
+ * Ask aw-auth to email ticket recipients (spec 33). Same `h2tecs-web` service
+ * account (`notify:send`) as other notify calls. Returns true only when aw-auth
+ * reports `sent: true`.
+ */
+export async function sendTicketEmail(
+  payload: TicketEmailPayload,
+): Promise<boolean> {
+  const who = `#${payload.ticket.number} (${payload.event})`;
+  try {
+    const token = await getServiceToken();
+    if (!token) return false;
+    if (!payload.recipients.length) return false;
+
+    const res = await fetch(`${AUTH_API_URL}/v1/notify/ticket`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+      cache: "no-store",
+    });
+    if (res.status === 401) cachedToken = null;
+    if (!res.ok) {
+      console.error(
+        `[notify] ticket ${who} ${res.status}: ${(await res.text()).slice(0, 200)}`,
+      );
+      return false;
+    }
+    const data = (await res.json().catch(() => null)) as { sent?: boolean } | null;
+    return data?.sent === true;
+  } catch (err) {
+    console.error(`[notify] ticket email failed for ${who}:`, err);
+    return false;
+  }
+}
