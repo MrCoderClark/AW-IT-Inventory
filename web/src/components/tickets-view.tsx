@@ -33,6 +33,7 @@ import type {
   TicketPriority,
   TicketStatus,
 } from "@/lib/data";
+import { ticketSlaState } from "@/lib/ticket-sla";
 import {
   assigneeLabel,
   categoryLabel,
@@ -292,6 +293,7 @@ export function TicketsView({
                     <TableHead>Category</TableHead>
                     <TableHead>Priority</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>SLA</TableHead>
                     <TableHead>Created</TableHead>
                     <TableHead>Updated</TableHead>
                     <TableHead>Location</TableHead>
@@ -323,6 +325,9 @@ export function TicketsView({
                         <Badge variant={ticketStatusVariant(t.status)}>
                           {TICKET_STATUS_LABEL[t.status]}
                         </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        <SlaCell ticket={t} />
                       </TableCell>
                       <TableCell className="text-muted-foreground whitespace-nowrap text-sm">
                         {fmtDateTime(t.createdAt)}
@@ -388,6 +393,23 @@ export function TicketsView({
         linkAssets={linkAssets}
       />
     </>
+  );
+}
+
+function SlaCell({ ticket }: { ticket: TicketListItem }) {
+  const sla = ticketSlaState(ticket);
+  return (
+    <span
+      className={
+        sla.kind === "breached"
+          ? "text-destructive font-medium"
+          : sla.kind === "paused"
+            ? "text-muted-foreground"
+            : undefined
+      }
+    >
+      {sla.label}
+    </span>
   );
 }
 
