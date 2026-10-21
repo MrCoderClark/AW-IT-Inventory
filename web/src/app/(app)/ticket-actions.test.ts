@@ -15,6 +15,7 @@ const {
   getCurrentUserMock,
   hasPermissionMock,
   revalidateMock,
+  sendMock,
 } = vi.hoisted(() => ({
   createMock: vi.fn(),
   updateMock: vi.fn(),
@@ -25,6 +26,7 @@ const {
   getCurrentUserMock: vi.fn(),
   hasPermissionMock: vi.fn(),
   revalidateMock: vi.fn(),
+  sendMock: vi.fn(),
 }));
 
 vi.mock("@/db/tickets", () => ({
@@ -40,6 +42,9 @@ vi.mock("@/lib/auth/session", () => ({
   hasPermission: hasPermissionMock,
 }));
 vi.mock("next/cache", () => ({ revalidatePath: revalidateMock }));
+vi.mock("@/lib/notify", () => ({
+  sendTicketEmail: (...args: unknown[]) => sendMock(...args),
+}));
 
 import {
   addTicketCommentAction,
@@ -52,6 +57,18 @@ import {
 
 const TICKET_ID = "b4000000-0000-4000-8000-000000000001";
 const NOTIF_ID = "c5000000-0000-4000-8000-000000000001";
+
+function ticketRow(over: Record<string, unknown> = {}) {
+  return {
+    id: TICKET_ID,
+    number: 7,
+    subject: "Printer jam",
+    status: "open",
+    assigneeEmail: null as string | null,
+    requesterEmail: null as string | null,
+    ...over,
+  };
+}
 
 function grant(allowed: boolean) {
   getCurrentUserMock.mockResolvedValue(allowed ? { email: "admin@example.com" } : null);
@@ -193,5 +210,167 @@ describe("setTicketAutoCreateTypeAction", () => {
     expect(revalidateMock).toHaveBeenCalledWith("/admin");
     expect(revalidateMock).toHaveBeenCalledWith("/tickets");
     expect(res.ok).toBe(true);
+  });
+});
+
+describe("ticket actions — outbound email", () => {
+  beforeEach(() => {
+    grant(true);
+    sendMock.mockResolvedValue(true);
+    delete process.env.WEB_PUBLIC_URL;
+  });
+
+  it("loads the ticket before updating and emails the new assignee", async () => {
+    const order: string[] = [];
+    getTicketMock.mockImplementation(async () => {
+      order.push("get");
+      return ticketRow();
+    });
+    updateMock.mockImplementation(async () => {
+      order.push("update");
+      return true;
+    });
+
+    const res = await updateTicketAction(TICKET_ID, {
+      assigneeEmail: "tech@co.com",
+    });
+
+    expect(res.ok).toBe(true);
+    expect(order).toEqual(["get", "update"]);
+    expect(sendMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: "assigned",
+        recipients: ["tech@co.com"],
+        actorEmail: "admin@example.com",
+        detail: "Assigned to tech@co.com",
+        ticket: expect.objectContaining({
+          id: TICKET_ID,
+          number: 7,
+          subject: "Printer jam",
+          status: "open",
+          assigneeEmail: "tech@co.com",
+        }),
+      }),
+    );
+  });
+
+  it("emails assigned and status when both change", async () => {
+    getTicketMock.mockResolvedValue(ticketRow());
+    updateMock.mockResolvedValue(true);
+
+    const res = await updateTicketAction(TICKET_ID, {
+      assigneeEmail: "tech@co.com",
+      status: "in_progress",
+      subject: "Ignored for notify",
+    });
+
+    expect(res.ok).toBe(true);
+    expect(sendMock).toHaveBeenCalledTimes(2);
+    expect(sendMock).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ event: "assigned", recipients: ["tech@co.com"] }),
+    );
+    expect(sendMock).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        event: "status",
+        recipients: ["tech@co.com"],
+        detail: "open → in_progress",
+      }),
+    );
+  });
+
+  it("does not email when the actor assigns the ticket to themselves", async () => {
+    getTicketMock.mockResolvedValue(ticketRow());
+    updateMock.mockResolvedValue(true);
+
+    const res = await updateTicketAction(TICKET_ID, {
+      assigneeEmail: "admin@example.com",
+    });
+
+    expect(res.ok).toBe(true);
+    expect(updateMock).toHaveBeenCalled();
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("does not email when the update fails", async () => {
+    getTicketMock.mockResolvedValue(ticketRow({ assigneeEmail: "tech@co.com" }));
+    updateMock.mockResolvedValue(false);
+
+    const res = await updateTicketAction(TICKET_ID, { status: "closed" });
+
+    expect(res.ok).toBe(false);
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("does not email a subject-only update", async () => {
+    getTicketMock.mockResolvedValue(ticketRow({ assigneeEmail: "tech@co.com" }));
+    updateMock.mockResolvedValue(true);
+
+    const res = await updateTicketAction(TICKET_ID, { subject: "New subject" });
+
+    expect(res.ok).toBe(true);
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("still returns ok when the assignee email send throws", async () => {
+    getTicketMock.mockResolvedValue(ticketRow());
+    updateMock.mockResolvedValue(true);
+    sendMock.mockRejectedValue(new Error("smtp down"));
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const res = await updateTicketAction(TICKET_ID, {
+      assigneeEmail: "tech@co.com",
+    });
+
+    expect(res.ok).toBe(true);
+    spy.mockRestore();
+  });
+
+  it("emails the assignee after a user comment", async () => {
+    const order: string[] = [];
+    addCommentMock.mockImplementation(async () => {
+      order.push("comment");
+      return "comment-1";
+    });
+    getTicketMock.mockImplementation(async () => {
+      order.push("get");
+      return ticketRow({ assigneeEmail: "tech@co.com" });
+    });
+
+    const res = await addTicketCommentAction(TICKET_ID, "Checking logs.");
+
+    expect(res.ok).toBe(true);
+    expect(order).toEqual(["comment", "get"]);
+    expect(sendMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: "comment",
+        recipients: ["tech@co.com"],
+        detail: "Checking logs.",
+        actorEmail: "admin@example.com",
+      }),
+    );
+  });
+
+  it("does not email when the commenter is the assignee", async () => {
+    addCommentMock.mockResolvedValue("comment-1");
+    getTicketMock.mockResolvedValue(
+      ticketRow({ assigneeEmail: "admin@example.com" }),
+    );
+
+    const res = await addTicketCommentAction(TICKET_ID, "On it.");
+
+    expect(res.ok).toBe(true);
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("does not email when the comment cannot be saved", async () => {
+    addCommentMock.mockResolvedValue(null);
+
+    const res = await addTicketCommentAction(TICKET_ID, "Checking logs.");
+
+    expect(res.ok).toBe(false);
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(getTicketMock).not.toHaveBeenCalled();
   });
 });

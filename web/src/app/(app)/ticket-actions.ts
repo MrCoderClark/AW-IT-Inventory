@@ -3,6 +3,11 @@
 import { revalidatePath } from "next/cache";
 
 import {
+  maybeNotifyTicketComment,
+  maybeNotifyTicketUpdate,
+  type TicketNotifySnapshot,
+} from "@/db/ticket-notify";
+import {
   addTicketComment,
   createTicket,
   createTicketFromNotification,
@@ -50,6 +55,24 @@ function isNotificationType(value: unknown): value is NotificationType {
 
 function ticketNumberLabel(number: number): string {
   return `TKT-${number}`;
+}
+
+function notifySnapshot(ticket: {
+  id: string;
+  number: number;
+  subject: string;
+  status: string;
+  assigneeEmail?: string | null;
+  requesterEmail?: string | null;
+}): TicketNotifySnapshot {
+  return {
+    id: ticket.id,
+    number: ticket.number,
+    subject: ticket.subject,
+    status: ticket.status,
+    assigneeEmail: ticket.assigneeEmail ?? null,
+    requesterEmail: ticket.requesterEmail ?? null,
+  };
 }
 
 /**
@@ -134,8 +157,25 @@ export async function updateTicketAction(
     return { ok: false, error: firstTicketError(parsed.error) };
   }
 
+  const before = await getTicket(id);
   const updated = await updateTicket(id, parsed.data);
   if (!updated) return { ok: false, error: "That ticket is no longer there." };
+
+  if (before) {
+    const notifyPatch: { assigneeEmail?: string | null; status?: string } = {};
+    if ("assigneeEmail" in parsed.data) {
+      notifyPatch.assigneeEmail = parsed.data.assigneeEmail ?? null;
+    }
+    if ("status" in parsed.data && parsed.data.status !== undefined) {
+      notifyPatch.status = parsed.data.status;
+    }
+    await maybeNotifyTicketUpdate({
+      before: notifySnapshot(before),
+      after: notifySnapshot({ ...before, ...parsed.data }),
+      patch: notifyPatch,
+      actorEmail: user!.email,
+    });
+  }
 
   revalidateTickets(id);
   return { ok: true, message: "Updated that ticket." };
@@ -163,6 +203,16 @@ export async function addTicketCommentAction(
   });
   if (!commentId) {
     return { ok: false, error: "That ticket is no longer there." };
+  }
+
+  const ticket = await getTicket(ticketId);
+  if (ticket) {
+    await maybeNotifyTicketComment({
+      ticket: notifySnapshot(ticket),
+      actorEmail: user!.email,
+      body: parsed.data.body,
+      kind: "user",
+    });
   }
 
   revalidateTickets(ticketId);
