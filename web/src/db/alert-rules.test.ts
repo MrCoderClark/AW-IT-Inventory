@@ -123,6 +123,7 @@ const DISK = {
   consecutive: 1,
   severity: "critical",
   enabled: true,
+  ticketAutoCreate: "inherit" as const,
 };
 const CPU = {
   id: "rule-cpu",
@@ -133,6 +134,7 @@ const CPU = {
   consecutive: 2,
   severity: "warning",
   enabled: true,
+  ticketAutoCreate: "inherit" as const,
 };
 const ASSET = { id: "a1", tag: "H2TECS-COMP-1", name: "Reception PC" };
 
@@ -178,6 +180,7 @@ describe("evaluateMetricAlerts", () => {
       severity: "critical",
       assetId: "a1",
       href: "/assets/H2TECS-COMP-1",
+      meta: { alertRuleId: "rule-disk" },
     });
     expect(H.state.upserts[0]).toMatchObject({
       consecutive: 1,
@@ -212,6 +215,7 @@ describe("evaluateMetricAlerts", () => {
     expect(H.notifyMock.mock.calls[0][0]).toMatchObject({
       type: "metric-threshold",
       severity: "warning",
+      meta: { alertRuleId: "rule-cpu" },
     });
     expect(H.state.upserts[0]).toMatchObject({
       consecutive: 2,
@@ -244,6 +248,7 @@ describe("evaluateMetricAlerts", () => {
     expect(H.notifyMock.mock.calls[0][0]).toMatchObject({
       type: "metric-recovered",
       severity: "info",
+      meta: { alertRuleId: "rule-disk" },
     });
     expect(H.state.upserts[0]).toMatchObject({
       consecutive: 0,
@@ -281,6 +286,7 @@ const RULE_INPUT = {
   threshold: 90,
   consecutive: 2,
   severity: "warning" as const,
+  ticketAutoCreate: "inherit" as const,
 };
 
 const RULE_ID = "a3000000-0000-4000-8000-000000000001";

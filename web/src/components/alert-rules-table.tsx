@@ -26,6 +26,7 @@ import {
   formatCondition,
   SEVERITY_LABEL,
   SIGNAL_LABEL,
+  TICKET_AUTO_CREATE_LABEL,
   type AlertRuleRecord,
 } from "@/lib/alert-rules";
 
@@ -131,6 +132,7 @@ export function AlertRulesTable({ rules }: { rules: AlertRuleRecord[] }) {
                 <TableHead>Signal</TableHead>
                 <TableHead>Condition</TableHead>
                 <TableHead>Severity</TableHead>
+                <TableHead>Auto-create</TableHead>
                 <TableHead>Enabled</TableHead>
                 <TableHead className="w-[1%] text-right"> </TableHead>
               </TableRow>
@@ -147,6 +149,9 @@ export function AlertRulesTable({ rules }: { rules: AlertRuleRecord[] }) {
                     <Badge variant={severityVariant(rule.severity)}>
                       {SEVERITY_LABEL[rule.severity]}
                     </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {TICKET_AUTO_CREATE_LABEL[rule.ticketAutoCreate]}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">

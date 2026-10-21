@@ -9,6 +9,7 @@
 export type MetricSignal = "cpu_pct" | "mem_pct" | "disk_pct" | "uptime_sec";
 export type MetricOp = "gt" | "gte" | "lt" | "lte";
 export type AlertSeverity = "info" | "warning" | "critical";
+export type TicketAutoCreateMode = "inherit" | "on" | "off";
 
 export interface MetricRule {
   signal: MetricSignal;
@@ -44,6 +45,12 @@ export const SEVERITY_LABEL: Record<AlertSeverity, string> = {
   critical: "Critical",
 };
 
+export const TICKET_AUTO_CREATE_LABEL: Record<TicketAutoCreateMode, string> = {
+  inherit: "Inherit",
+  on: "On",
+  off: "Off",
+};
+
 /** One `alert_rules` row, safe to pass into the admin table/dialog. */
 export interface AlertRuleRecord {
   id: string;
@@ -54,6 +61,7 @@ export interface AlertRuleRecord {
   consecutive: number;
   severity: AlertSeverity;
   enabled: boolean;
+  ticketAutoCreate: TicketAutoCreateMode;
 }
 
 export function matchesThreshold(

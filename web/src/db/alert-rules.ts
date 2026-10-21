@@ -73,6 +73,7 @@ function toRecord(row: {
   consecutive: number;
   severity: AlertRuleRecord["severity"];
   enabled: boolean;
+  ticketAutoCreate: AlertRuleRecord["ticketAutoCreate"];
 }): AlertRuleRecord {
   return {
     id: row.id,
@@ -83,6 +84,7 @@ function toRecord(row: {
     consecutive: row.consecutive,
     severity: row.severity,
     enabled: row.enabled,
+    ticketAutoCreate: row.ticketAutoCreate,
   };
 }
 
@@ -120,6 +122,7 @@ export async function createAlertRule(
       threshold: input.threshold,
       consecutive: input.consecutive,
       severity: input.severity,
+      ticketAutoCreate: input.ticketAutoCreate,
       enabled: true,
     })
     .returning();
@@ -141,6 +144,7 @@ export async function updateAlertRule(
       threshold: input.threshold,
       consecutive: input.consecutive,
       severity: input.severity,
+      ticketAutoCreate: input.ticketAutoCreate,
       updatedAt: new Date(),
     })
     .where(eq(alertRules.id, id))
@@ -266,6 +270,7 @@ export async function evaluateMetricAlerts(
               ? `metric-threshold-${rule.id}-${assetId}-${now.toISOString()}`
               : `metric-recovered-${rule.id}-${assetId}-${now.toISOString()}`,
             assetId,
+            meta: { alertRuleId: rule.id },
           });
           if (id) {
             nextAlerted = fired ? "firing" : "ok";

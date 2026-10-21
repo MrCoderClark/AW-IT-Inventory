@@ -707,6 +707,10 @@ export const alertRules = pgTable("alert_rules", {
   consecutive: integer("consecutive").notNull().default(1),
   severity: text("severity").$type<"info" | "warning" | "critical">().notNull(),
   enabled: boolean("enabled").notNull().default(true),
+  ticketAutoCreate: text("ticket_auto_create")
+    .$type<"inherit" | "on" | "off">()
+    .notNull()
+    .default("inherit"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

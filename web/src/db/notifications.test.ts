@@ -204,6 +204,7 @@ describe("createNotification", () => {
       title: "Printer offline",
       body: "Lobby Canon is down.",
       assetId: "asset-pr-1",
+      meta: null,
     });
   });
 });
