@@ -11,10 +11,11 @@ export function TicketKpiStrip({ tickets }: { tickets: TicketListItem[] }) {
     { label: "In Progress", value: c.inProgress, accent: "text-sky-600" },
     { label: "Waiting", value: c.waiting, accent: "text-amber-600" },
     { label: "Resolved", value: c.resolved, accent: "text-emerald-600" },
+    { label: "SLA Breached", value: c.slaBreached, accent: "text-red-600" },
   ] as const;
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
       {cards.map((card) => (
         <div
           key={card.label}

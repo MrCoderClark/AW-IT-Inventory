@@ -44,18 +44,56 @@ describe("ticket-ui helpers", () => {
       }),
     ).toBe("admin");
   });
-});
 
-it("counts KPI buckets", () => {
-  expect(
-    ticketKpiCounts([
-      { status: "open" },
-      { status: "open" },
-      { status: "in_progress" },
-      { status: "waiting_on_user" },
-      { status: "resolved" },
-      { status: "resolved" },
-      { status: "closed" },
-    ]),
-  ).toEqual({ open: 2, inProgress: 1, waiting: 1, resolved: 2 });
+  it("counts KPI buckets including SLA breached", () => {
+    const now = new Date("2026-10-21T18:00:00.000Z");
+    expect(
+      ticketKpiCounts(
+        [
+          {
+            status: "open",
+            priority: "high",
+            createdAt: "2026-10-21T12:00:00.000Z", // due 16:00 → breached
+          },
+          {
+            status: "open",
+            priority: "high",
+            createdAt: "2026-10-21T16:00:00.000Z", // due 20:00 → ok
+          },
+          {
+            status: "in_progress",
+            priority: "medium",
+            createdAt: "2026-10-21T12:00:00.000Z",
+          },
+          {
+            status: "waiting_on_user",
+            priority: "high",
+            createdAt: "2026-10-20T00:00:00.000Z", // paused, not breached
+          },
+          {
+            status: "resolved",
+            priority: "high",
+            createdAt: "2026-10-20T00:00:00.000Z",
+          },
+          {
+            status: "resolved",
+            priority: "low",
+            createdAt: "2026-10-20T00:00:00.000Z",
+          },
+          {
+            status: "closed",
+            priority: "high",
+            createdAt: "2026-10-20T00:00:00.000Z",
+          },
+        ],
+        now,
+      ),
+    ).toEqual({
+      open: 2,
+      inProgress: 1,
+      waiting: 1,
+      resolved: 2,
+      slaBreached: 1,
+    });
+  });
 });
