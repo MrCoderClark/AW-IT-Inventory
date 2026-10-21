@@ -180,6 +180,7 @@ describe("evaluateMetricAlerts", () => {
       severity: "critical",
       assetId: "a1",
       href: "/assets/H2TECS-COMP-1",
+      meta: { alertRuleId: "rule-disk" },
     });
     expect(H.state.upserts[0]).toMatchObject({
       consecutive: 1,
@@ -214,6 +215,7 @@ describe("evaluateMetricAlerts", () => {
     expect(H.notifyMock.mock.calls[0][0]).toMatchObject({
       type: "metric-threshold",
       severity: "warning",
+      meta: { alertRuleId: "rule-cpu" },
     });
     expect(H.state.upserts[0]).toMatchObject({
       consecutive: 2,
@@ -246,6 +248,7 @@ describe("evaluateMetricAlerts", () => {
     expect(H.notifyMock.mock.calls[0][0]).toMatchObject({
       type: "metric-recovered",
       severity: "info",
+      meta: { alertRuleId: "rule-disk" },
     });
     expect(H.state.upserts[0]).toMatchObject({
       consecutive: 0,

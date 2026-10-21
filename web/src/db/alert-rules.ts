@@ -270,6 +270,7 @@ export async function evaluateMetricAlerts(
               ? `metric-threshold-${rule.id}-${assetId}-${now.toISOString()}`
               : `metric-recovered-${rule.id}-${assetId}-${now.toISOString()}`,
             assetId,
+            meta: { alertRuleId: rule.id },
           });
           if (id) {
             nextAlerted = fired ? "firing" : "ok";
