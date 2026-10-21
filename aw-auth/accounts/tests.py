@@ -234,6 +234,63 @@ class ReportDeliveryResendTest(TestCase):
         mock_urlopen.assert_not_called()
 
 
+class TicketNotifyResendTest(TestCase):
+    """Outbound ticket email (Spec 33) — explicit recipients only."""
+
+    def setUp(self):
+        os.environ["RESEND_API_KEY"] = "re_test_key"
+        os.environ["EMAIL_FROM"] = "H2Tecs <tickets@example.com>"
+
+    def tearDown(self):
+        os.environ.pop("RESEND_API_KEY", None)
+        os.environ.pop("EMAIL_FROM", None)
+
+    @patch.object(notifications, "resolve_admin_emails", return_value=["admin@x.com"])
+    @patch("accounts.notifications.urllib.request.urlopen")
+    def test_sends_to_explicit_recipients(self, mock_urlopen, mock_admins):
+        import json
+
+        resp = MagicMock()
+        resp.status = 200
+        mock_urlopen.return_value.__enter__.return_value = resp
+
+        ok = notifications.send_ticket_event(
+            "assigned",
+            {
+                "id": "t1",
+                "number": 42,
+                "subject": "Disk full",
+                "status": "open",
+                "assigneeEmail": "tech@co.com",
+            },
+            ["tech@co.com"],
+            "Assigned to tech@co.com",
+            actor_email="admin@co.com",
+            ticket_url="https://inventory.example/tickets/t1",
+        )
+
+        self.assertTrue(ok)
+        body = json.loads(mock_urlopen.call_args.args[0].data)
+        self.assertEqual(body["to"], ["tech@co.com"])
+        mock_admins.assert_not_called()
+        self.assertIn("#42", body["subject"])
+        self.assertIn("assigned", body["subject"].lower())
+        self.assertIn("Disk full", body["text"])
+        self.assertIn("https://inventory.example/tickets/t1", body["text"])
+        self.assertIn("<", body["html"])  # has HTML
+
+    @patch("accounts.notifications.urllib.request.urlopen")
+    def test_returns_false_without_recipients(self, mock_urlopen):
+        ok = notifications.send_ticket_event(
+            "comment",
+            {"id": "t1", "number": 1, "subject": "x", "status": "open"},
+            [],
+            "hi",
+        )
+        self.assertFalse(ok)
+        mock_urlopen.assert_not_called()
+
+
 class UserManagementTestBase(TestCase):
     """Seed the RBAC bits these tests need and build an admin + a plain user."""
 
