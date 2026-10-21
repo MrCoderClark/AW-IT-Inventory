@@ -13,6 +13,17 @@ import { db } from "./index";
 import { ticketEmailMessages, tickets } from "./schema";
 import { addTicketComment, getTicket } from "./tickets";
 
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** Same check as `tickets.ts`: postgres.js exposes SQLSTATE on `.code`. */
+function isUniqueViolation(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    (err as { code?: unknown }).code === "23505"
+  );
+}
+
 /**
  * Spec 33 Message-ID store. Outbound sends and inbound replies share one
  * unique message id so a reply can be matched and a duplicate webhook ignored.
@@ -30,8 +41,10 @@ export type RecordTicketEmailMessageInput = {
 
 export async function recordTicketEmailMessage(
   input: RecordTicketEmailMessageInput,
+  tx?: Tx,
 ): Promise<void> {
-  await db.insert(ticketEmailMessages).values({
+  const q = (tx ?? db) as typeof db;
+  await q.insert(ticketEmailMessages).values({
     ticketId: input.ticketId,
     direction: input.direction,
     messageId: input.messageId,
@@ -109,8 +122,8 @@ function htmlToTextRough(html: string | null): string {
 
 /**
  * Reply-only inbound mail. Matches an existing ticket, authorizes the sender,
- * and records the message id before the comment so a retried webhook cannot
- * add the comment twice.
+ * then inserts the inbound Message-ID and the comment in one transaction.
+ * A unique-violation on that insert is a duplicate. Notify runs only after commit.
  */
 export async function processInboundEmail(
   mail: InboundEmail,
@@ -149,23 +162,39 @@ export async function processInboundEmail(
   if (!body) return { status: "ignored", reason: "empty_body" };
 
   try {
-    await recordTicketEmailMessage({
-      ticketId: ticket.id,
-      direction: "inbound",
-      messageId: mail.messageId,
-      inReplyTo,
-      fromEmail: from,
+    await db.transaction(async (tx) => {
+      await recordTicketEmailMessage(
+        {
+          ticketId: ticket.id,
+          direction: "inbound",
+          messageId: mail.messageId,
+          inReplyTo,
+          fromEmail: from,
+        },
+        tx,
+      );
+      const commentId = await addTicketComment(
+        ticket.id,
+        {
+          authorEmail: from,
+          body,
+          kind: "user",
+        },
+        tx,
+      );
+      // Null means the comment was not stored. Throw so the Message-ID insert
+      // rolls back with it; a committed id without a comment would swallow retries.
+      if (!commentId) {
+        throw new Error("inbound comment was not stored");
+      }
     });
-  } catch {
-    return { status: "duplicate" };
+  } catch (err) {
+    if (isUniqueViolation(err)) return { status: "duplicate" };
+    throw err;
   }
 
-  await addTicketComment(ticket.id, {
-    authorEmail: from,
-    body,
-    kind: "user",
-  });
   // Dynamic import: ticket-notify records outbound ids through this module.
+  // After commit only — a notify failure must not roll back the comment.
   const { maybeNotifyTicketComment } = await import("./ticket-notify");
   await maybeNotifyTicketComment({
     ticket: {

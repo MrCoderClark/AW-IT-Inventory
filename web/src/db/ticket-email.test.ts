@@ -31,6 +31,29 @@ const H = vi.hoisted(() => {
       return Promise.resolve();
     },
   }));
+  const tx = { select, insert };
+  const session = {
+    inTransaction: false,
+    committed: false,
+    notifyDuringTransaction: false,
+  };
+  const transaction = vi.fn(async (cb: (t: typeof tx) => Promise<unknown>) => {
+    const startValues = insertValues.length;
+    const startTables = insertTables.length;
+    session.inTransaction = true;
+    session.committed = false;
+    try {
+      const result = await cb(tx);
+      session.committed = true;
+      return result;
+    } catch (err) {
+      insertValues.splice(startValues);
+      insertTables.splice(startTables);
+      throw err;
+    } finally {
+      session.inTransaction = false;
+    }
+  });
   const getTicket = vi.fn();
   const addTicketComment = vi.fn();
   const maybeNotifyTicketComment = vi.fn();
@@ -42,6 +65,9 @@ const H = vi.hoisted(() => {
     insertError,
     select,
     insert,
+    tx,
+    session,
+    transaction,
     getTicket,
     addTicketComment,
     maybeNotifyTicketComment,
@@ -53,6 +79,7 @@ vi.mock("@/db/index", () => ({
   db: {
     select: H.select,
     insert: H.insert,
+    transaction: H.transaction,
   },
 }));
 vi.mock("@/db/tickets", () => ({
@@ -114,14 +141,20 @@ beforeEach(() => {
   H.insertValues.length = 0;
   H.insertTables.length = 0;
   H.insertError.current = null;
+  H.session.inTransaction = false;
+  H.session.committed = false;
+  H.session.notifyDuringTransaction = false;
   H.select.mockClear();
   H.insert.mockClear();
+  H.transaction.mockClear();
   H.getTicket.mockReset();
   H.addTicketComment.mockReset();
   H.maybeNotifyTicketComment.mockReset();
   H.getTicket.mockResolvedValue(TICKET);
   H.addTicketComment.mockResolvedValue("comment-1");
-  H.maybeNotifyTicketComment.mockResolvedValue(undefined);
+  H.maybeNotifyTicketComment.mockImplementation(async () => {
+    if (H.session.inTransaction) H.session.notifyDuringTransaction = true;
+  });
 });
 
 describe("recordTicketEmailMessage", () => {
@@ -229,11 +262,17 @@ describe("processInboundEmail", () => {
         fromEmail: "tech@example.com",
       },
     ]);
-    expect(H.addTicketComment).toHaveBeenCalledWith("ticket-1", {
-      authorEmail: "tech@example.com",
-      body: "The printer is still down.",
-      kind: "user",
-    });
+    expect(H.transaction).toHaveBeenCalledTimes(1);
+    expect(H.session.committed).toBe(true);
+    expect(H.addTicketComment).toHaveBeenCalledWith(
+      "ticket-1",
+      {
+        authorEmail: "tech@example.com",
+        body: "The printer is still down.",
+        kind: "user",
+      },
+      H.tx,
+    );
     expect(H.maybeNotifyTicketComment).toHaveBeenCalledWith({
       ticket: {
         id: "ticket-1",
@@ -253,6 +292,7 @@ describe("processInboundEmail", () => {
     expect(
       H.maybeNotifyTicketComment.mock.invocationCallOrder[0],
     ).toBeGreaterThan(H.addTicketComment.mock.invocationCallOrder[0]);
+    expect(H.session.notifyDuringTransaction).toBe(false);
   });
 
   it("matches In-Reply-To before the subject and accepts the requester", async () => {
@@ -274,11 +314,15 @@ describe("processInboundEmail", () => {
       inReplyTo: "<out@h2tecs.local>",
       fromEmail: "user@example.com",
     });
-    expect(H.addTicketComment).toHaveBeenCalledWith("ticket-1", {
-      authorEmail: "user@example.com",
-      body: "I rebooted it.",
-      kind: "user",
-    });
+    expect(H.addTicketComment).toHaveBeenCalledWith(
+      "ticket-1",
+      {
+        authorEmail: "user@example.com",
+        body: "I rebooted it.",
+        kind: "user",
+      },
+      H.tx,
+    );
   });
 
   it("uses a rough html-to-text body when text is blank", async () => {
@@ -296,6 +340,7 @@ describe("processInboundEmail", () => {
     expect(H.addTicketComment).toHaveBeenCalledWith(
       "ticket-1",
       expect.objectContaining({ body: "Need a new toner" }),
+      H.tx,
     );
   });
 
@@ -345,7 +390,7 @@ describe("processInboundEmail", () => {
     expect(H.maybeNotifyTicketComment).not.toHaveBeenCalled();
   });
 
-  it("treats a unique message-id insert conflict as a duplicate", async () => {
+  it("treats a unique message-id insert conflict (23505) as a duplicate", async () => {
     queueSubjectMatch();
     H.insertError.current = Object.assign(new Error("duplicate key"), {
       code: "23505",
@@ -357,6 +402,35 @@ describe("processInboundEmail", () => {
 
     expect(H.addTicketComment).not.toHaveBeenCalled();
     expect(H.maybeNotifyTicketComment).not.toHaveBeenCalled();
+    expect(H.session.committed).toBe(false);
+    expect(H.insertValues).toEqual([]);
+  });
+
+  it("rethrows an insert error that is not 23505 and does not comment", async () => {
+    queueSubjectMatch();
+    const err = Object.assign(new Error("connection reset"), { code: "08006" });
+    H.insertError.current = err;
+
+    await expect(processInboundEmail(inbound())).rejects.toBe(err);
+
+    expect(H.addTicketComment).not.toHaveBeenCalled();
+    expect(H.maybeNotifyTicketComment).not.toHaveBeenCalled();
+    expect(H.session.committed).toBe(false);
+    expect(H.insertValues).toEqual([]);
+  });
+
+  it("rolls back the inbound message when the comment is not stored", async () => {
+    queueSubjectMatch();
+    H.addTicketComment.mockResolvedValue(null);
+
+    await expect(processInboundEmail(inbound())).rejects.toThrow(
+      /inbound comment was not stored/,
+    );
+
+    expect(H.addTicketComment).toHaveBeenCalledTimes(1);
+    expect(H.maybeNotifyTicketComment).not.toHaveBeenCalled();
+    expect(H.session.committed).toBe(false);
+    expect(H.insertValues).toEqual([]);
   });
 
   it("ignores a reply whose body is empty after quote stripping", async () => {
