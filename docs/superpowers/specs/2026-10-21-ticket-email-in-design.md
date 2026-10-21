@@ -19,7 +19,7 @@ attachment storage in this slice.
 |---|---|
 | Scope | Reply-only (no new tickets from mail) |
 | Transport | Resend inbound webhook |
-| Match | Subject `[#N]` primary; `In-Reply-To` / `References` via stored Message-IDs |
+| Match | Duplicate inbound Message-ID first; then ticket via `In-Reply-To` (stored message ids), then subject `[#N]` only (not bare `#N`, not `References`) |
 | AuthZ | From must be assignee **or** requester (case-insensitive) |
 | Attachments | Ignore / do not store |
 | Architecture | Web owns webhook + ticket write |
@@ -32,20 +32,21 @@ attachment storage in this slice.
 2. Resend delivers a signed inbound event to web `POST /api/ingest/email`.
 3. Web verifies the Resend/Svix signature. Invalid signature → **401** `{ error: "invalid signature" }` and no fetch.
 4. Parse From, subject, plain-text body (prefer text/plain; strip HTML if needed),
-   Message-ID, In-Reply-To / References.
-5. Resolve ticket:
-   - Look up Message-ID / In-Reply-To in `ticket_email_messages`; else
-   - Parse `[#N]` (or equivalent `#N` token) from subject.
-6. If no ticket → log, return 200, stop.
-7. If From ∉ {assigneeEmail, requesterEmail} → log, return 200, stop.
-8. Idempotency: if inbound Message-ID already stored → return 200, no second comment.
-9. In one transaction: insert the `inbound` row, then `addTicketComment` with
+   Message-ID, and In-Reply-To.
+5. Idempotency first. A missing Message-ID is ignored (**200**). If that inbound
+   Message-ID is already stored → return **200**, no second comment.
+6. Resolve the ticket, in order:
+   - `In-Reply-To` against stored message ids in `ticket_email_messages`;
+   - else the subject token `[#N]` only (not a bare `#N`, not `References`).
+7. If no ticket, From ∉ {assigneeEmail, requesterEmail}, or the stripped body
+   is empty → log, return **200**, stop.
+8. In one transaction: insert the `inbound` row, then `addTicketComment` with
    `authorEmail = From`, `kind = "user"` (quoted reply stripped, body truncated).
    A unique violation on that insert is a duplicate (**200**). If the comment
    is not stored, the insert rolls back and the route returns **500**.
-10. After commit, existing outbound notify may email the other party (e.g.
-    requester replies → assignee notified) via current skip-self rules. A
-    notify failure does not roll back the comment.
+9. After commit, existing outbound notify may email the other party (e.g.
+   requester replies → assignee notified) via current skip-self rules. A
+   notify failure does not roll back the comment.
 
 `fetchReceivedEmail` returning null → **500** `{ error: "fetch failed" }`.
 `processInboundEmail` throwing → **500** `{ error: "process failed" }`. Both
