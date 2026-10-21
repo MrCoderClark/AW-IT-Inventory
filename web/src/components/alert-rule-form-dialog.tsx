@@ -26,12 +26,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { AlertRuleRecord } from "@/lib/alert-rules";
-import { OP_LABEL, SIGNAL_LABEL, SEVERITY_LABEL } from "@/lib/alert-rules";
+import {
+  OP_LABEL,
+  SIGNAL_LABEL,
+  SEVERITY_LABEL,
+  TICKET_AUTO_CREATE_LABEL,
+} from "@/lib/alert-rules";
 import {
   ALERT_SEVERITIES,
   EMPTY_ALERT_RULE_FORM,
   METRIC_OPS,
   METRIC_SIGNALS,
+  TICKET_AUTO_CREATE_MODES,
   alertRuleInputSchema,
   fieldErrors,
   type AlertRuleFormValues,
@@ -234,6 +240,42 @@ export function AlertRuleFormDialog({
                   ))}
                 </SelectContent>
               </Select>
+            </Field>
+
+            <Field label="Ticket auto-create" error={errors.ticketAutoCreate}>
+              <Select
+                value={values.ticketAutoCreate}
+                onValueChange={(v) =>
+                  set(
+                    "ticketAutoCreate",
+                    v as AlertRuleFormValues["ticketAutoCreate"],
+                  )
+                }
+              >
+                <SelectTrigger
+                  className="w-full"
+                  aria-invalid={!!errors.ticketAutoCreate}
+                >
+                  <SelectValue>
+                    {(value) =>
+                      TICKET_AUTO_CREATE_LABEL[
+                        value as AlertRuleFormValues["ticketAutoCreate"]
+                      ] ?? "Choose a mode"
+                    }
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {TICKET_AUTO_CREATE_MODES.map((m) => (
+                    <SelectItem key={m} value={m}>
+                      {TICKET_AUTO_CREATE_LABEL[m]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-muted-foreground text-xs">
+                Inherit follows Admin → Ticket auto-create for metric notification
+                types.
+              </p>
             </Field>
           </div>
 

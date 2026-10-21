@@ -79,6 +79,7 @@ describe("AlertRulesTable — render (AC-1, AC-8)", () => {
     expect(
       screen.getByRole("switch", { name: /Disable CPU high/i }),
     ).toBeChecked();
+    expect(screen.getAllByText("Inherit")).toHaveLength(2);
   });
 
   it("shows empty copy when there are no rules", () => {
