@@ -9,8 +9,9 @@ via a feature branch + PR.
 
 ## 🚧 Spec 33: Outbound ticket email (`feat/spec-33-outbound-ticket-email`)
 
-Email on ticket assign / comment / status (and related) via aw-auth notify + Resend —
-outbound only; email-in still Later. Design TBD (brainstorming).
+Email assignee on assign / user comment / status via aw-auth notify + Resend —
+outbound only; email-in still Later. Design:
+`docs/superpowers/specs/2026-10-21-outbound-ticket-email-design.md`.
 
 ## Shipped ✅ — Spec 34 v2c: Ticket draft assist (merged #115)
 
