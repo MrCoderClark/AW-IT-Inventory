@@ -442,6 +442,67 @@ def send_report(
     )
 
 
+def send_ticket_event(
+    event: str,
+    ticket: dict,
+    recipients: list[str],
+    detail: str,
+    *,
+    actor_email: str | None = None,
+    ticket_url: str | None = None,
+) -> bool:
+    """Email explicit recipients about a ticket event (Spec 33 outbound).
+
+    ``event`` is assigned | comment | status. Never falls back to admin list.
+    """
+    if not recipients:
+        logger.warning("ticket-notify (%s) not sent: no recipients.", event)
+        return False
+
+    number = ticket.get("number")
+    subject_line = ticket.get("subject") or "(no subject)"
+    verb = {
+        "assigned": "assigned",
+        "comment": "new comment",
+        "status": "status updated",
+    }.get(event, event)
+
+    subject = f"[H2Tecs] Ticket #{number} — {verb}"
+    lines = [
+        f"Ticket #{number}: {subject_line}",
+        f"Status: {ticket.get('status') or '—'}",
+        f"Event: {verb}",
+        f"Detail: {detail}",
+    ]
+    if actor_email:
+        lines.append(f"By: {actor_email}")
+    if ticket_url:
+        lines.append(f"Open: {ticket_url}")
+    body = "\n".join(lines)
+
+    esc = html_lib.escape
+    html_parts = [
+        f"<p><strong>Ticket #{esc(str(number))}</strong>: {esc(str(subject_line))}</p>",
+        f"<p>Status: {esc(str(ticket.get('status') or '—'))}</p>",
+        f"<p>Event: {esc(verb)}</p>",
+        f"<p>Detail: {esc(detail)}</p>",
+    ]
+    if actor_email:
+        html_parts.append(f"<p>By: {esc(actor_email)}</p>")
+    if ticket_url:
+        safe_url = esc(ticket_url)
+        html_parts.append(f'<p><a href="{safe_url}">Open ticket</a></p>')
+    html = "\n".join(html_parts)
+
+    return _deliver(
+        subject,
+        body,
+        label=f"ticket-notify ({event})",
+        html=html,
+        recipients=recipients,
+    )
+
+
 def send_counter_report(printers: list[dict]) -> bool:
     """Email every admin the daily printer page-counter report (spec 14, AC-4).
 

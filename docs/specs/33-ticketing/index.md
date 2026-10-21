@@ -95,11 +95,15 @@ List KPI strip: **Open / In Progress / Waiting / Resolved** (`waiting` =
    toggles.
 2. **v2** — waiting status; CSV export; simple SLA; **per-alert-rule ticket
    auto-create override** (shipped).
-3. **Later** — email-in; end-user portal.
+3. **v2.5 — outbound ticket email** — [design](../../superpowers/specs/2026-10-21-outbound-ticket-email-design.md):
+   assignee notified on assign / user comment / status via aw-auth + Resend
+   (shipped on feat/spec-33-outbound-ticket-email).
+4. **Later** — email-in; end-user portal.
 
 ## Out of scope / non-goals (v1)
 
-- Email-in / outbound ticket email threads.
+- Email-in (parked). Outbound assignee email shipped on
+  `feat/spec-33-outbound-ticket-email`; no email-in or reply threads.
 - SLA clocks, escalation, “SLA Breached” KPIs.
 - AI triage / auto-triage / confidence UI.
 - End-user self-service.

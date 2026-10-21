@@ -113,3 +113,58 @@ describe("sendAlertRuleEmail (spec 30, AC-6)", () => {
     expect(await sendAlertRuleEmail(RULE_PAYLOAD)).toBe(false);
   });
 });
+
+const TICKET_PAYLOAD = {
+  event: "assigned" as const,
+  ticket: {
+    id: "t-1",
+    number: 42,
+    subject: "Printer jam",
+    status: "open",
+    priority: "normal",
+    assigneeEmail: "tech@co.com",
+  },
+  recipients: ["tech@co.com"],
+  detail: "Assigned to you",
+  actorEmail: "admin@co.com",
+};
+
+describe("sendTicketEmail (spec 33)", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    process.env.H2TECS_WEB_CLIENT_ID = "cid";
+    process.env.H2TECS_WEB_CLIENT_SECRET = "sec";
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("posts to /v1/notify/ticket and returns true when sent", async () => {
+    const fetchMock = mockFetch({ ok: true, sent: true });
+    vi.stubGlobal("fetch", fetchMock);
+    const { sendTicketEmail } = await import("./notify");
+    expect(await sendTicketEmail(TICKET_PAYLOAD)).toBe(true);
+    const urls = fetchMock.mock.calls.map((c) => String(c[0]));
+    expect(urls.some((u) => u.includes("/v1/notify/ticket"))).toBe(true);
+  });
+
+  it("returns false when aw-auth accepted but sent=false", async () => {
+    vi.stubGlobal("fetch", mockFetch({ ok: true, sent: false }));
+    const { sendTicketEmail } = await import("./notify");
+    expect(await sendTicketEmail(TICKET_PAYLOAD)).toBe(false);
+  });
+
+  it("skips the call and returns false when h2tecs-web creds are unset", async () => {
+    delete process.env.H2TECS_WEB_CLIENT_ID;
+    delete process.env.H2TECS_WEB_CLIENT_SECRET;
+    const spy = vi.fn();
+    vi.stubGlobal("fetch", spy);
+    const { sendTicketEmail } = await import("./notify");
+    expect(await sendTicketEmail(TICKET_PAYLOAD)).toBe(false);
+    expect(spy).not.toHaveBeenCalled();
+  });
+});

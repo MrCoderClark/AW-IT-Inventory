@@ -23,6 +23,7 @@ from .notifications import (
     send_counter_report,
     send_printer_alert,
     send_report,
+    send_ticket_event,
 )
 from .permissions import HasAppPerm
 from .serializers import (
@@ -517,6 +518,61 @@ class ReportDeliveryView(APIView):
             )
 
         sent = send_report(report, table, recipients, attachment)
+        return Response({"ok": True, "sent": sent})
+
+
+class TicketNotifyView(APIView):
+    """Outbound ticket email (Spec 33). Explicit recipients[]; notify:send."""
+
+    authentication_classes: list = []  # machine caller; token verified by scope
+    permission_classes = [HasServiceScope]
+    required_scope = "notify:send"
+
+    @extend_schema(request=None, responses={200: None})
+    def post(self, request):
+        event = request.data.get("event")
+        ticket = request.data.get("ticket") or {}
+        recipients = request.data.get("recipients")
+        detail = request.data.get("detail")
+        actor_email = request.data.get("actorEmail")
+        ticket_url = request.data.get("ticketUrl")
+
+        if event not in ("assigned", "comment", "status"):
+            return Response(
+                {"detail": "event must be assigned|comment|status"},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        if not isinstance(ticket, dict) or ticket.get("number") is None:
+            return Response(
+                {"detail": "ticket{number,subject,status} is required"},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        if not isinstance(recipients, list) or not all(
+            isinstance(r, str) and r for r in recipients
+        ):
+            return Response(
+                {"detail": "recipients[] of email strings is required"},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        if not recipients:
+            return Response(
+                {"detail": "recipients[] must not be empty"},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        if not isinstance(detail, str) or not detail.strip():
+            return Response(
+                {"detail": "detail string is required"},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+
+        sent = send_ticket_event(
+            event,
+            ticket,
+            recipients,
+            detail.strip(),
+            actor_email=actor_email if isinstance(actor_email, str) else None,
+            ticket_url=ticket_url if isinstance(ticket_url, str) else None,
+        )
         return Response({"ok": True, "sent": sent})
 
 

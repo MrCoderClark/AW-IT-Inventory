@@ -234,6 +234,172 @@ class ReportDeliveryResendTest(TestCase):
         mock_urlopen.assert_not_called()
 
 
+class TicketNotifyResendTest(TestCase):
+    """Outbound ticket email (Spec 33) — explicit recipients only."""
+
+    def setUp(self):
+        os.environ["RESEND_API_KEY"] = "re_test_key"
+        os.environ["EMAIL_FROM"] = "H2Tecs <tickets@example.com>"
+
+    def tearDown(self):
+        os.environ.pop("RESEND_API_KEY", None)
+        os.environ.pop("EMAIL_FROM", None)
+
+    @patch.object(notifications, "resolve_admin_emails", return_value=["admin@x.com"])
+    @patch("accounts.notifications.urllib.request.urlopen")
+    def test_sends_to_explicit_recipients(self, mock_urlopen, mock_admins):
+        import json
+
+        resp = MagicMock()
+        resp.status = 200
+        mock_urlopen.return_value.__enter__.return_value = resp
+
+        ok = notifications.send_ticket_event(
+            "assigned",
+            {
+                "id": "t1",
+                "number": 42,
+                "subject": "Disk full",
+                "status": "open",
+                "assigneeEmail": "tech@co.com",
+            },
+            ["tech@co.com"],
+            "Assigned to tech@co.com",
+            actor_email="admin@co.com",
+            ticket_url="https://inventory.example/tickets/t1",
+        )
+
+        self.assertTrue(ok)
+        body = json.loads(mock_urlopen.call_args.args[0].data)
+        self.assertEqual(body["to"], ["tech@co.com"])
+        mock_admins.assert_not_called()
+        self.assertIn("#42", body["subject"])
+        self.assertIn("assigned", body["subject"].lower())
+        self.assertIn("Disk full", body["text"])
+        self.assertIn("https://inventory.example/tickets/t1", body["text"])
+        self.assertIn("<", body["html"])  # has HTML
+
+    @patch("accounts.notifications.urllib.request.urlopen")
+    def test_returns_false_without_recipients(self, mock_urlopen):
+        ok = notifications.send_ticket_event(
+            "comment",
+            {"id": "t1", "number": 1, "subject": "x", "status": "open"},
+            [],
+            "hi",
+        )
+        self.assertFalse(ok)
+        mock_urlopen.assert_not_called()
+
+
+class TicketNotifyViewTest(TestCase):
+    """POST /v1/notify/ticket (Spec 33). Explicit recipients; notify:send."""
+
+    def setUp(self):
+        self.client = APIClient()
+
+    def test_url_resolves(self):
+        self.assertEqual(reverse("notify-ticket"), "/v1/notify/ticket")
+
+    def _payload(self, **overrides):
+        body = {
+            "event": "assigned",
+            "ticket": {"number": 42, "subject": "Disk full", "status": "open"},
+            "recipients": ["tech@co.com"],
+            "detail": "Assigned to tech@co.com",
+            "actorEmail": "admin@co.com",
+            "ticketUrl": "https://inventory.example/tickets/t1",
+        }
+        body.update(overrides)
+        return body
+
+    def _post(self, payload):
+        return self.client.post(
+            reverse("notify-ticket"),
+            payload,
+            format="json",
+            HTTP_AUTHORIZATION="Bearer svc-token",
+        )
+
+    def test_rejects_missing_bearer(self):
+        res = self.client.post(
+            reverse("notify-ticket"), self._payload(), format="json"
+        )
+        self.assertEqual(res.status_code, 403)
+
+    @patch("accounts.service_auth.verify_service_scope", return_value=False)
+    def test_rejects_token_without_notify_scope(self, mock_scope):
+        res = self._post(self._payload())
+        self.assertEqual(res.status_code, 403)
+        self.assertEqual(mock_scope.call_args.args[1], "notify:send")
+
+    @patch("accounts.service_auth.verify_service_scope", return_value=True)
+    def test_rejects_bad_event(self, _scope):
+        res = self._post(self._payload(event="created"))
+        self.assertEqual(res.status_code, 422)
+        self.assertEqual(res.data["detail"], "event must be assigned|comment|status")
+
+    @patch("accounts.service_auth.verify_service_scope", return_value=True)
+    def test_rejects_ticket_without_number(self, _scope):
+        res = self._post(self._payload(ticket={"subject": "x", "status": "open"}))
+        self.assertEqual(res.status_code, 422)
+        self.assertEqual(
+            res.data["detail"], "ticket{number,subject,status} is required"
+        )
+
+    @patch("accounts.service_auth.verify_service_scope", return_value=True)
+    def test_rejects_non_string_recipients(self, _scope):
+        res = self._post(self._payload(recipients=["ok@co.com", ""]))
+        self.assertEqual(res.status_code, 422)
+        self.assertEqual(
+            res.data["detail"], "recipients[] of email strings is required"
+        )
+
+    @patch("accounts.service_auth.verify_service_scope", return_value=True)
+    def test_rejects_empty_recipients(self, _scope):
+        res = self._post(self._payload(recipients=[]))
+        self.assertEqual(res.status_code, 422)
+        self.assertEqual(res.data["detail"], "recipients[] must not be empty")
+
+    @patch("accounts.service_auth.verify_service_scope", return_value=True)
+    def test_rejects_blank_detail(self, _scope):
+        res = self._post(self._payload(detail="   "))
+        self.assertEqual(res.status_code, 422)
+        self.assertEqual(res.data["detail"], "detail string is required")
+
+    @patch("accounts.views.send_ticket_event", return_value=True)
+    @patch("accounts.service_auth.verify_service_scope", return_value=True)
+    def test_sends_stripped_detail_and_returns_ok(self, mock_scope, mock_send):
+        res = self._post(self._payload(detail="  Assigned to tech@co.com  "))
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data, {"ok": True, "sent": True})
+        self.assertEqual(mock_scope.call_args.args[1], "notify:send")
+        mock_send.assert_called_once_with(
+            "assigned",
+            {"number": 42, "subject": "Disk full", "status": "open"},
+            ["tech@co.com"],
+            "Assigned to tech@co.com",
+            actor_email="admin@co.com",
+            ticket_url="https://inventory.example/tickets/t1",
+        )
+
+    @patch("accounts.views.send_ticket_event", return_value=False)
+    @patch("accounts.service_auth.verify_service_scope", return_value=True)
+    def test_non_string_actor_and_url_become_none(self, _scope, mock_send):
+        res = self._post(
+            self._payload(event="comment", actorEmail={"email": "x"}, ticketUrl=12)
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data, {"ok": True, "sent": False})
+        mock_send.assert_called_once_with(
+            "comment",
+            {"number": 42, "subject": "Disk full", "status": "open"},
+            ["tech@co.com"],
+            "Assigned to tech@co.com",
+            actor_email=None,
+            ticket_url=None,
+        )
+
+
 class UserManagementTestBase(TestCase):
     """Seed the RBAC bits these tests need and build an admin + a plain user."""
 

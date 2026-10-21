@@ -7,10 +7,16 @@ via a feature branch + PR.
 
 ---
 
-## 🚧 Spec 34 v2c: Ticket draft assist (`feat/spec-34-ticket-draft-assist`)
+## 🚧 Spec 33: Outbound ticket email (`feat/spec-33-outbound-ticket-email`)
+
+Implemented on branch (merge pending): email assignee on assign / user comment /
+status via aw-auth notify + Resend — outbound only; email-in still Later. Design:
+[2026-10-21-outbound-ticket-email-design.md](docs/superpowers/specs/2026-10-21-outbound-ticket-email-design.md).
+
+## Shipped ✅ — Spec 34 v2c: Ticket draft assist (merged #115)
 
 Manual **Create ticket** from a notification uses Spec 34 `draft_ticket` when AI is
-configured; auto-create stays raw notification fields. Design:
+configured; auto-create stays raw. Design:
 `docs/superpowers/specs/2026-10-21-ticket-draft-assist-design.md`.
 
 ## Shipped ✅ — Spec 33 v2 ticketing (merged #110–#113)
@@ -23,7 +29,8 @@ Completes Spec 33 phase 2 on `main`:
 - **Per-alert-rule auto-create** (#113) — tri-state Inherit/On/Off on Spec 30 rules;
   `meta.alertRuleId` on metric notifications. **Needs `npm run db:push`** if not done.
 
-Later (not started): email-in, end-user portal.
+Later: **outbound ticket email** (shipped on branch above, 🚧 until merge); then
+email-in; end-user portal.
 
 ## Shipped ✅ — Reporting engine (spec 26, merged #84–#87)
 
