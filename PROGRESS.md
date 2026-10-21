@@ -7,6 +7,12 @@ via a feature branch + PR.
 
 ---
 
+## 🚧 Ticketing: CSV list export (spec 33 v2, `feat/spec-33-ticket-csv-export`)
+
+Export button on `/tickets` downloads the current filtered ticket set as
+`opus-tickets-YYYY-MM-DD.csv` (client-side, asset-export pattern). No SLA
+columns. Design: `docs/superpowers/specs/2026-10-21-ticket-csv-export-design.md`.
+
 ## 🚧 Ticketing: Waiting on user status (spec 33 v2, `feat/spec-33-waiting-status`)
 
 Adds real status `waiting_on_user` (label **Waiting on user**) across schema types,

@@ -90,8 +90,9 @@ List KPI strip: **Open / In Progress / Waiting / Resolved** (`waiting` =
 1. **v1 (this spec)** — AC-1–7: schema, CRUD, comments, manual + auto from
    notifications, `/tickets` UI (mock-guided, SLA/AI stripped), admin type
    toggles.
-2. **v2 (partial)** — `waiting_on_user` status + Waiting KPI (shipped). Still
-   open: SLA timers / breach KPIs; export; per-alert-rule auto-create override.
+2. **v2 (partial)** — `waiting_on_user` + Waiting KPI (shipped); **CSV list
+   export** (shipped). Still open: SLA timers / breach KPIs; per-alert-rule
+   auto-create override.
 3. **Later** — email-in; end-user portal; Spec 34 ticket-draft assist.
 
 ## Out of scope / non-goals (v1)

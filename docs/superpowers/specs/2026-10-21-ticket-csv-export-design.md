@@ -1,7 +1,7 @@
 # Spec 33 v2 — Ticket list CSV export
 
 **Date**: 2026-10-21  
-**Status**: Accepted (design)  
+**Status**: Accepted (implemented on feat/spec-33-ticket-csv-export)  
 **Parent**: [Spec 33 ticketing](../../specs/33-ticketing/index.md)  
 **Branch**: `feat/spec-33-ticket-csv-export`  
 **UI reference**: Export control on [`docs/Design/ticketing-mock.png`](../../Design/ticketing-mock.png)
