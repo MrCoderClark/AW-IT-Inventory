@@ -1,4 +1,5 @@
 import type { TicketPriority, TicketStatus } from "@/lib/data";
+import { ticketSlaState } from "@/lib/ticket-sla";
 
 /** Labels and badge variants for the tickets UI (spec 33). */
 
@@ -91,19 +92,32 @@ export function categoryLabel(category: string): string {
 }
 
 export function ticketKpiCounts(
-  rows: { status: TicketStatus }[],
+  rows: {
+    status: TicketStatus;
+    priority: TicketPriority;
+    createdAt: string;
+  }[],
+  now: Date = new Date(),
 ): {
   open: number;
   inProgress: number;
   waiting: number;
   resolved: number;
+  slaBreached: number;
 } {
-  const out = { open: 0, inProgress: 0, waiting: 0, resolved: 0 };
+  const out = {
+    open: 0,
+    inProgress: 0,
+    waiting: 0,
+    resolved: 0,
+    slaBreached: 0,
+  };
   for (const r of rows) {
     if (r.status === "open") out.open += 1;
     else if (r.status === "in_progress") out.inProgress += 1;
     else if (r.status === "waiting_on_user") out.waiting += 1;
     else if (r.status === "resolved") out.resolved += 1;
+    if (ticketSlaState(r, now).kind === "breached") out.slaBreached += 1;
   }
   return out;
 }

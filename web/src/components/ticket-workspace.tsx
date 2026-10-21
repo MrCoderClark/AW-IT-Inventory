@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Calendar,
+  Clock,
   ChevronDown,
   ChevronRight,
   CircleDot,
@@ -69,6 +70,7 @@ import {
   TICKET_STATUS_LABEL,
   ticketStatusVariant,
 } from "@/lib/ticket-ui";
+import { ticketSlaState } from "@/lib/ticket-sla";
 import { cn } from "@/lib/utils";
 
 function normalizeCategory(value: string): TicketCategory {
@@ -580,6 +582,15 @@ export function TicketWorkspace({
                   <Badge variant={ticketStatusVariant(status)}>
                     {TICKET_STATUS_LABEL[status]}
                   </Badge>
+                </MetaRow>
+                <MetaRow icon={Clock} label="SLA">
+                  {
+                    ticketSlaState({
+                      createdAt: ticket.createdAt,
+                      priority,
+                      status,
+                    }).label
+                  }
                 </MetaRow>
                 <MetaRow icon={Tag} label="Priority">
                   <Badge variant={ticketPriorityVariant(priority)}>
