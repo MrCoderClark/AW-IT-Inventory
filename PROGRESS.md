@@ -7,57 +7,25 @@ via a feature branch + PR.
 
 ---
 
-## 🚧 Ticketing: Per-alert-rule ticket auto-create (spec 33 v2, `feat/spec-33-alert-rule-ticket-override`)
+## Shipped ✅ — Spec 33 v2 ticketing (merged #110–#113)
 
-Tri-state **Ticket auto-create** on each Spec 30 alert rule (`inherit` | `on` |
-`off`); metric fire/recover notifications carry `meta.alertRuleId` for override
-resolution. Admin table + dialog on `/admin/alert-rules`. Completes Spec 33 v2.
-Design:
-`docs/superpowers/specs/2026-10-21-alert-rule-ticket-auto-create-design.md`.
-**Needs `npm run db:push`.**
+Completes Spec 33 phase 2 on `main`:
 
-## 🚧 Ticketing: Simple SLA (spec 33 v2, `feat/spec-33-simple-sla`)
+- **Waiting on user** (#110) — status `waiting_on_user` + Waiting KPI.
+- **CSV list export** (#111) — Export filtered tickets from `/tickets`.
+- **Simple SLA** (#112) — priority budgets, soft-pause, SLA Breached KPI, list/detail/CSV.
+- **Per-alert-rule auto-create** (#113) — tri-state Inherit/On/Off on Spec 30 rules;
+  `meta.alertRuleId` on metric notifications. **Needs `npm run db:push`** if not done.
 
-Wall-clock SLA from priority (High 4h / Medium 8h / Low 24h), soft-pause on
-**Waiting on user**, **SLA Breached** KPI, list + detail labels, CSV **SLA**
-column. Pure compute — no DB columns. Design:
-`docs/superpowers/specs/2026-10-21-ticket-simple-sla-design.md`.
+Later (not started): email-in, end-user portal, Spec 34 ticket-draft assist.
 
-## 🚧 Ticketing: CSV list export (spec 33 v2, `feat/spec-33-ticket-csv-export`)
+## Shipped ✅ — Reporting engine (spec 26, merged #84–#87)
 
-Export button on `/tickets` downloads the current filtered ticket set as
-`opus-tickets-YYYY-MM-DD.csv` (client-side, asset-export pattern). No SLA
-columns. Design: `docs/superpowers/specs/2026-10-21-ticket-csv-export-design.md`.
-
-## 🚧 Ticketing: Waiting on user status (spec 33 v2, `feat/spec-33-waiting-status`)
-
-Adds real status `waiting_on_user` (label **Waiting on user**) across schema types,
-Zod, list/detail status selects, and the list KPI strip (**Waiting** replaces the
-Closed stand-in for the mock On Hold slot). `closed` remains a valid ticket status
-but is no longer a KPI card. Docs: `docs/specs/33-ticketing/index.md`.
-
-## 🚧 Reporting engine (spec 26, `feat/spec-26-reporting`)
-
-A custom **report builder** over live data, replacing the four hardcoded `/reports`
-aggregates. Spec: `docs/specs/26-reporting-engine/`. Safe by design — the builder
-only composes from a whitelisted field catalog, never user SQL; at fleet scale v1
-filters/groups/sorts in memory. **Phase 1 scope:** 6 data sources, on-demand run +
-live preview, CSV/Excel/PDF export, saved report definitions. Scheduling/email is
-phase 2.
-
-- **Slice 1a — engine ✅ (done, uncommitted on the branch):** `src/lib/report-spec.ts`
-  (pure `runReport`: type-aware filters, group+aggregates, sort, limit; 12 tests),
-  `src/lib/report-sources.ts` (field catalog for assets / computers+compliance /
-  assignments / people / software / printers), `src/db/report-engine.ts` (the 6
-  denormalized source queries + `runReportBySpec` + saved-report CRUD + `validateSpec`),
-  `report_definitions` table, and `report:write` in the aw-auth RBAC seed (Owner/Admin).
-  700 web tests pass. **Needs `npm run db:push` + `seed_rbac` (+ admin re-login).**
-- **Slice 1b — builder UI 🔜:** `/reports/builder` (source → columns → filters →
-  group/sort → live preview). *Next up.*
-- **Slice 1c — exports 🔜:** client-side CSV / Excel (`exceljs`) / PDF (`jspdf` +
-  `jspdf-autotable`), lazy-loaded.
-- **Slice 1d — saved reports hub 🔜:** save/list/edit/delete; `/reports` becomes
-  Standard reports + Custom reports + New report.
+Custom report builder fully built: engine + `/reports/builder` + CSV/Excel/PDF
+export + saved hub + scheduled email delivery + charts + folders + minimal SQL
+push-down. Spec: `docs/specs/26-reporting-engine/`. Deploy once:
+`db:push` (`report_definitions` / `report_schedules`) + `seed_rbac` for
+`report:write` (+ admin re-login) + `npm install` for export libs.
 
 ## Shipped ✅ — Collector: bound WinRM calls so a wedged host can't hang a scan (merged `fix/collect-subcall-timeout`)
 
@@ -87,16 +55,11 @@ Assignment history + Reports. Gotcha: a Django `is_superuser` implicitly holds e
 permission, so a "Viewer" who is also a superuser bypasses all role limits. Tests:
 `app-sidebar.test.tsx` + `command-palette.test.tsx`.
 
-## 🚧 Compliance alert email (spec 21 v2, `feat/compliance-alert-email`)
+## Shipped ✅ — Compliance alert email (spec 21 v2, merged #81 `feat/compliance-alert-email`)
 
-Delivers the compliance at-risk / recovered alerts to admins' inboxes, not just the
-in-app bell. aw-auth gains `send_compliance_alert()` + a `ComplianceAlertView`
-(scope `notify:send`) at `v1/notify/compliance-alert`, reusing the Resend sender and
-live RBAC admin resolution (same path as printer alerts). web's `notify.ts` gains
-`sendComplianceAlertEmail()` (via the `opus-web` service account, keys on `sent`);
-`evaluateComplianceAlert` emails on each transition **best-effort and non-gating** —
-the in-app notification still drives `alertedState`, so a failed email just logs and
-never re-fires the in-app alert. No DB migration (delivery only).
+Delivers compliance at-risk / recovered alerts to admins' inboxes (not just the
+in-app bell). aw-auth `v1/notify/compliance-alert` + web `sendComplianceAlertEmail()`;
+best-effort and non-gating on the evaluate path. No DB migration.
 
 ## Shipped ✅ — Compliance alerting (spec 21 v2, merged `feat/compliance-alerting`)
 
