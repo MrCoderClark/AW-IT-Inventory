@@ -14,6 +14,7 @@ import {
   assets,
   computerDetails,
   locations,
+  notifications,
 } from "./schema";
 import { redactDeep } from "@/lib/ai/redact";
 
@@ -151,4 +152,67 @@ export async function buildComputerContextPack(
 function truncate(s: string | null | undefined, n: number): string | null {
   if (!s) return null;
   return s.length <= n ? s : `…${s.slice(-n)}`;
+}
+
+/** Notification body cap before egress. Keep the start; alerts lead with the fact. */
+const NOTIFICATION_BODY_MAX = 2000;
+
+export type NotificationContextPack = {
+  notification: {
+    type: string;
+    severity: string;
+    title: string;
+    body: string;
+  };
+  asset: {
+    tag: string;
+    name: string;
+    type: string;
+    locationPath: string | null;
+  } | null;
+};
+
+/** Redacted context for drafting a ticket from one notification. Null if missing. */
+export async function buildNotificationContextPack(
+  notificationId: string,
+): Promise<NotificationContextPack | null> {
+  const [row] = await db
+    .select({
+      type: notifications.type,
+      severity: notifications.severity,
+      title: notifications.title,
+      body: notifications.body,
+      tag: assets.tag,
+      name: assets.name,
+      assetType: assets.type,
+      locationName: locations.name,
+    })
+    .from(notifications)
+    .leftJoin(assets, eq(assets.id, notifications.assetId))
+    .leftJoin(locations, eq(locations.id, assets.locationId))
+    .where(eq(notifications.id, notificationId))
+    .limit(1);
+  if (!row) return null;
+
+  const pack: NotificationContextPack = {
+    notification: {
+      type: String(row.type),
+      severity: String(row.severity),
+      title: row.title,
+      body:
+        row.body.length <= NOTIFICATION_BODY_MAX
+          ? row.body
+          : row.body.slice(0, NOTIFICATION_BODY_MAX),
+    },
+    asset: row.tag
+      ? {
+          tag: row.tag,
+          name: row.name ?? "",
+          type: String(row.assetType ?? ""),
+          locationPath: row.locationName ?? null,
+        }
+      : null,
+  };
+
+  return redactDeep(pack);
 }
