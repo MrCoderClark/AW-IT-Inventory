@@ -199,4 +199,60 @@ describe("maybeAutoCreateTicketFromNotification", () => {
       category: "Alert",
     });
   });
+
+  it("force on creates even when global type is disabled", async () => {
+    const withMeta = {
+      ...row,
+      meta: { alertRuleId: "a3000000-0000-4000-8000-000000000001" },
+    };
+    H.selectQueue.push([{ ticketAutoCreate: "on" }]);
+    H.selectQueue.push([
+      {
+        id: row.id,
+        type: row.type,
+        title: row.title,
+        body: row.body,
+        assetId: row.assetId,
+      },
+    ]);
+    H.selectQueue.push([]);
+    H.selectQueue.push([{ m: 0 }]);
+    H.insertReturning.push([{ id: "auto-ticket", number: 1 }]);
+
+    await maybeAutoCreateTicketFromNotification(withMeta);
+
+    expect(H.transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("force off skips even when global type is enabled", async () => {
+    H.selectQueue.push([{ ticketAutoCreate: "off" }]);
+    await maybeAutoCreateTicketFromNotification({
+      ...row,
+      meta: { alertRuleId: "a3000000-0000-4000-8000-000000000001" },
+    });
+    expect(H.transaction).not.toHaveBeenCalled();
+  });
+
+  it("inherit uses global type toggle", async () => {
+    H.selectQueue.push([{ ticketAutoCreate: "inherit" }]);
+    H.selectQueue.push([{ enabled: true }]);
+    H.selectQueue.push([
+      {
+        id: row.id,
+        type: row.type,
+        title: row.title,
+        body: row.body,
+        assetId: row.assetId,
+      },
+    ]);
+    H.selectQueue.push([]);
+    H.selectQueue.push([{ m: 0 }]);
+    H.insertReturning.push([{ id: "auto-ticket", number: 2 }]);
+
+    await maybeAutoCreateTicketFromNotification({
+      ...row,
+      meta: { alertRuleId: "a3000000-0000-4000-8000-000000000001" },
+    });
+    expect(H.transaction).toHaveBeenCalledTimes(1);
+  });
 });

@@ -125,6 +125,7 @@ export async function createNotification(
         title: row.title,
         body: row.body,
         assetId: row.assetId,
+        meta: (row.meta as Record<string, unknown> | null) ?? null,
       });
     } catch (e) {
       console.error(`[notifications] ticket auto-create failed (${row.id}):`, e);

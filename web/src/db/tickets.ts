@@ -4,6 +4,7 @@ import { and, desc, eq, ilike, inArray, max, or } from "drizzle-orm";
 
 import { db } from "./index";
 import {
+  alertRules,
   assets,
   locations,
   notifications,
@@ -431,20 +432,44 @@ export async function setTicketAutoCreateType(
     });
 }
 
+function alertRuleIdFromMeta(
+  meta: Record<string, unknown> | null | undefined,
+): string | null {
+  const v = meta?.alertRuleId;
+  return typeof v === "string" && v.length > 0 ? v : null;
+}
+
 export async function maybeAutoCreateTicketFromNotification(row: {
   id: string;
   type: NotificationType;
   title: string;
   body: string;
   assetId: string | null;
+  meta?: Record<string, unknown> | null;
 }): Promise<void> {
   try {
-    const [cfg] = await db
-      .select()
-      .from(ticketAutoCreateTypes)
-      .where(eq(ticketAutoCreateTypes.type, row.type))
-      .limit(1);
-    if (!cfg?.enabled) return;
+    let mode: "inherit" | "on" | "off" = "inherit";
+    const ruleId = alertRuleIdFromMeta(row.meta);
+    if (ruleId) {
+      const [rule] = await db
+        .select({ ticketAutoCreate: alertRules.ticketAutoCreate })
+        .from(alertRules)
+        .where(eq(alertRules.id, ruleId))
+        .limit(1);
+      if (rule?.ticketAutoCreate === "on" || rule?.ticketAutoCreate === "off") {
+        mode = rule.ticketAutoCreate;
+      }
+    }
+
+    if (mode === "off") return;
+    if (mode === "inherit") {
+      const [cfg] = await db
+        .select()
+        .from(ticketAutoCreateTypes)
+        .where(eq(ticketAutoCreateTypes.type, row.type))
+        .limit(1);
+      if (!cfg?.enabled) return;
+    }
     await createTicketFromNotification(row.id, "system:auto");
   } catch (e) {
     console.error(`[tickets] auto-create failed (${row.id}):`, e);
