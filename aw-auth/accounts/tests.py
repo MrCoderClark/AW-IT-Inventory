@@ -254,7 +254,7 @@ class TicketNotifyResendTest(TestCase):
         resp.status = 200
         mock_urlopen.return_value.__enter__.return_value = resp
 
-        ok = notifications.send_ticket_event(
+        sent, message_id = notifications.send_ticket_event(
             "assigned",
             {
                 "id": "t1",
@@ -269,7 +269,8 @@ class TicketNotifyResendTest(TestCase):
             ticket_url="https://inventory.example/tickets/t1",
         )
 
-        self.assertTrue(ok)
+        self.assertTrue(sent)
+        self.assertIsNone(message_id)
         body = json.loads(mock_urlopen.call_args.args[0].data)
         self.assertEqual(body["to"], ["tech@co.com"])
         mock_admins.assert_not_called()
@@ -281,14 +282,44 @@ class TicketNotifyResendTest(TestCase):
 
     @patch("accounts.notifications.urllib.request.urlopen")
     def test_returns_false_without_recipients(self, mock_urlopen):
-        ok = notifications.send_ticket_event(
+        sent, message_id = notifications.send_ticket_event(
             "comment",
             {"id": "t1", "number": 1, "subject": "x", "status": "open"},
             [],
             "hi",
         )
-        self.assertFalse(ok)
+        self.assertEqual((sent, message_id), (False, None))
         mock_urlopen.assert_not_called()
+
+    @patch.object(notifications, "resolve_admin_emails", return_value=["admin@x.com"])
+    @patch("accounts.notifications.urllib.request.urlopen")
+    def test_subject_includes_bracket_number_and_returns_resend_id(
+        self, mock_urlopen, mock_admins
+    ):
+        import json
+
+        resp = MagicMock()
+        resp.status = 200
+        resp.read.return_value = b'{"id":"re_abc"}'
+        mock_urlopen.return_value.__enter__.return_value = resp
+
+        result = notifications.send_ticket_event(
+            "assigned",
+            {
+                "id": "t1",
+                "number": 42,
+                "subject": "Disk full",
+                "status": "open",
+            },
+            ["tech@co.com"],
+            "Assigned to tech@co.com",
+        )
+
+        body = json.loads(mock_urlopen.call_args.args[0].data)
+        self.assertEqual(body["subject"], "[H2Tecs] [#42] — assigned")
+        self.assertEqual(body["headers"], {"X-Ticket-Number": "42"})
+        self.assertEqual(result, (True, "re_abc"))
+        mock_admins.assert_not_called()
 
 
 class TicketNotifyViewTest(TestCase):
@@ -366,7 +397,7 @@ class TicketNotifyViewTest(TestCase):
         self.assertEqual(res.status_code, 422)
         self.assertEqual(res.data["detail"], "detail string is required")
 
-    @patch("accounts.views.send_ticket_event", return_value=True)
+    @patch("accounts.views.send_ticket_event", return_value=(True, None))
     @patch("accounts.service_auth.verify_service_scope", return_value=True)
     def test_sends_stripped_detail_and_returns_ok(self, mock_scope, mock_send):
         res = self._post(self._payload(detail="  Assigned to tech@co.com  "))
@@ -382,7 +413,7 @@ class TicketNotifyViewTest(TestCase):
             ticket_url="https://inventory.example/tickets/t1",
         )
 
-    @patch("accounts.views.send_ticket_event", return_value=False)
+    @patch("accounts.views.send_ticket_event", return_value=(False, None))
     @patch("accounts.service_auth.verify_service_scope", return_value=True)
     def test_non_string_actor_and_url_become_none(self, _scope, mock_send):
         res = self._post(
@@ -397,6 +428,15 @@ class TicketNotifyViewTest(TestCase):
             "Assigned to tech@co.com",
             actor_email=None,
             ticket_url=None,
+        )
+
+    @patch("accounts.views.send_ticket_event", return_value=(True, "re_abc"))
+    @patch("accounts.service_auth.verify_service_scope", return_value=True)
+    def test_returns_message_id_when_send_provides_one(self, _scope, _mock_send):
+        res = self._post(self._payload())
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(
+            res.data, {"ok": True, "sent": True, "messageId": "re_abc"}
         )
 
 

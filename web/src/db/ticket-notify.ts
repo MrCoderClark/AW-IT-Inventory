@@ -1,6 +1,7 @@
 import "server-only";
 
-import { sendTicketEmail } from "@/lib/notify";
+import { recordTicketEmailMessage } from "@/db/ticket-email";
+import { sendTicketEmail, type TicketEmailPayload } from "@/lib/notify";
 
 const COMMENT_MAX = 2000;
 
@@ -61,7 +62,7 @@ export async function maybeNotifyTicketUpdate(input: {
     ) {
       const recipients = ticketNotifyRecipients(after, actorEmail);
       if (recipients.length) {
-        await sendTicketEmail({
+        await sendAndRecord(after.id, {
           ...base,
           event: "assigned",
           recipients,
@@ -76,7 +77,7 @@ export async function maybeNotifyTicketUpdate(input: {
     ) {
       const recipients = ticketNotifyRecipients(after, actorEmail);
       if (recipients.length) {
-        await sendTicketEmail({
+        await sendAndRecord(after.id, {
           ...base,
           event: "status",
           recipients,
@@ -100,7 +101,7 @@ export async function maybeNotifyTicketComment(input: {
     const recipients = ticketNotifyRecipients(input.ticket, input.actorEmail);
     if (!recipients.length) return;
     const detail = input.body.trim().slice(0, COMMENT_MAX);
-    await sendTicketEmail({
+    await sendAndRecord(input.ticket.id, {
       event: "comment",
       ticket: {
         id: input.ticket.id,
@@ -116,6 +117,20 @@ export async function maybeNotifyTicketComment(input: {
     });
   } catch (err) {
     console.error("[ticket-notify] comment failed:", err);
+  }
+}
+
+async function sendAndRecord(
+  ticketId: string,
+  payload: TicketEmailPayload,
+): Promise<void> {
+  const result = await sendTicketEmail(payload);
+  if (result?.sent && result.messageId) {
+    await recordTicketEmailMessage({
+      ticketId,
+      direction: "outbound",
+      messageId: result.messageId,
+    });
   }
 }
 

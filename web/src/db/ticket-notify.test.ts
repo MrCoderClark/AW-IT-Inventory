@@ -1,11 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { sendMock } = vi.hoisted(() => ({
+const { sendMock, recordMock } = vi.hoisted(() => ({
   sendMock: vi.fn(),
+  recordMock: vi.fn(),
 }));
 
 vi.mock("@/lib/notify", () => ({
   sendTicketEmail: (...args: unknown[]) => sendMock(...args),
+}));
+
+vi.mock("@/db/ticket-email", () => ({
+  recordTicketEmailMessage: (...args: unknown[]) => recordMock(...args),
 }));
 
 import {
@@ -76,6 +81,8 @@ describe("maybeNotifyTicketUpdate", () => {
   beforeEach(() => {
     sendMock.mockReset();
     sendMock.mockResolvedValue(true);
+    recordMock.mockReset();
+    recordMock.mockResolvedValue(undefined);
     delete process.env.WEB_PUBLIC_URL;
   });
 
@@ -207,6 +214,45 @@ describe("maybeNotifyTicketUpdate", () => {
     );
   });
 
+  it("records an outbound message id after a successful send", async () => {
+    sendMock.mockResolvedValue({ sent: true, messageId: "re_abc" });
+    await maybeNotifyTicketUpdate({
+      before: snap(),
+      after: snap({ assigneeEmail: "tech@co.com" }),
+      patch: { assigneeEmail: "tech@co.com" },
+      actorEmail: "admin@co.com",
+    });
+    expect(recordMock).toHaveBeenCalledTimes(1);
+    expect(recordMock).toHaveBeenCalledWith({
+      ticketId: "t1",
+      direction: "outbound",
+      messageId: "re_abc",
+    });
+  });
+
+  it("does not record when the send has no message id", async () => {
+    sendMock.mockResolvedValue({ sent: true });
+    await maybeNotifyTicketUpdate({
+      before: snap({ assigneeEmail: "tech@co.com" }),
+      after: snap({ assigneeEmail: "tech@co.com", status: "closed" }),
+      patch: { status: "closed" },
+      actorEmail: "admin@co.com",
+    });
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(recordMock).not.toHaveBeenCalled();
+  });
+
+  it("does not record when the send was not delivered", async () => {
+    sendMock.mockResolvedValue({ sent: false, messageId: "re_abc" });
+    await maybeNotifyTicketUpdate({
+      before: snap({ assigneeEmail: "tech@co.com" }),
+      after: snap({ assigneeEmail: "tech@co.com", status: "closed" }),
+      patch: { status: "closed" },
+      actorEmail: "admin@co.com",
+    });
+    expect(recordMock).not.toHaveBeenCalled();
+  });
+
   it("swallows send failures so the caller still resolves", async () => {
     sendMock.mockRejectedValue(new Error("smtp down"));
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -227,6 +273,8 @@ describe("maybeNotifyTicketComment", () => {
   beforeEach(() => {
     sendMock.mockReset();
     sendMock.mockResolvedValue(true);
+    recordMock.mockReset();
+    recordMock.mockResolvedValue(undefined);
     delete process.env.WEB_PUBLIC_URL;
   });
 
@@ -266,6 +314,21 @@ describe("maybeNotifyTicketComment", () => {
       kind: "user",
     });
     expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("records an outbound message id after a user comment is sent", async () => {
+    sendMock.mockResolvedValue({ sent: true, messageId: "re_cmt" });
+    await maybeNotifyTicketComment({
+      ticket: snap({ assigneeEmail: "tech@co.com" }),
+      actorEmail: "admin@co.com",
+      body: "hello",
+      kind: "user",
+    });
+    expect(recordMock).toHaveBeenCalledWith({
+      ticketId: "t1",
+      direction: "outbound",
+      messageId: "re_cmt",
+    });
   });
 
   it("swallows comment send failures", async () => {

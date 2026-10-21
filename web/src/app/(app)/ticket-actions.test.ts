@@ -45,6 +45,9 @@ vi.mock("next/cache", () => ({ revalidatePath: revalidateMock }));
 vi.mock("@/lib/notify", () => ({
   sendTicketEmail: (...args: unknown[]) => sendMock(...args),
 }));
+vi.mock("@/db/ticket-email", () => ({
+  recordTicketEmailMessage: vi.fn(),
+}));
 
 import {
   addTicketCommentAction,

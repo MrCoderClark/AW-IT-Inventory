@@ -66,7 +66,35 @@ def _subject_and_body(printer: dict, event: str, since: str | None) -> tuple[str
     return subject, body
 
 
-def _deliver(
+def _resend_id(resp) -> str | None:
+    """Resend's send ``id`` when the success body is JSON. Parse failures are None.
+
+    A missing or non-JSON body must not turn a 2xx send into a failure — other
+    mailers only care that the post succeeded.
+    """
+    try:
+        raw = resp.read()
+    except Exception:  # noqa: BLE001 — body is optional
+        return None
+    if isinstance(raw, bytes):
+        text = raw.decode("utf-8", errors="replace")
+    elif isinstance(raw, str):
+        text = raw
+    else:
+        return None
+    try:
+        parsed = json.loads(text)
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    message_id = parsed.get("id")
+    if isinstance(message_id, str) and message_id:
+        return message_id
+    return None
+
+
+def _send_resend(
     subject: str,
     body: str,
     *,
@@ -74,28 +102,23 @@ def _deliver(
     html: str | None = None,
     recipients: list[str] | None = None,
     attachments: list[dict] | None = None,
-) -> bool:
-    """Send one email through Resend. Returns True on a real send.
+    headers: dict[str, str] | None = None,
+) -> tuple[bool, str | None]:
+    """POST one email to Resend. Returns ``(sent, id)``.
 
-    No recipients, or no Resend API key configured: logs and returns False (the
-    caller treats it as a non-fatal, retryable miss). Shared by the printer down/
-    recovery alert (spec 12), the daily counter report (spec 14) and scheduled
-    report delivery (spec 26 phase 2). ``recipients`` defaults to the admins
-    (resolved from RBAC) when not given; a report delivery passes an explicit
-    list. ``body`` is the plain-text part; ``html`` is an optional HTML part;
-    ``attachments`` is an optional list of Resend ``{filename, content}`` (content
-    base64) parts.
+    ``id`` is Resend's JSON ``id`` on a 2xx response, otherwise None. No
+    recipients, or no API key: logs and returns ``(False, None)``.
     """
     api_key = os.environ.get("RESEND_API_KEY", "")
     email_from = os.environ.get("EMAIL_FROM", "")
     if not api_key or not email_from:
         logger.warning("%s not sent: RESEND_API_KEY / EMAIL_FROM not configured.", label)
-        return False
+        return False, None
 
     to = resolve_admin_emails() if recipients is None else recipients
     if not to:
         logger.warning("%s not sent: no recipients.", label)
-        return False
+        return False, None
 
     message: dict = {
         "from": email_from,
@@ -107,6 +130,8 @@ def _deliver(
         message["html"] = html
     if attachments:
         message["attachments"] = attachments
+    if headers:
+        message["headers"] = headers
     payload = json.dumps(message).encode("utf-8")
     req = urllib.request.Request(
         RESEND_ENDPOINT,
@@ -125,16 +150,49 @@ def _deliver(
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
             if 200 <= resp.status < 300:
+                message_id = _resend_id(resp)
                 logger.info("%s sent to %d recipient(s).", label, len(to))
-                return True
+                return True, message_id
             logger.error("%s Resend returned HTTP %s", label, resp.status)
-            return False
+            return False, None
     except urllib.error.HTTPError as e:
         logger.error("%s Resend HTTP %s: %s", label, e.code, e.read()[:200])
-        return False
+        return False, None
     except Exception:  # noqa: BLE001 — a send failure must never crash the pipeline
         logger.exception("%s Resend request failed", label)
-        return False
+        return False, None
+
+
+def _deliver(
+    subject: str,
+    body: str,
+    *,
+    label: str,
+    html: str | None = None,
+    recipients: list[str] | None = None,
+    attachments: list[dict] | None = None,
+) -> bool:
+    """Send one email through Resend. Returns True on a real send.
+
+    No recipients, or no Resend API key configured: logs and returns False (the
+    caller treats it as a non-fatal, retryable miss). Shared by the printer down/
+    recovery alert (spec 12), the daily counter report (spec 14) and scheduled
+    report delivery (spec 26 phase 2). ``recipients`` defaults to the admins
+    (resolved from RBAC) when not given; a report delivery passes an explicit
+    list. ``body`` is the plain-text part; ``html`` is an optional HTML part;
+    ``attachments`` is an optional list of Resend ``{filename, content}`` (content
+    base64) parts. Ticket mail uses ``_send_resend`` directly so it can keep the
+    Resend id; this wrapper stays a bool for every other caller.
+    """
+    sent, _message_id = _send_resend(
+        subject,
+        body,
+        label=label,
+        html=html,
+        recipients=recipients,
+        attachments=attachments,
+    )
+    return sent
 
 
 def send_printer_alert(printer: dict, event: str, since: str | None) -> bool:
@@ -450,14 +508,16 @@ def send_ticket_event(
     *,
     actor_email: str | None = None,
     ticket_url: str | None = None,
-) -> bool:
+) -> tuple[bool, str | None]:
     """Email explicit recipients about a ticket event (Spec 33 outbound).
 
     ``event`` is assigned | comment | status. Never falls back to admin list.
+    Returns ``(sent, message_id)``. ``message_id`` is Resend's send id when the
+    API returns one; inbound matching still keys off the ``[#N]`` subject token.
     """
     if not recipients:
         logger.warning("ticket-notify (%s) not sent: no recipients.", event)
-        return False
+        return False, None
 
     number = ticket.get("number")
     subject_line = ticket.get("subject") or "(no subject)"
@@ -467,7 +527,7 @@ def send_ticket_event(
         "status": "status updated",
     }.get(event, event)
 
-    subject = f"[H2Tecs] Ticket #{number} — {verb}"
+    subject = f"[H2Tecs] [#{number}] — {verb}"
     lines = [
         f"Ticket #{number}: {subject_line}",
         f"Status: {ticket.get('status') or '—'}",
@@ -494,12 +554,13 @@ def send_ticket_event(
         html_parts.append(f'<p><a href="{safe_url}">Open ticket</a></p>')
     html = "\n".join(html_parts)
 
-    return _deliver(
+    return _send_resend(
         subject,
         body,
         label=f"ticket-notify ({event})",
         html=html,
         recipients=recipients,
+        headers={"X-Ticket-Number": str(number)},
     )
 
 

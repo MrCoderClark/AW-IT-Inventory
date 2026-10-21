@@ -370,19 +370,25 @@ export type TicketEmailPayload = {
   ticketUrl?: string;
 };
 
+/** aw-auth ticket notify result. `messageId` is Resend's send id when present. */
+export type TicketEmailResult = {
+  sent: boolean;
+  messageId?: string;
+};
+
 /**
  * Ask aw-auth to email ticket recipients (spec 33). Same `h2tecs-web` service
- * account (`notify:send`) as other notify calls. Returns true only when aw-auth
- * reports `sent: true`.
+ * account (`notify:send`) as other notify calls. `sent` is true only when
+ * aw-auth reports `sent: true`. `messageId` is included only on that success.
  */
 export async function sendTicketEmail(
   payload: TicketEmailPayload,
-): Promise<boolean> {
+): Promise<TicketEmailResult> {
   const who = `#${payload.ticket.number} (${payload.event})`;
   try {
     const token = await getServiceToken();
-    if (!token) return false;
-    if (!payload.recipients.length) return false;
+    if (!token) return { sent: false };
+    if (!payload.recipients.length) return { sent: false };
 
     const res = await fetch(`${AUTH_API_URL}/v1/notify/ticket`, {
       method: "POST",
@@ -398,12 +404,20 @@ export async function sendTicketEmail(
       console.error(
         `[notify] ticket ${who} ${res.status}: ${(await res.text()).slice(0, 200)}`,
       );
-      return false;
+      return { sent: false };
     }
-    const data = (await res.json().catch(() => null)) as { sent?: boolean } | null;
-    return data?.sent === true;
+    const data = (await res.json().catch(() => null)) as {
+      sent?: boolean;
+      messageId?: unknown;
+    } | null;
+    const sent = data?.sent === true;
+    const messageId = data?.messageId;
+    if (sent && typeof messageId === "string" && messageId) {
+      return { sent: true, messageId };
+    }
+    return { sent };
   } catch (err) {
     console.error(`[notify] ticket email failed for ${who}:`, err);
-    return false;
+    return { sent: false };
   }
 }
