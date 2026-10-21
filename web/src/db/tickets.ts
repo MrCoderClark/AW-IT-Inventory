@@ -7,6 +7,7 @@ import {
   assets,
   locations,
   notifications,
+  people,
   ticketAutoCreateTypes,
   ticketComments,
   tickets,
@@ -82,6 +83,7 @@ function toListItem(row: {
   priority: string;
   category: string;
   assigneeEmail: string | null;
+  requesterEmail?: string | null;
   assetId: string | null;
   sourceNotificationId: string | null;
   createdBy: string;
@@ -100,6 +102,7 @@ function toListItem(row: {
     priority: row.priority as TicketPriority,
     category: row.category,
     assigneeEmail: row.assigneeEmail,
+    requesterEmail: row.requesterEmail ?? null,
     assetId: row.assetId,
     assetTag: row.assetTag ?? null,
     assetName: row.assetName ?? null,
@@ -109,6 +112,20 @@ function toListItem(row: {
     createdAt: isoOf(row.createdAt),
     updatedAt: isoOf(row.updatedAt),
   };
+}
+
+/** Current device holder's email, when the asset is assigned to a person. */
+export async function getAssetOwnerEmail(
+  assetId: string,
+): Promise<string | null> {
+  const [row] = await db
+    .select({ email: people.email })
+    .from(assets)
+    .leftJoin(people, eq(assets.assigneeId, people.id))
+    .where(eq(assets.id, assetId))
+    .limit(1);
+  const email = row?.email?.trim();
+  return email || null;
 }
 
 async function nextTicketNumber(tx: Tx): Promise<number> {
@@ -122,6 +139,7 @@ export async function createTicket(input: {
   priority?: TicketPriority;
   category?: string;
   assigneeEmail?: string | null;
+  requesterEmail?: string | null;
   assetId?: string | null;
   sourceNotificationId?: string | null;
   createdBy: string;
@@ -137,6 +155,12 @@ export async function createTicket(input: {
     if (existing) return { existingId: existing.id };
   }
 
+  let requesterEmail = input.requesterEmail?.trim() || null;
+  if (!requesterEmail && input.assetId) {
+    requesterEmail = await getAssetOwnerEmail(input.assetId);
+  }
+  if (!requesterEmail) requesterEmail = input.createdBy;
+
   try {
     return await db.transaction(async (tx) => {
       const number = await nextTicketNumber(tx);
@@ -147,8 +171,9 @@ export async function createTicket(input: {
           subject: input.subject,
           description: input.description ?? "",
           priority: input.priority ?? "medium",
-          category: input.category ?? "",
+          category: input.category?.trim() || "General",
           assigneeEmail: input.assigneeEmail ?? null,
+          requesterEmail,
           assetId: input.assetId ?? null,
           sourceNotificationId,
           createdBy: input.createdBy,
@@ -208,6 +233,7 @@ export async function listTickets(filters?: {
       priority: tickets.priority,
       category: tickets.category,
       assigneeEmail: tickets.assigneeEmail,
+      requesterEmail: tickets.requesterEmail,
       assetId: tickets.assetId,
       sourceNotificationId: tickets.sourceNotificationId,
       createdBy: tickets.createdBy,
@@ -239,6 +265,7 @@ export async function getTicket(
       priority: tickets.priority,
       category: tickets.category,
       assigneeEmail: tickets.assigneeEmail,
+      requesterEmail: tickets.requesterEmail,
       assetId: tickets.assetId,
       sourceNotificationId: tickets.sourceNotificationId,
       createdBy: tickets.createdBy,
@@ -282,6 +309,7 @@ export async function updateTicket(
     priority: TicketPriority;
     category: string;
     assigneeEmail: string | null;
+    requesterEmail: string | null;
     assetId: string | null;
   }>,
 ): Promise<boolean> {

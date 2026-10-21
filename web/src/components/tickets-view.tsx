@@ -25,12 +25,19 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { TicketListItem, TicketPriority, TicketStatus } from "@/lib/data";
+import type {
+  LinkAsset,
+  TicketListItem,
+  TicketPriority,
+  TicketStatus,
+} from "@/lib/data";
 import {
   assigneeLabel,
   categoryLabel,
+  requesterLabel,
   ticketNumberLabel,
   ticketPriorityVariant,
+  TICKET_CATEGORIES,
   TICKET_PRIORITY_LABEL,
   TICKET_STATUS_LABEL,
   ticketStatusVariant,
@@ -81,9 +88,11 @@ function filterTickets(
 
 export function TicketsView({
   initialTickets,
+  linkAssets = [],
   viewerEmail: _viewerEmail,
 }: {
   initialTickets: TicketListItem[];
+  linkAssets?: LinkAsset[];
   viewerEmail: string;
 }) {
   const router = useRouter();
@@ -95,12 +104,6 @@ export function TicketsView({
   const [categoryFilter, setCategoryFilter] = React.useState(ALL);
   const [assigneeFilter, setAssigneeFilter] = React.useState(ALL);
   const [page, setPage] = React.useState(0);
-
-  const categories = React.useMemo(() => {
-    const set = new Set<string>();
-    for (const t of initialTickets) set.add(categoryLabel(t.category));
-    return [...set].sort((a, b) => a.localeCompare(b));
-  }, [initialTickets]);
 
   const assignees = React.useMemo(() => {
     const set = new Set<string>();
@@ -209,7 +212,7 @@ export function TicketsView({
             onValueChange={setCategoryFilter}
             options={[
               { value: ALL, label: "All" },
-              ...categories.map((c) => ({ value: c, label: c })),
+              ...TICKET_CATEGORIES.map((c) => ({ value: c, label: c })),
             ]}
           />
           <FilterSelect
@@ -267,7 +270,7 @@ export function TicketsView({
                         {t.subject}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {assigneeLabel(t.createdBy)}
+                        {requesterLabel(t)}
                       </TableCell>
                       <TableCell>{categoryLabel(t.category)}</TableCell>
                       <TableCell>
@@ -341,6 +344,7 @@ export function TicketsView({
         open={dialogOpen}
         onOpenChange={onDialogOpenChange}
         onCreated={onTicketCreated}
+        linkAssets={linkAssets}
       />
     </>
   );

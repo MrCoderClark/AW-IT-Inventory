@@ -41,6 +41,7 @@ function makeTicket(overrides: Partial<TicketDetail> = {}): TicketDetail {
     priority: "high",
     category: "Hardware",
     assigneeEmail: "tech@example.com",
+    requesterEmail: "owner@example.com",
     assetId: "asset-1",
     assetTag: "OPUS-PRN-1",
     assetName: "Front Desk HP",
@@ -83,11 +84,12 @@ describe("TicketWorkspace — conversation vs activity", () => {
     expect(
       screen.getByRole("heading", { level: 1, name: "Printer offline" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("#TKT-12")).toBeInTheDocument();
+    expect(screen.getAllByText("#TKT-12").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByRole("tab", { name: "Conversation", selected: true })).toBeInTheDocument();
     expect(screen.getByRole("tabpanel")).toHaveTextContent("Checking the tray.");
     expect(screen.getByRole("tabpanel")).not.toHaveTextContent("Ticket created");
-    expect(screen.queryByRole("tab", { name: "Related tickets" })).toBeNull();
+    expect(screen.getByRole("tab", { name: "Related Tickets" })).toBeInTheDocument();
+    expect(screen.getByText(/High Priority/i)).toBeInTheDocument();
   });
 
   it("moves system lines onto the Activity tab", async () => {
@@ -110,7 +112,9 @@ describe("TicketWorkspace — details, assets, and actions", () => {
 
     await user.click(screen.getByRole("tab", { name: "Details" }));
     expect(screen.getByRole("tabpanel")).toHaveTextContent("From alert");
-    expect(screen.getByRole("tabpanel")).toHaveTextContent("Hardware");
+    expect(screen.getByRole("combobox", { name: "Category" })).toHaveTextContent(
+      "Hardware",
+    );
     expect(screen.getByRole("tabpanel")).toHaveTextContent("admin@example.com");
 
     await user.click(screen.getByRole("tab", { name: "Assets" }));
@@ -122,13 +126,83 @@ describe("TicketWorkspace — details, assets, and actions", () => {
     expect(screen.getByText("HQ / Lobby")).toBeInTheDocument();
   });
 
-  it("focuses the note composer from Add note and sends the comment", async () => {
+  it("marks Update dirty when category or linked asset changes", async () => {
+    updateMock.mockResolvedValue({ ok: true, message: "Updated that ticket." });
+    const user = userEvent.setup();
+    const ticket = makeTicket();
+    const linkAssets = [
+      {
+        id: "asset-1",
+        tag: "OPUS-PRN-1",
+        name: "Front Desk HP",
+        type: "printer" as const,
+        serial: "SN-1",
+        ownerEmail: "owner@example.com",
+      },
+      {
+        id: "asset-2",
+        tag: "LAP-9",
+        name: "Spare laptop",
+        type: "computer" as const,
+        serial: "SN-9",
+        ownerEmail: "jane@example.com",
+      },
+    ];
+    render(<TicketWorkspace ticket={ticket} linkAssets={linkAssets} />);
+
+    const update = screen.getByRole("button", { name: "Update" });
+    expect(update).toBeDisabled();
+
+    await user.click(screen.getByRole("tab", { name: "Details" }));
+    await user.click(screen.getByRole("combobox", { name: "Category" }));
+    await user.click(screen.getByRole("option", { name: "Network" }));
+    expect(update).toBeEnabled();
+
+    await user.click(update);
+    expect(updateMock).toHaveBeenCalledWith(ticket.id, {
+      status: "open",
+      priority: "high",
+      category: "Network",
+      assigneeEmail: "tech@example.com",
+      requesterEmail: "owner@example.com",
+      assetId: "asset-1",
+    });
+  });
+
+  it("sets requester from the asset owner when linking an asset", async () => {
+    const user = userEvent.setup();
+    const ticket = makeTicket({ assetId: null, assetTag: null, assetName: null });
+    const linkAssets = [
+      {
+        id: "asset-2",
+        tag: "LAP-9",
+        name: "Spare laptop",
+        type: "computer" as const,
+        serial: "SN-9",
+        ownerEmail: "jane@example.com",
+      },
+    ];
+    render(<TicketWorkspace ticket={ticket} linkAssets={linkAssets} />);
+
+    await user.click(screen.getByRole("tab", { name: "Assets" }));
+    await user.click(screen.getAllByRole("button", { name: "Link asset" })[0]!);
+    await user.type(screen.getByRole("textbox", { name: "Search assets" }), "LAP-9");
+    await user.click(screen.getByRole("button", { name: /Spare laptop/i }));
+    expect(screen.getByRole("button", { name: "Update" })).toBeEnabled();
+
+    await user.click(screen.getByRole("tab", { name: "Details" }));
+    expect(screen.getByRole("textbox", { name: "Requester email" })).toHaveValue(
+      "jane@example.com",
+    );
+  });
+
+  it("focuses the note composer from Add Note and sends the comment", async () => {
     commentMock.mockResolvedValue({ ok: true, message: "Comment added." });
     const user = userEvent.setup();
     const ticket = makeTicket();
     render(<TicketWorkspace ticket={ticket} />);
 
-    await user.click(screen.getByRole("button", { name: "Add note" }));
+    await user.click(screen.getByRole("button", { name: "Add Note" }));
     const note = screen.getByRole("textbox", { name: "Note" });
     expect(note).toHaveFocus();
 
@@ -148,6 +222,7 @@ describe("TicketWorkspace — details, assets, and actions", () => {
     const update = screen.getByRole("button", { name: "Update" });
     expect(update).toBeDisabled();
 
+    await user.click(screen.getByRole("button", { name: "Assign" }));
     const assignee = screen.getByRole("textbox", { name: "Assignee email" });
     await user.clear(assignee);
     await user.type(assignee, "other@example.com");
@@ -157,7 +232,10 @@ describe("TicketWorkspace — details, assets, and actions", () => {
     expect(updateMock).toHaveBeenCalledWith(ticket.id, {
       status: "open",
       priority: "high",
+      category: "Hardware",
       assigneeEmail: "other@example.com",
+      requesterEmail: "owner@example.com",
+      assetId: "asset-1",
     });
     expect(refreshMock).toHaveBeenCalled();
   });
@@ -167,11 +245,9 @@ describe("TicketWorkspace — details, assets, and actions", () => {
     const ticket = makeTicket();
     const { container, rerender } = render(<TicketWorkspace ticket={ticket} />);
 
-    const statusTrigger = container.querySelectorAll(
-      '[data-slot="select-trigger"]',
-    )[0];
+    const statusTrigger = screen.getByRole("combobox", { name: "Status" });
     expect(statusTrigger).toBeTruthy();
-    await user.click(statusTrigger!);
+    await user.click(statusTrigger);
     await user.click(screen.getByRole("option", { name: "In progress" }));
 
     const update = screen.getByRole("button", { name: "Update" });
@@ -195,9 +271,10 @@ describe("TicketWorkspace — details, assets, and actions", () => {
     );
 
     expect(screen.getByRole("button", { name: "Update" })).toBeEnabled();
-    expect(
-      container.querySelectorAll('[data-slot="select-trigger"]')[0],
-    ).toHaveTextContent(/in_progress/i);
+    expect(screen.getByRole("combobox", { name: "Status" })).toHaveTextContent(
+      /in.?progress/i,
+    );
     expect(screen.getByText("Follow-up note.")).toBeInTheDocument();
+    expect(container).toBeTruthy();
   });
 });

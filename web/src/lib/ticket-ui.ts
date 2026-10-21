@@ -15,6 +15,31 @@ export const TICKET_PRIORITY_LABEL: Record<TicketPriority, string> = {
   high: "High",
 };
 
+/** Fixed ticket categories — UI select only (no free text). */
+export const TICKET_CATEGORIES = [
+  "General",
+  "Hardware",
+  "Software",
+  "Network",
+  "Printer",
+  "Security",
+  "Patching",
+  "Maintenance",
+  "Request",
+  "Alert",
+  "Warranty",
+  "Discovery",
+  "Scan",
+  "Ops",
+  "Assist",
+] as const;
+
+export type TicketCategory = (typeof TICKET_CATEGORIES)[number];
+
+export function isTicketCategory(value: string): value is TicketCategory {
+  return (TICKET_CATEGORIES as readonly string[]).includes(value);
+}
+
 export function ticketStatusVariant(
   status: TicketStatus,
 ): "outline" | "secondary" | "destructive" | "default" {
@@ -41,6 +66,21 @@ export function assigneeLabel(email: string | null | undefined): string {
   const at = email.indexOf("@");
   if (at <= 0) return email;
   return email.slice(0, at);
+}
+
+/** Display email for the person the ticket is about. */
+export function requesterEmailOf(ticket: {
+  requesterEmail: string | null;
+  createdBy: string;
+}): string {
+  return ticket.requesterEmail?.trim() || ticket.createdBy;
+}
+
+export function requesterLabel(ticket: {
+  requesterEmail: string | null;
+  createdBy: string;
+}): string {
+  return assigneeLabel(requesterEmailOf(ticket));
 }
 
 export function categoryLabel(category: string): string {

@@ -74,6 +74,7 @@ export async function createTicketAction(
     priority: data.priority,
     category: data.category,
     assigneeEmail: data.assigneeEmail ?? null,
+    requesterEmail: data.requesterEmail ?? null,
     assetId: data.assetId ?? null,
     createdBy: user!.email,
   });

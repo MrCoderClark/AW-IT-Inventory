@@ -290,6 +290,8 @@ export interface TicketListItem {
   priority: TicketPriority;
   category: string;
   assigneeEmail: string | null;
+  /** Who the ticket is for; falls back to createdBy in the UI when null. */
+  requesterEmail: string | null;
   assetId: string | null;
   assetTag: string | null;
   assetName: string | null;
@@ -433,6 +435,8 @@ export interface LinkAsset {
   name: string;
   type: AssetType;
   serial: string;
+  /** Current holder email from people, when the asset is assigned. */
+  ownerEmail: string | null;
 }
 
 /* Result of an inbox write action (link / create / ignore / restore). */

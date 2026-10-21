@@ -2,6 +2,7 @@ import { Lock } from "lucide-react";
 
 import { PagePlaceholder } from "@/components/page-placeholder";
 import { TicketsView } from "@/components/tickets-view";
+import { getLinkAssets } from "@/db/queries";
 import { listTickets } from "@/db/tickets";
 import { hasPermission, requireUser } from "@/lib/auth/session";
 
@@ -20,9 +21,16 @@ export default async function TicketsPage() {
     );
   }
 
-  const tickets = await listTickets();
+  const [tickets, linkAssets] = await Promise.all([
+    listTickets(),
+    getLinkAssets(),
+  ]);
 
   return (
-    <TicketsView initialTickets={tickets} viewerEmail={user.email} />
+    <TicketsView
+      initialTickets={tickets}
+      linkAssets={linkAssets}
+      viewerEmail={user.email}
+    />
   );
 }

@@ -606,8 +606,10 @@ export async function getLinkAssets(): Promise<LinkAsset[]> {
       name: assets.name,
       type: assets.type,
       serial: assets.serial,
+      ownerEmail: people.email,
     })
     .from(assets)
+    .leftJoin(people, eq(assets.assigneeId, people.id))
     .orderBy(asc(assets.name));
   return rows.map((r) => ({
     id: r.id,
@@ -615,6 +617,7 @@ export async function getLinkAssets(): Promise<LinkAsset[]> {
     name: r.name,
     type: r.type as AssetType,
     serial: r.serial ?? "",
+    ownerEmail: r.ownerEmail?.trim() || null,
   }));
 }
 

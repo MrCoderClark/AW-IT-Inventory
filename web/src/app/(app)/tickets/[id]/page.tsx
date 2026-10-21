@@ -3,6 +3,7 @@ import { Lock } from "lucide-react";
 
 import { PagePlaceholder } from "@/components/page-placeholder";
 import { TicketWorkspace } from "@/components/ticket-workspace";
+import { getLinkAssets } from "@/db/queries";
 import { getTicket } from "@/db/tickets";
 import { hasPermission, requireUser } from "@/lib/auth/session";
 
@@ -22,7 +23,10 @@ export default async function TicketDetailPage({
     );
   }
   const { id } = await params;
-  const ticket = await getTicket(id);
+  const [ticket, linkAssets] = await Promise.all([
+    getTicket(id),
+    getLinkAssets(),
+  ]);
   if (!ticket) notFound();
-  return <TicketWorkspace ticket={ticket} />;
+  return <TicketWorkspace ticket={ticket} linkAssets={linkAssets} />;
 }
