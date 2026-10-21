@@ -128,7 +128,12 @@ Ensure `integer` and `uniqueIndex` / `index` are imported from `drizzle-orm/pg-c
 In `web/src/lib/data.ts`:
 
 ```ts
-export type TicketStatus = "open" | "in_progress" | "resolved" | "closed";
+export type TicketStatus =
+  | "open"
+  | "in_progress"
+  | "waiting_on_user"
+  | "resolved"
+  | "closed";
 export type TicketPriority = "low" | "medium" | "high";
 
 export interface TicketListItem {

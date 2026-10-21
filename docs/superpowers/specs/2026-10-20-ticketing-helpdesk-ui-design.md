@@ -18,7 +18,7 @@ Make Ticketing feel like a service desk: a **KPI + table list** and a **full tic
 | Navigation shape | List at `/tickets` → full page at `/tickets/[id]` (no list side pane) |
 | Visual target | America Works helpdesk mock (KPIs, table columns, conversation detail) |
 | Branding | H2Tecs sidebar/header; do not adopt America Works logo/nav |
-| On Hold KPI | Show as **Closed** count (status `closed`) |
+| Waiting KPI | Count of `waiting_on_user` (mock “On Hold” slot) |
 | Requester | `createdBy` |
 | Location | From linked asset’s office/location when present; else — |
 | Conversation | User comments as thread messages; system comments on Activity |
@@ -46,7 +46,7 @@ Remove the right detail pane from the list view. Retire or gut `TicketDetailPane
 2. **KPI strip** — Four cards:
    - Open (`status === open`)
    - In Progress (`in_progress`)
-   - Closed (`closed`) — stands in for mock “On Hold”
+   - Waiting (`waiting_on_user`) — mock “On Hold” slot
    - Resolved (`resolved`)
    Counts from the loaded ticket set. **No % / vs-prior deltas** in this pass (avoid fake or half-baked trend lines).
 3. **Filter bar** — Search; Status; Priority; Category; Assignee (Assignee instead of mock’s Location filter).
@@ -116,9 +116,9 @@ Delete or stop using side-pane selection on the list. Keep `NewTicketDialog`.
 - **AC-UI-2**: `/tickets/[id]` matches the helpdesk detail structure (back link, actions, Conversation tab, right meta sidebar).
 - **AC-UI-3**: Create ticket / notification create / nav deep links land on `/tickets/[id]`.
 - **AC-UI-4**: Existing ticket CRUD + comments still work; still gated `user:admin`.
-- **AC-UI-5**: No SLA/AI/fake KPI percentages; Closed stands in for On Hold.
+- **AC-UI-5**: No SLA/AI/fake KPI percentages; Waiting (`waiting_on_user`) fills the On Hold slot.
 
 ## Migration / follow-ups
 
 - Update Spec 33 index AC-6 from “list + right detail pane” to “list dashboard + full detail page”.
-- Optional later: real `on_hold` / `waiting` status; Location filter; tags; related tickets.
+- Optional later: Location filter; tags; related tickets.

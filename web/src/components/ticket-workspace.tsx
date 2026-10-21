@@ -76,7 +76,13 @@ function normalizeCategory(value: string): TicketCategory {
   return isTicketCategory(trimmed) ? trimmed : "General";
 }
 
-const STATUSES: TicketStatus[] = ["open", "in_progress", "resolved", "closed"];
+const STATUSES: TicketStatus[] = [
+  "open",
+  "in_progress",
+  "waiting_on_user",
+  "resolved",
+  "closed",
+];
 const PRIORITIES: TicketPriority[] = ["low", "medium", "high"];
 
 export type TicketDetail = TicketListItem & { comments: TicketCommentItem[] };

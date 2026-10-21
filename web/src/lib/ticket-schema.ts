@@ -6,6 +6,7 @@ import { TICKET_CATEGORIES } from "@/lib/ticket-ui";
 const TICKET_STATUSES = [
   "open",
   "in_progress",
+  "waiting_on_user",
   "resolved",
   "closed",
 ] as const satisfies readonly TicketStatus[];

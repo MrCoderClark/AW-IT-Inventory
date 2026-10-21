@@ -52,9 +52,10 @@ it("counts KPI buckets", () => {
       { status: "open" },
       { status: "open" },
       { status: "in_progress" },
+      { status: "waiting_on_user" },
+      { status: "resolved" },
+      { status: "resolved" },
       { status: "closed" },
-      { status: "resolved" },
-      { status: "resolved" },
     ]),
-  ).toEqual({ open: 2, inProgress: 1, closed: 1, resolved: 2 });
+  ).toEqual({ open: 2, inProgress: 1, waiting: 1, resolved: 2 });
 });

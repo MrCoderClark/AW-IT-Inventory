@@ -1778,7 +1778,9 @@ export const tickets = pgTable(
     subject: text("subject").notNull(),
     description: text("description").notNull().default(""),
     status: text("status")
-      .$type<"open" | "in_progress" | "resolved" | "closed">()
+      .$type<
+        "open" | "in_progress" | "waiting_on_user" | "resolved" | "closed"
+      >()
       .notNull()
       .default("open"),
     priority: text("priority")
