@@ -1,7 +1,7 @@
 # Spec 33 v2 — Per-alert-rule ticket auto-create override
 
 **Date**: 2026-10-21  
-**Status**: Accepted (design)  
+**Status**: Accepted (implemented on `feat/spec-33-alert-rule-ticket-override`)  
 **Parent**: [Spec 33 ticketing](../../specs/33-ticketing/index.md) · [Spec 30 alert rules](../../specs/30-alert-rules/index.md)  
 **Branch**: `feat/spec-33-alert-rule-ticket-override`  
 **Prior v2**: waiting status · [CSV export](./2026-10-21-ticket-csv-export-design.md) · [simple SLA](./2026-10-21-ticket-simple-sla-design.md)

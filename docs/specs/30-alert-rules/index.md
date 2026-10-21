@@ -117,6 +117,7 @@ alert_rules
   consecutive    int  not null default 1   -- ≥ 1
   severity       text not null   -- info | warning | critical
   enabled        bool not null default true
+  ticket_auto_create text not null default 'inherit'  -- inherit | on | off (Spec 33 v2)
   created_at     timestamptz
   updated_at     timestamptz
 
@@ -164,8 +165,10 @@ same pattern as discovery toggles / tracked software. No new RBAC permission.
 
 - **`/admin`**: an "Alert rules" card with a Manage button (next to Users & roles).
 - **`/admin/alert-rules`**: table of rules (name, signal, condition as readable
-  text e.g. `CPU ≥ 90% for 2 samples (~30 min)`, severity, enabled switch) +
-  New / Edit dialog. Empty copy explains they watch spec-29 samples.
+  text e.g. `CPU ≥ 90% for 2 samples (~30 min)`, severity, enabled switch,
+  **Ticket auto-create** Inherit / On / Off) + New / Edit dialog. Empty copy
+  explains they watch spec-29 samples. Per-rule override resolves against the
+  global Spec 33 notification-type matrix when set to Inherit.
 - **Bell / `/notifications`**: new types in the existing type filter.
 - **Computer Monitoring card**: no extra chrome in v1 (the notification deep-link
   is enough). Optional "N rules firing" chip is phase 2.

@@ -7,6 +7,15 @@ via a feature branch + PR.
 
 ---
 
+## 🚧 Ticketing: Per-alert-rule ticket auto-create (spec 33 v2, `feat/spec-33-alert-rule-ticket-override`)
+
+Tri-state **Ticket auto-create** on each Spec 30 alert rule (`inherit` | `on` |
+`off`); metric fire/recover notifications carry `meta.alertRuleId` for override
+resolution. Admin table + dialog on `/admin/alert-rules`. Completes Spec 33 v2.
+Design:
+`docs/superpowers/specs/2026-10-21-alert-rule-ticket-auto-create-design.md`.
+**Needs `npm run db:push`.**
+
 ## 🚧 Ticketing: Simple SLA (spec 33 v2, `feat/spec-33-simple-sla`)
 
 Wall-clock SLA from priority (High 4h / Medium 8h / Low 24h), soft-pause on
