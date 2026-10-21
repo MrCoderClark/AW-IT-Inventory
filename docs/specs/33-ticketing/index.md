@@ -95,7 +95,8 @@ List KPI strip: **Open / In Progress / Waiting / Resolved** (`waiting` =
    toggles.
 2. **v2** — waiting status; CSV export; simple SLA; **per-alert-rule ticket
    auto-create override** (shipped).
-3. **Later** — email-in; end-user portal.
+3. **Later** — **outbound ticket email** (in progress on
+   `feat/spec-33-outbound-ticket-email`); then email-in; end-user portal.
 
 ## Out of scope / non-goals (v1)
 
