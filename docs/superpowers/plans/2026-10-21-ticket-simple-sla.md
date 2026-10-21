@@ -128,7 +128,7 @@ describe("ticket SLA", () => {
   });
 
   it("retargets when priority changes", () => {
-    const now = new Date("2026-10-21T15:00:00.000Z"); // 3h after create
+    const now = new Date("2026-10-21T17:00:00.000Z"); // 5h after create
     expect(
       ticketSlaState(
         { createdAt: CREATED, priority: "high", status: "open" },
@@ -140,7 +140,7 @@ describe("ticket SLA", () => {
         { createdAt: CREATED, priority: "medium", status: "open" },
         now,
       ),
-    ).toMatchObject({ kind: "ok", label: "5h left" }); // med due +8h = 20:00
+    ).toMatchObject({ kind: "ok", label: "3h left" }); // med due +8h = 20:00
   });
 });
 ```
