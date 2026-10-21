@@ -6,8 +6,9 @@
 > [spec 34](../34-ai-assisted-ops/index.md) (later).
 
 **Date**: 2026-10-20  
-**Status**: Accepted (implemented on feat/spec-33-ticketing-v1; pending merge) — [design v1](./design-v1.md) · [plan v1](./plan-v1.md)  
-**UI reference**: [`docs/Design/ticketing-mock.png`](../../Design/ticketing-mock.png)
+**Status**: Accepted (v1 merged) — [design v1](./design-v1.md) · [plan v1](./plan-v1.md)  
+**UI polish (Accepted)**: [helpdesk list + full detail](../../superpowers/specs/2026-10-20-ticketing-helpdesk-ui-design.md)  
+**UI references**: helpdesk mock (user) · [`docs/Design/ticketing-mock.png`](../../Design/ticketing-mock.png)
 
 ## Summary
 
@@ -29,8 +30,8 @@ layout; those features are parked for later phases.
   always available. Never fail an alert because ticket insert failed.
 - **Reuse inventory identity.** Optional `asset_id`; assignees are emails
   (aw-auth users), same pattern as other `requestedBy` / actor fields.
-- **Mock-guided UI, scope-honest.** Master–detail list + pane from the mock;
-  no fake SLA or AI blocks in v1.
+- **Mock-guided UI, scope-honest.** Helpdesk list dashboard at `/tickets` and
+  full detail page at `/tickets/[id]`; no fake SLA or AI blocks in v1.
 
 ## Requirements
 
@@ -63,9 +64,10 @@ layout; those features are parked for later phases.
   **auto-create ticket**. On successful `createNotification`, if the type is
   enabled and no ticket exists for that notification id, insert a ticket
   best-effort (never fails the notification path).
-- **AC-6**: UI at `/tickets` follows the mock’s list + right detail pane
-  (search, filters for status/priority/category/assignee). v1 omits SLA column,
-  KPI/SLA cards, Auto-triage toggle, and AI Triage panel.
+- **AC-6**: UI at `/tickets` is a helpdesk list (KPI strip + table with search
+  and filters for status/priority/category/assignee); detail at `/tickets/[id]`
+  (conversation + meta sidebar). UI polish omits SLA, AI, Export, Tags, and
+  Related tickets.
 - **AC-7**: Nav **Ticketing** under Manage, gated `user:admin`. Deep-link from
   ticket to asset when linked; from notification to ticket when one exists.
 

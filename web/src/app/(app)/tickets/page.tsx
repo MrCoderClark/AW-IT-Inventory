@@ -2,14 +2,13 @@ import { Lock } from "lucide-react";
 
 import { PagePlaceholder } from "@/components/page-placeholder";
 import { TicketsView } from "@/components/tickets-view";
+import { getLinkAssets } from "@/db/queries";
 import { listTickets } from "@/db/tickets";
 import { hasPermission, requireUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
-export default async function TicketsPage({
-  searchParams,
-}: PageProps<"/tickets">) {
+export default async function TicketsPage() {
   const user = await requireUser();
 
   if (!hasPermission(user, "user:admin")) {
@@ -22,16 +21,16 @@ export default async function TicketsPage({
     );
   }
 
-  const tickets = await listTickets();
-  const { id: rawId } = await searchParams;
-  const initialTicketId =
-    typeof rawId === "string" && rawId.length > 0 ? rawId : null;
+  const [tickets, linkAssets] = await Promise.all([
+    listTickets(),
+    getLinkAssets(),
+  ]);
 
   return (
     <TicketsView
       initialTickets={tickets}
+      linkAssets={linkAssets}
       viewerEmail={user.email}
-      initialTicketId={initialTicketId}
     />
   );
 }

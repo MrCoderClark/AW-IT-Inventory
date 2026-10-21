@@ -154,7 +154,7 @@ export function NotificationsView({
         ...prev,
         [notificationId]: res.ticketId!,
       }));
-      router.push(`/tickets?id=${res.ticketId}`);
+      router.push(`/tickets/${res.ticketId}`);
     }
   }
 
@@ -251,7 +251,7 @@ export function NotificationsView({
                         size="sm"
                         nativeButton={false}
                         render={
-                          <Link href={`/tickets?id=${ticketId}`} />
+                          <Link href={`/tickets/${ticketId}`} />
                         }
                       >
                         <Ticket className="size-3.5" /> View ticket

@@ -89,6 +89,7 @@ describe("createTicketAction", () => {
       }),
     );
     expect(revalidateMock).toHaveBeenCalledWith("/tickets");
+    expect(revalidateMock).toHaveBeenCalledWith(`/tickets/${TICKET_ID}`);
     expect(res.ok).toBe(true);
   });
 });
@@ -124,10 +125,12 @@ describe("updateTicketAction", () => {
     expect(revalidateMock).not.toHaveBeenCalled();
   });
 
-  it("updates and revalidates", async () => {
+  it("updates and revalidates the list and the ticket page", async () => {
     updateMock.mockResolvedValue(true);
     const res = await updateTicketAction(TICKET_ID, { status: "closed" });
     expect(updateMock).toHaveBeenCalledWith(TICKET_ID, { status: "closed" });
+    expect(revalidateMock).toHaveBeenCalledWith("/tickets");
+    expect(revalidateMock).toHaveBeenCalledWith(`/tickets/${TICKET_ID}`);
     expect(res.ok).toBe(true);
   });
 });
@@ -142,6 +145,8 @@ describe("addTicketCommentAction / createTicketFromNotificationAction", () => {
       authorEmail: "admin@example.com",
       body: "Checking logs.",
     });
+    expect(revalidateMock).toHaveBeenCalledWith("/tickets");
+    expect(revalidateMock).toHaveBeenCalledWith(`/tickets/${TICKET_ID}`);
     expect(res.ok).toBe(true);
   });
 
@@ -152,7 +157,16 @@ describe("addTicketCommentAction / createTicketFromNotificationAction", () => {
     createFromNotifMock.mockResolvedValue({ id: TICKET_ID, number: 1 });
     const res = await createTicketFromNotificationAction(NOTIF_ID);
     expect(res.ok).toBe(true);
+    expect(revalidateMock).toHaveBeenCalledWith("/tickets");
+    expect(revalidateMock).toHaveBeenCalledWith(`/tickets/${TICKET_ID}`);
     expect(revalidateMock).toHaveBeenCalledWith("/notifications");
+  });
+
+  it("revalidates the existing ticket page when one already exists", async () => {
+    createFromNotifMock.mockResolvedValue({ existingId: TICKET_ID });
+    const res = await createTicketFromNotificationAction(NOTIF_ID);
+    expect(res.ok).toBe(true);
+    expect(revalidateMock).toHaveBeenCalledWith(`/tickets/${TICKET_ID}`);
   });
 });
 

@@ -1787,6 +1787,8 @@ export const tickets = pgTable(
       .default("medium"),
     category: text("category").notNull().default(""),
     assigneeEmail: text("assignee_email"),
+    /** End-user / device owner the ticket is for (may differ from createdBy). */
+    requesterEmail: text("requester_email"),
     assetId: uuid("asset_id").references(() => assets.id, {
       onDelete: "set null",
     }),

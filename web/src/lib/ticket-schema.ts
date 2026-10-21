@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import type { TicketPriority, TicketStatus } from "@/lib/data";
+import { TICKET_CATEGORIES } from "@/lib/ticket-ui";
 
 const TICKET_STATUSES = [
   "open",
@@ -15,12 +16,15 @@ const TICKET_PRIORITIES = [
   "high",
 ] as const satisfies readonly TicketPriority[];
 
+const ticketCategorySchema = z.enum(TICKET_CATEGORIES);
+
 export const createTicketInputSchema = z.object({
   subject: z.string().trim().min(1, "Enter a subject."),
   description: z.string().optional(),
   priority: z.enum(TICKET_PRIORITIES).optional(),
-  category: z.string().optional(),
+  category: ticketCategorySchema.optional(),
   assigneeEmail: z.string().email().nullable().optional(),
+  requesterEmail: z.string().email().nullable().optional(),
   assetId: z.string().uuid().nullable().optional(),
 });
 
@@ -30,8 +34,9 @@ export const updateTicketPatchSchema = z
     description: z.string().optional(),
     status: z.enum(TICKET_STATUSES).optional(),
     priority: z.enum(TICKET_PRIORITIES).optional(),
-    category: z.string().optional(),
+    category: ticketCategorySchema.optional(),
     assigneeEmail: z.string().email().nullable().optional(),
+    requesterEmail: z.string().email().nullable().optional(),
     assetId: z.string().uuid().nullable().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, {

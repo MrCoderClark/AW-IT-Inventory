@@ -1,15 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Plus, Search } from "lucide-react";
 
-import { getTicketAction } from "@/app/(app)/ticket-actions";
+import { fmtDateTime } from "@/components/detail-ui";
 import { NewTicketDialog } from "@/components/new-ticket-dialog";
-import {
-  TicketDetailPane,
-  type TicketDetail,
-} from "@/components/ticket-detail-pane";
+import { TicketKpiStrip } from "@/components/ticket-kpi-strip";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,20 +25,27 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { TicketListItem, TicketPriority, TicketStatus } from "@/lib/data";
+import type {
+  LinkAsset,
+  TicketListItem,
+  TicketPriority,
+  TicketStatus,
+} from "@/lib/data";
 import {
   assigneeLabel,
   categoryLabel,
+  requesterLabel,
   ticketNumberLabel,
   ticketPriorityVariant,
+  TICKET_CATEGORIES,
   TICKET_PRIORITY_LABEL,
   TICKET_STATUS_LABEL,
   ticketStatusVariant,
 } from "@/lib/ticket-ui";
-import { cn } from "@/lib/utils";
 
 const ALL = "__all__";
 const UNASSIGNED = "__unassigned__";
+const PAGE = 10;
 
 const STATUSES: TicketStatus[] = ["open", "in_progress", "resolved", "closed"];
 const PRIORITIES: TicketPriority[] = ["low", "medium", "high"];
@@ -84,14 +88,14 @@ function filterTickets(
 
 export function TicketsView({
   initialTickets,
-  initialTicketId = null,
+  linkAssets = [],
+  viewerEmail: _viewerEmail,
 }: {
   initialTickets: TicketListItem[];
+  linkAssets?: LinkAsset[];
   viewerEmail: string;
-  initialTicketId?: string | null;
 }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
 
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
@@ -99,18 +103,7 @@ export function TicketsView({
   const [priorityFilter, setPriorityFilter] = React.useState(ALL);
   const [categoryFilter, setCategoryFilter] = React.useState(ALL);
   const [assigneeFilter, setAssigneeFilter] = React.useState(ALL);
-
-  const [selectedId, setSelectedId] = React.useState<string | null>(
-    initialTicketId,
-  );
-  const [detail, setDetail] = React.useState<TicketDetail | null>(null);
-  const [detailLoading, setDetailLoading] = React.useState(false);
-
-  const categories = React.useMemo(() => {
-    const set = new Set<string>();
-    for (const t of initialTickets) set.add(categoryLabel(t.category));
-    return [...set].sort((a, b) => a.localeCompare(b));
-  }, [initialTickets]);
+  const [page, setPage] = React.useState(0);
 
   const assignees = React.useMemo(() => {
     const set = new Set<string>();
@@ -140,36 +133,16 @@ export function TicketsView({
     ],
   );
 
-  const loadDetail = React.useCallback(async (id: string) => {
-    setDetailLoading(true);
-    const res = await getTicketAction(id);
-    setDetailLoading(false);
-    if (res.ok) {
-      setDetail(res.ticket);
-    } else {
-      setDetail(null);
-    }
-  }, []);
-
   React.useEffect(() => {
-    const fromUrl = searchParams.get("id");
-    if (fromUrl) setSelectedId(fromUrl);
-  }, [searchParams]);
+    setPage(0);
+  }, [query, statusFilter, priorityFilter, categoryFilter, assigneeFilter]);
 
-  React.useEffect(() => {
-    if (!selectedId) {
-      setDetail(null);
-      return;
-    }
-    void loadDetail(selectedId);
-  }, [selectedId, loadDetail, initialTickets]);
-
-  function selectTicket(id: string) {
-    setSelectedId(id);
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("id", id);
-    router.replace(`/tickets?${params.toString()}`, { scroll: false });
-  }
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE));
+  const clampedPage = Math.min(page, pageCount - 1);
+  const pageRows = filtered.slice(
+    clampedPage * PAGE,
+    clampedPage * PAGE + PAGE,
+  );
 
   function onDialogOpenChange(open: boolean) {
     setDialogOpen(open);
@@ -177,13 +150,8 @@ export function TicketsView({
   }
 
   function onTicketCreated(ticketId: string | undefined) {
-    if (ticketId) selectTicket(ticketId);
+    if (ticketId) router.push(`/tickets/${ticketId}`);
     router.refresh();
-  }
-
-  function refreshDetail() {
-    router.refresh();
-    if (selectedId) void loadDetail(selectedId);
   }
 
   return (
@@ -201,6 +169,8 @@ export function TicketsView({
             New Ticket
           </Button>
         </div>
+
+        <TicketKpiStrip tickets={initialTickets} />
 
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
           <div className="relative min-w-[200px] flex-1 sm:max-w-xs">
@@ -242,7 +212,7 @@ export function TicketsView({
             onValueChange={setCategoryFilter}
             options={[
               { value: ALL, label: "All" },
-              ...categories.map((c) => ({ value: c, label: c })),
+              ...TICKET_CATEGORIES.map((c) => ({ value: c, label: c })),
             ]}
           />
           <FilterSelect
@@ -260,79 +230,113 @@ export function TicketsView({
           />
         </div>
 
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-          <div className="min-w-0 flex-1 overflow-hidden rounded-xl border bg-card">
-            {filtered.length === 0 ? (
-              <div className="grid place-content-center gap-2 py-16 text-center">
-                <p className="text-sm font-semibold">No tickets match</p>
-                <p className="text-muted-foreground mx-auto max-w-sm text-sm">
-                  {initialTickets.length === 0
-                    ? "Create a ticket or wait for one from an alert notification."
-                    : "Try clearing filters or search."}
-                </p>
-              </div>
-            ) : (
+        <div className="overflow-hidden rounded-xl border bg-card">
+          {filtered.length === 0 ? (
+            <div className="grid place-content-center gap-2 py-16 text-center">
+              <p className="text-sm font-semibold">No tickets match</p>
+              <p className="text-muted-foreground mx-auto max-w-sm text-sm">
+                {initialTickets.length === 0
+                  ? "Create a ticket or wait for one from an alert notification."
+                  : "Try clearing filters or search."}
+              </p>
+            </div>
+          ) : (
+            <>
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Ticket</TableHead>
-                    <TableHead>Subject</TableHead>
-                    <TableHead>Asset</TableHead>
+                    <TableHead>Title</TableHead>
+                    <TableHead>Requester</TableHead>
                     <TableHead>Category</TableHead>
                     <TableHead>Priority</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Assignee</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead>Updated</TableHead>
+                    <TableHead>Location</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filtered.map((t) => {
-                    const selected = t.id === selectedId;
-                    return (
-                      <TableRow
-                        key={t.id}
-                        data-state={selected ? "selected" : undefined}
-                        className={cn(
-                          "cursor-pointer",
-                          selected && "bg-primary/5",
-                        )}
-                        onClick={() => selectTicket(t.id)}
-                      >
-                        <TableCell className="font-mono text-sm">
-                          {ticketNumberLabel(t.number)}
-                        </TableCell>
-                        <TableCell className="max-w-[200px] truncate font-medium">
-                          {t.subject}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {t.assetTag ?? "—"}
-                        </TableCell>
-                        <TableCell>{categoryLabel(t.category)}</TableCell>
-                        <TableCell>
-                          <Badge variant={ticketPriorityVariant(t.priority)}>
-                            {TICKET_PRIORITY_LABEL[t.priority]}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={ticketStatusVariant(t.status)}>
-                            {TICKET_STATUS_LABEL[t.status]}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {assigneeLabel(t.assigneeEmail)}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                  {pageRows.map((t) => (
+                    <TableRow
+                      key={t.id}
+                      className="cursor-pointer"
+                      onClick={() => router.push(`/tickets/${t.id}`)}
+                    >
+                      <TableCell className="font-mono text-sm">
+                        {ticketNumberLabel(t.number)}
+                      </TableCell>
+                      <TableCell className="max-w-[200px] truncate font-medium">
+                        {t.subject}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {requesterLabel(t)}
+                      </TableCell>
+                      <TableCell>{categoryLabel(t.category)}</TableCell>
+                      <TableCell>
+                        <Badge variant={ticketPriorityVariant(t.priority)}>
+                          {TICKET_PRIORITY_LABEL[t.priority]}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={ticketStatusVariant(t.status)}>
+                          {TICKET_STATUS_LABEL[t.status]}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground whitespace-nowrap text-sm">
+                        {fmtDateTime(t.createdAt)}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground whitespace-nowrap text-sm">
+                        {fmtDateTime(t.updatedAt)}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {t.locationLabel ?? "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
-            )}
-          </div>
 
-          <TicketDetailPane
-            ticket={detail}
-            loading={detailLoading}
-            onSaved={refreshDetail}
-          />
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t p-4">
+                <p className="text-muted-foreground text-sm">
+                  {filtered.length}{" "}
+                  {filtered.length === 1 ? "ticket" : "tickets"} ·{" "}
+                  {clampedPage + 1} of {pageCount}
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage((p) => Math.max(p - 1, 0))}
+                    disabled={clampedPage === 0}
+                  >
+                    Previous
+                  </Button>
+                  {Array.from({ length: pageCount }, (_, i) => (
+                    <Button
+                      key={i}
+                      variant={clampedPage === i ? "default" : "outline"}
+                      size="sm"
+                      className="min-w-8 px-2"
+                      onClick={() => setPage(i)}
+                    >
+                      {i + 1}
+                    </Button>
+                  ))}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setPage((p) => Math.min(p + 1, pageCount - 1))
+                    }
+                    disabled={clampedPage >= pageCount - 1}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -340,6 +344,7 @@ export function TicketsView({
         open={dialogOpen}
         onOpenChange={onDialogOpenChange}
         onCreated={onTicketCreated}
+        linkAssets={linkAssets}
       />
     </>
   );
