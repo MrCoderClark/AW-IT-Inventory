@@ -4,7 +4,8 @@ export type AssistAction =
   | "summarize_health"
   | "explain_failures"
   | "summarize_script_run"
-  | "draft_script";
+  | "draft_script"
+  | "draft_ticket";
 
 export type AssistResult = {
   observed: string[];
@@ -14,6 +15,12 @@ export type AssistResult = {
     name?: string;
     body: string;
     notes?: string;
+  };
+  ticketDraft?: {
+    subject: string;
+    description: string;
+    category?: string;
+    priority?: "low" | "medium" | "high";
   };
 };
 

@@ -42,4 +42,38 @@ describe("parseAssistResult", () => {
     );
     expect(r.scriptDraft).toBeUndefined();
   });
+
+  it("parses ticketDraft for draft_ticket", () => {
+    const r = parseAssistResult(
+      JSON.stringify({
+        observed: ["Disk alert"],
+        hypotheses: [],
+        recommendations: [],
+        ticketDraft: {
+          subject: "Disk space critical on PC-1",
+          description: "Free space below threshold. Investigate cleanup.",
+          category: "Alert",
+          priority: "high",
+        },
+      }),
+    );
+    expect(r.ticketDraft).toEqual({
+      subject: "Disk space critical on PC-1",
+      description: "Free space below threshold. Investigate cleanup.",
+      category: "Alert",
+      priority: "high",
+    });
+  });
+
+  it("omits ticketDraft when subject/description missing", () => {
+    const r = parseAssistResult(
+      JSON.stringify({
+        observed: [],
+        hypotheses: [],
+        recommendations: [],
+        ticketDraft: { subject: "", description: "x" },
+      }),
+    );
+    expect(r.ticketDraft).toBeUndefined();
+  });
 });
