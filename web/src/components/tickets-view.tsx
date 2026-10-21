@@ -2,7 +2,9 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Search } from "lucide-react";
+import { Download, Plus, Search } from "lucide-react";
+import { toast } from "sonner";
+import { ticketsToCsv } from "@/lib/ticket-csv";
 
 import { fmtDateTime } from "@/components/detail-ui";
 import { NewTicketDialog } from "@/components/new-ticket-dialog";
@@ -160,6 +162,28 @@ export function TicketsView({
     router.refresh();
   }
 
+  function exportCsv() {
+    if (filtered.length === 0) {
+      toast.error("Nothing to export", {
+        description: "No tickets match the current filters.",
+      });
+      return;
+    }
+    const csv = ticketsToCsv(filtered);
+    const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `opus-tickets-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    toast.success("Export ready", {
+      description: `${filtered.length} ticket${filtered.length === 1 ? "" : "s"} exported to CSV.`,
+    });
+  }
+
   return (
     <>
       <div className="mx-auto flex max-w-[1400px] flex-col gap-6">
@@ -170,10 +194,21 @@ export function TicketsView({
               Service tickets linked to assets and alerts.
             </p>
           </div>
-          <Button type="button" onClick={() => setDialogOpen(true)}>
-            <Plus className="size-4" />
-            New Ticket
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={filtered.length === 0}
+              onClick={exportCsv}
+            >
+              <Download className="size-4" />
+              Export
+            </Button>
+            <Button type="button" onClick={() => setDialogOpen(true)}>
+              <Plus className="size-4" />
+              New Ticket
+            </Button>
+          </div>
         </div>
 
         <TicketKpiStrip tickets={initialTickets} />
