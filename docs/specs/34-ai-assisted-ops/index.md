@@ -146,8 +146,11 @@ Service accounts: **no** AI scopes in v1 (techs only).
 4. **v2+ (parked)** — fleet alert correlation; recurring-issue / automation
    reports; on-prem provider profile + richer PII; internal KB article hints
    (when a KB exists).
-5. **Later** — ticket draft assist (after [spec 33](../33-ticketing/index.md) v1);
-   streaming UI; admin prompt retention opt-in.
+5. **v2c — ticket draft assist** — [design](../../superpowers/specs/2026-10-21-ticket-draft-assist-design.md):
+   manual Create ticket from notification uses AI draft when configured;
+   auto-create stays raw. (shipped on feat/spec-34-ticket-draft-assist)
+6. **Later** — streaming UI; admin prompt retention opt-in; computer Assist
+   “Draft ticket”; email-in still Spec 33.
 
 ## Out of scope / non-goals (v1)
 

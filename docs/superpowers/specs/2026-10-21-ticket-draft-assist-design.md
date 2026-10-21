@@ -1,7 +1,7 @@
 # Spec 34 — Ticket draft assist (from notification)
 
 **Date**: 2026-10-21  
-**Status**: Accepted (design)  
+**Status**: Accepted (implemented on `feat/spec-34-ticket-draft-assist`)  
 **Parent**: [Spec 34 AI-assisted ops](../../specs/34-ai-assisted-ops/index.md) · [Spec 33 ticketing](../../specs/33-ticketing/index.md)  
 **Branch**: `feat/spec-34-ticket-draft-assist`
 
