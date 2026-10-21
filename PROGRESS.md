@@ -7,6 +7,13 @@ via a feature branch + PR.
 
 ---
 
+## 🚧 Ticketing: Simple SLA (spec 33 v2, `feat/spec-33-simple-sla`)
+
+Wall-clock SLA from priority (High 4h / Medium 8h / Low 24h), soft-pause on
+**Waiting on user**, **SLA Breached** KPI, list + detail labels, CSV **SLA**
+column. Pure compute — no DB columns. Design:
+`docs/superpowers/specs/2026-10-21-ticket-simple-sla-design.md`.
+
 ## 🚧 Ticketing: CSV list export (spec 33 v2, `feat/spec-33-ticket-csv-export`)
 
 Export button on `/tickets` downloads the current filtered ticket set as

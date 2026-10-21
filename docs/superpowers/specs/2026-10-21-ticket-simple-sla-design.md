@@ -1,7 +1,7 @@
 # Spec 33 v2 — Simple ticket SLA (compute + soft pause)
 
 **Date**: 2026-10-21  
-**Status**: Accepted (design)  
+**Status**: Accepted (implemented on `feat/spec-33-simple-sla`)  
 **Parent**: [Spec 33 ticketing](../../specs/33-ticketing/index.md)  
 **Branch**: `feat/spec-33-simple-sla`  
 **UI reference**: SLA column + “SLA Breached” KPI on [`docs/Design/ticketing-mock.png`](../../Design/ticketing-mock.png)  

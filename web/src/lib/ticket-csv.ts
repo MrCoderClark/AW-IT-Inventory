@@ -1,4 +1,5 @@
 import type { TicketListItem } from "@/lib/data";
+import { ticketSlaState } from "@/lib/ticket-sla";
 import {
   categoryLabel,
   requesterLabel,
@@ -15,6 +16,7 @@ const HEADERS = [
   "Category",
   "Priority",
   "Status",
+  "SLA",
   "Assignee",
   "Requester",
   "Created",
@@ -27,7 +29,7 @@ function csvField(value: string): string {
   return value;
 }
 
-function ticketCsvCells(t: TicketListItem): string[] {
+function ticketCsvCells(t: TicketListItem, now: Date): string[] {
   return [
     ticketNumberLabel(t.number),
     t.subject,
@@ -36,6 +38,7 @@ function ticketCsvCells(t: TicketListItem): string[] {
     categoryLabel(t.category),
     TICKET_PRIORITY_LABEL[t.priority],
     TICKET_STATUS_LABEL[t.status],
+    ticketSlaState(t, now).label,
     t.assigneeEmail ?? "",
     requesterLabel(t),
     t.createdAt,
@@ -43,10 +46,10 @@ function ticketCsvCells(t: TicketListItem): string[] {
 }
 
 /** RFC 4180 CSV for ticket list export (spec 33 v2). Caller passes filtered rows. */
-export function ticketsToCsv(rows: TicketListItem[]): string {
+export function ticketsToCsv(rows: TicketListItem[], now: Date = new Date()): string {
   const lines = [HEADERS.map((h) => csvField(h)).join(",")];
   for (const t of rows) {
-    lines.push(ticketCsvCells(t).map(csvField).join(","));
+    lines.push(ticketCsvCells(t, now).map(csvField).join(","));
   }
   return lines.join("\r\n");
 }
