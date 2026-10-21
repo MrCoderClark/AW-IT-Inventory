@@ -38,7 +38,7 @@ export function verifyResendWebhook(payload: string, headers: Headers) {
 
 /**
  * Fetch a received email's body. Returns null when the key is unset or the
- * receiving API fails, so a webhook can acknowledge without retrying forever.
+ * receiving API fails. The ingest route returns 500 on null so Resend retries.
  */
 export async function fetchReceivedEmail(
   emailId: string,
