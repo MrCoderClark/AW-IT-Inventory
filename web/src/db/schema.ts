@@ -1830,6 +1830,30 @@ export const ticketComments = pgTable("ticket_comments", {
     .notNull(),
 });
 
+/** Spec 33: outbound and inbound ticket mail, keyed by Message-ID. */
+export const ticketEmailMessages = pgTable(
+  "ticket_email_messages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ticketId: uuid("ticket_id")
+      .notNull()
+      .references(() => tickets.id, { onDelete: "cascade" }),
+    direction: text("direction")
+      .$type<"outbound" | "inbound">()
+      .notNull(),
+    messageId: text("message_id").notNull(),
+    inReplyTo: text("in_reply_to"),
+    fromEmail: text("from_email"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    uniqueIndex("ticket_email_messages_message_id_uidx").on(t.messageId),
+    index("ticket_email_messages_ticket_id_idx").on(t.ticketId),
+  ],
+);
+
 /** Absent type = auto-create OFF (explicit enable required). */
 export const ticketAutoCreateTypes = pgTable("ticket_auto_create_types", {
   type: text("type").primaryKey(),
@@ -1841,4 +1865,5 @@ export const ticketAutoCreateTypes = pgTable("ticket_auto_create_types", {
 
 export type TicketRow = typeof tickets.$inferSelect;
 export type TicketCommentRow = typeof ticketComments.$inferSelect;
+export type TicketEmailMessageRow = typeof ticketEmailMessages.$inferSelect;
 export type TicketAutoCreateTypeRow = typeof ticketAutoCreateTypes.$inferSelect;
