@@ -1,7 +1,7 @@
 # Spec 33 — Outbound ticket email
 
 **Date**: 2026-10-21  
-**Status**: Accepted (design)  
+**Status**: Accepted (implemented on branch)  
 **Parent**: [Spec 33 ticketing](../../specs/33-ticketing/index.md)  
 **Branch**: `feat/spec-33-outbound-ticket-email`
 
