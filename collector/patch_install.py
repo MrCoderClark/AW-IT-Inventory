@@ -227,6 +227,26 @@ def _extract_json_object(raw: str) -> str | None:
     return text[start : end + 1]
 
 
+def _extract_json_object(raw: str) -> str | None:
+    """Last JSON object in mixed WinRM stdout (winget text / CLIXML noise)."""
+    text = (raw or "").strip()
+    if not text:
+        return None
+    # Prefer a whole-line object (our ConvertTo-Json -Compress line).
+    for line in reversed(text.splitlines()):
+        s = line.strip()
+        if s.startswith("{") and s.endswith("}"):
+            return s
+    # Fallback: last {...} span in the blob.
+    end = text.rfind("}")
+    if end < 0:
+        return None
+    start = text.rfind("{", 0, end)
+    if start < 0:
+        return None
+    return text[start : end + 1]
+
+
 def _parse_item(raw: str) -> dict:
     blob = _extract_json_object(raw)
     if blob is None:
