@@ -117,6 +117,7 @@ export function PatchesFleet({
       const n = new Set(prev);
       if (n.has(tag)) n.delete(tag);
       else n.add(tag);
+      if (n.size === 0) setSummary(null);
       return n;
     });
   }
@@ -129,8 +130,14 @@ export function PatchesFleet({
       } else {
         for (const t of viewTags) n.add(t);
       }
+      if (n.size === 0) setSummary(null);
       return n;
     });
+  }
+
+  function openInstallConfirm() {
+    setSummary(null);
+    setConfirmOpen(true);
   }
 
   function doInstall() {
@@ -177,7 +184,7 @@ export function PatchesFleet({
             <Button
               size="sm"
               disabled={selected.size === 0 || busy}
-              onClick={() => setConfirmOpen(true)}
+              onClick={openInstallConfirm}
             >
               {busy ? (
                 <Loader2 className="size-4 animate-spin" />

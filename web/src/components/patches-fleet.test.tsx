@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { PatchesFleet } from "./patches-fleet";
@@ -78,9 +78,44 @@ describe("PatchesFleet", () => {
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText(/Install OS updates on 1 computer/i)).toBeTruthy();
     expect(within(dialog).getByText(/missing OS updates/i)).toBeTruthy();
-    expect(within(dialog).getByText(/not/i)).toBeTruthy();
+    const description = within(dialog).getByText((_, el) => {
+      return (
+        el instanceof HTMLElement &&
+        el.getAttribute("data-slot") === "dialog-description"
+      );
+    });
+    expect(description.textContent).toMatch(/not/i);
+    expect(description.textContent).toMatch(/reboot/i);
     expect(within(dialog).getByText(/rebooted automatically/i)).toBeTruthy();
     expect(within(dialog).getByText(/fleet concurrency limit/i)).toBeTruthy();
+  });
+
+  it("queues install on confirm and clears selection", async () => {
+    vi.mocked(requestFleetOsPatchInstall).mockResolvedValue({
+      ok: true,
+      enqueued: ["jid"],
+      skipped: [],
+    });
+    const user = userEvent.setup();
+    render(<PatchesFleet rows={ROWS} canDeploy />);
+    await user.click(screen.getByLabelText(/Select Needs reboot/i));
+    await user.click(
+      screen.getByRole("button", { name: /Install OS updates/i }),
+    );
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: /^Install$/i }),
+    );
+    await waitFor(() =>
+      expect(requestFleetOsPatchInstall).toHaveBeenCalledWith({
+        assetTags: ["B"],
+      }),
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(/1 install queued/i);
+    const installBtn = screen.getByRole("button", {
+      name: /Install OS updates/i,
+    });
+    expect((installBtn as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("renders every computer with a count", () => {
