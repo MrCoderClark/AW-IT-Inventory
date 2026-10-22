@@ -6,7 +6,10 @@ import userEvent from "@testing-library/user-event";
 import { UpdatesPanel } from "./updates-panel";
 import type { ComputerPatches } from "@/db/patches";
 import { requestPatchInstall } from "@/app/(app)/patch-install-actions";
-import { requestRebootSchedule } from "@/app/(app)/reboot-actions";
+import {
+  requestCancelReboot,
+  requestRebootSchedule,
+} from "@/app/(app)/reboot-actions";
 
 vi.mock("@/app/(app)/patch-install-actions", () => ({
   requestPatchInstall: vi.fn(),
@@ -59,6 +62,7 @@ describe("UpdatesPanel", () => {
   beforeEach(() => {
     vi.mocked(requestPatchInstall).mockReset();
     vi.mocked(requestRebootSchedule).mockReset();
+    vi.mocked(requestCancelReboot).mockReset();
   });
 
   it("prompts to scan when there is no patch row", () => {
@@ -172,6 +176,61 @@ describe("UpdatesPanel", () => {
           rebootAtIso: new Date("2026-12-01T14:30").toISOString(),
         }),
       ),
+    );
+  });
+
+  it("calls requestRebootSchedule with assetTag and ISO when scheduling reboot", async () => {
+    vi.mocked(requestRebootSchedule).mockResolvedValue({ ok: true });
+    const user = userEvent.setup();
+    render(
+      <UpdatesPanel patches={SAMPLE} assetTag="PC1" canInstall patchJobs={[]} />,
+    );
+    await user.type(
+      screen.getByLabelText(/Reboot date and time/i),
+      "2026-12-01T14:30",
+    );
+    await user.click(screen.getByRole("button", { name: /Schedule reboot/i }));
+    await waitFor(() =>
+      expect(requestRebootSchedule).toHaveBeenCalledWith({
+        assetTag: "PC1",
+        scheduledAtIso: new Date("2026-12-01T14:30").toISOString(),
+      }),
+    );
+  });
+
+  it("calls requestCancelReboot when canceling a pending reboot job", async () => {
+    vi.mocked(requestCancelReboot).mockResolvedValue({ ok: true });
+    const user = userEvent.setup();
+    render(
+      <UpdatesPanel
+        patches={SAMPLE}
+        assetTag="PC1"
+        canInstall
+        patchJobs={[]}
+        rebootJobs={[
+          {
+            id: "reboot-job-1",
+            status: "pending",
+            scheduledAt: "2026-12-01T19:30:00.000Z",
+            sourcePatchInstallJobId: null,
+            requestedBy: "admin@example.com",
+            error: null,
+            finishedAt: null,
+            waitingForCollector: false,
+          },
+        ]}
+      />,
+    );
+    const history = screen
+      .getByRole("heading", { name: /Reboot history/i })
+      .closest("section");
+    expect(history).toBeTruthy();
+    await user.click(within(history!).getByRole("button", { name: /^Cancel$/i }));
+    await waitFor(() =>
+      expect(requestCancelReboot).toHaveBeenCalledWith({
+        id: "reboot-job-1",
+        assetTag: "PC1",
+      }),
     );
   });
 });
