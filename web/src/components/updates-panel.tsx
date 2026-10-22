@@ -171,6 +171,15 @@ export function UpdatesPanel({
     },
     [],
   );
+  const hasInFlight = inflight || rebootInflight || checkInflight;
+
+  // History is server-rendered; poll while any job is active so terminal
+  // status (and the bell) match without a manual reload.
+  React.useEffect(() => {
+    if (!hasInFlight) return;
+    const t = setInterval(() => router.refresh(), 3000);
+    return () => clearInterval(t);
+  }, [hasInFlight, router]);
 
   // Seed status maps once so we don't toast for already-finished history.
   React.useEffect(() => {
