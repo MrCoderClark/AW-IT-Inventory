@@ -53,8 +53,17 @@ const H = vi.hoisted(() => {
 
   const executeMock = vi.fn(() => Promise.resolve(state.execResult));
   const notifyMock = vi.fn();
+  const resolveDeployTargetMock = vi.fn();
 
-  return { state, selectMock, insertMock, updateMock, executeMock, notifyMock };
+  return {
+    state,
+    selectMock,
+    insertMock,
+    updateMock,
+    executeMock,
+    notifyMock,
+    resolveDeployTargetMock,
+  };
 });
 
 vi.mock("server-only", () => ({}));
@@ -70,10 +79,15 @@ vi.mock("@/db/index", () => ({
     execute: H.executeMock,
   },
 }));
+vi.mock("@/db/software-deploy", () => ({
+  resolveDeployTarget: (...args: unknown[]) =>
+    H.resolveDeployTargetMock(...args),
+}));
 
 import {
   buildPatchSelection,
   enqueuePatchInstall,
+  enqueueFleetOsPatchInstalls,
   claimNextPatchInstall,
   updatePatchInstallStatus,
   cancelPatchInstall,
@@ -254,5 +268,51 @@ describe("cancelPatchInstall", () => {
   it("cancels an in-flight job", async () => {
     H.state.updateReturns = [[{ id: JID }]];
     expect(await cancelPatchInstall(JID)).toBe(true);
+  });
+});
+
+describe("enqueueFleetOsPatchInstalls", () => {
+  it("enqueues OS-only jobs and skips empty / no-ip / in-flight", async () => {
+    H.resolveDeployTargetMock.mockImplementation(async (tag: string) => {
+      if (tag === "TAG-A") return { assetId: "a1", ip: "192.168.70.1" };
+      if (tag === "TAG-B") return null;
+      if (tag === "TAG-C") return { assetId: "a3", ip: "192.168.70.3" };
+      if (tag === "TAG-D") return { assetId: "a4", ip: "192.168.70.4" };
+      return null;
+    });
+
+    H.state.selects = [
+      [{ kbId: "KB1" }],
+      [{ kbId: "KB1", title: "Security Update" }],
+      [],
+      [{ kbId: "KB2" }],
+      [{ kbId: "KB2", title: "Update 2" }],
+      [{ id: "existing" }],
+      [],
+    ];
+    H.state.insertReturns = [[{ id: JID }]];
+
+    const result = await enqueueFleetOsPatchInstalls({
+      tags: ["TAG-A", "TAG-B", "TAG-C", "TAG-D"],
+      requestedBy: "admin@x.com",
+    });
+
+    expect(result.enqueued).toEqual([JID]);
+    expect(result.skipped).toEqual(
+      expect.arrayContaining([
+        { tag: "TAG-B", reason: "no-ip" },
+        { tag: "TAG-C", reason: "already-inflight" },
+        { tag: "TAG-D", reason: "no-missing" },
+      ]),
+    );
+    expect(result.skipped).toHaveLength(3);
+    expect(H.resolveDeployTargetMock).toHaveBeenCalledWith("TAG-A");
+  });
+
+  it("returns empty enqueued when tags empty", async () => {
+    expect(
+      await enqueueFleetOsPatchInstalls({ tags: [], requestedBy: "a@x.com" }),
+    ).toEqual({ enqueued: [], skipped: [] });
+    expect(H.resolveDeployTargetMock).not.toHaveBeenCalled();
   });
 });

@@ -9,7 +9,9 @@ import {
 import {
   buildPatchSelection,
   cancelPatchInstall,
+  enqueueFleetOsPatchInstalls,
   enqueuePatchInstall,
+  FLEET_OS_INSTALL_TAG_CAP,
   getPatchInstallJob,
   resolveDeployTarget,
 } from "@/db/patch-install";
@@ -85,6 +87,39 @@ export async function requestPatchInstall(input: {
 
   revalidatePath(`/assets/${tag}`);
   return { ok: true, id: enq.id };
+}
+
+export async function requestFleetOsPatchInstall(input: {
+  assetTags: string[];
+}): Promise<
+  | { ok: true; enqueued: string[]; skipped: { tag: string; reason: string }[] }
+  | ActionErr
+> {
+  const user = await getCurrentUser();
+  if (!user || !hasPermission(user, "software:deploy")) return FORBIDDEN;
+
+  const tags = (input.assetTags ?? []).map((t) => t.trim()).filter(Boolean);
+  if (tags.length === 0) {
+    return {
+      ok: false,
+      error: "Select at least one computer.",
+      code: "badrequest",
+    };
+  }
+  if (tags.length > FLEET_OS_INSTALL_TAG_CAP) {
+    return {
+      ok: false,
+      error: `Select at most ${FLEET_OS_INSTALL_TAG_CAP} computers.`,
+      code: "badrequest",
+    };
+  }
+
+  const result = await enqueueFleetOsPatchInstalls({
+    tags,
+    requestedBy: user.email,
+  });
+  revalidatePath("/patches");
+  return { ok: true, ...result };
 }
 
 export async function requestCancelPatchInstall(input: {
