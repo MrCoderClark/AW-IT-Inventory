@@ -30,3 +30,18 @@ npx vitest run src/db/reboot.test.ts src/db/notifications.test.ts src/app/api/re
 ## Commit
 
 Message: `feat(spec 31): reboot claim/status API and schedule actions`
+
+---
+
+## Follow-up — reboot schedule action edge cases (2026-10-22)
+
+Added four tests in `web/src/app/(app)/reboot-actions.test.ts`: past `scheduledAtIso` → `badrequest` (via enqueue `past-schedule`), invalid ISO → `badrequest`, `resolveDeployTarget` null → `badrequest`, enqueue `already-inflight` → `conflict`.
+
+```powershell
+cd web
+npx vitest run "src/app/(app)/reboot-actions.test.ts"
+```
+
+**Result:** 1 file, 7 tests passed.
+
+**Commit:** `test(spec 31): cover reboot schedule action edge cases`
