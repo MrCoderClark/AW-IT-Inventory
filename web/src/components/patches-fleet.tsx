@@ -285,12 +285,17 @@ export function PatchesFleet({
                     </TableCell>
                   )}
                   <TableCell>
-                    <Link
-                      href={`/assets/${r.tag}`}
-                      className="font-medium hover:underline"
-                    >
-                      {r.name}
-                    </Link>
+                    <div className="flex flex-col gap-0.5">
+                      <Link
+                        href={`/assets/${r.tag}`}
+                        className="font-medium hover:underline"
+                      >
+                        {r.name}
+                      </Link>
+                      <span className="text-xs text-muted-foreground">
+                        {r.assigneeName ?? "Pool"}
+                      </span>
+                    </div>
                   </TableCell>
                   <TableCell className="tabular-nums text-xs text-muted-foreground">
                     {attentionScore(r) || "—"}

@@ -7,6 +7,7 @@ import {
   appUpgrades,
   assets,
   complianceStatus,
+  people,
   windowsHotfixes,
   windowsMissingUpdates,
   windowsUpdateState,
@@ -401,6 +402,8 @@ export async function getComputerPatches(
 export type FleetPatchRow = {
   tag: string;
   name: string;
+  /** Current person assignment; null when unassigned (pool). */
+  assigneeName: string | null;
   pendingReboot: boolean | null;
   hotfixCount: number;
   wingetAvailable: boolean | null;
@@ -416,6 +419,7 @@ export async function getFleetPatches(): Promise<FleetPatchRow[]> {
     .select({
       tag: assets.tag,
       name: assets.name,
+      assigneeName: people.name,
       pendingReboot: windowsUpdateState.pendingReboot,
       hotfixCount: windowsUpdateState.hotfixCount,
       wingetAvailable: windowsUpdateState.wingetAvailable,
@@ -425,6 +429,7 @@ export async function getFleetPatches(): Promise<FleetPatchRow[]> {
       updatesLastDays: complianceStatus.updatesLastDays,
     })
     .from(assets)
+    .leftJoin(people, eq(people.id, assets.assigneeId))
     .leftJoin(windowsUpdateState, eq(windowsUpdateState.assetId, assets.id))
     .leftJoin(complianceStatus, eq(complianceStatus.assetId, assets.id))
     .where(eq(assets.type, "Computer"))
@@ -433,6 +438,7 @@ export async function getFleetPatches(): Promise<FleetPatchRow[]> {
   return rows.map((r) => ({
     tag: r.tag,
     name: r.name,
+    assigneeName: r.assigneeName ?? null,
     pendingReboot: r.pendingReboot,
     hotfixCount: r.hotfixCount ?? 0,
     wingetAvailable: r.wingetAvailable,

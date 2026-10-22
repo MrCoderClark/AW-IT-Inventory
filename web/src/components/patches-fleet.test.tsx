@@ -18,6 +18,7 @@ const ROWS: FleetPatchRow[] = [
   {
     tag: "A",
     name: "Clean PC",
+    assigneeName: "Ada Lovelace",
     pendingReboot: false,
     hotfixCount: 10,
     wingetAvailable: true,
@@ -29,6 +30,7 @@ const ROWS: FleetPatchRow[] = [
   {
     tag: "B",
     name: "Needs reboot",
+    assigneeName: null,
     pendingReboot: true,
     hotfixCount: 8,
     wingetAvailable: true,
@@ -40,6 +42,7 @@ const ROWS: FleetPatchRow[] = [
   {
     tag: "C",
     name: "Never scanned",
+    assigneeName: null,
     pendingReboot: null,
     hotfixCount: 0,
     wingetAvailable: null,
@@ -53,6 +56,12 @@ const ROWS: FleetPatchRow[] = [
 describe("PatchesFleet", () => {
   beforeEach(() => {
     vi.mocked(requestFleetOsPatchInstall).mockReset();
+  });
+
+  it("shows assignee next to the computer name", () => {
+    render(<PatchesFleet rows={ROWS} canDeploy={false} />);
+    expect(screen.getByText("Ada Lovelace")).toBeTruthy();
+    expect(screen.getAllByText("Pool").length).toBeGreaterThanOrEqual(1);
   });
 
   it("hides Install OS updates without canDeploy", () => {
