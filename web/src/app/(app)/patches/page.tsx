@@ -111,7 +111,10 @@ export default async function Page() {
         />
       </section>
 
-      <PatchesFleet rows={rows} />
+      <PatchesFleet
+        rows={rows}
+        canDeploy={hasPermission(user, "software:deploy")}
+      />
     </div>
   );
 }

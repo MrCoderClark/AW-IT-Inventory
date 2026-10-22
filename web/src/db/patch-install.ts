@@ -26,6 +26,15 @@ export const PATCH_INSTALL_STUCK_TIMEOUT_MS = Number(
   process.env.PATCH_INSTALL_STUCK_JOB_TIMEOUT_MS ?? 20 * 60 * 1000,
 );
 
+/** Max simultaneous patch installs (claimed|running) fleet-wide; env `PATCH_INSTALL_MAX_CONCURRENT`. */
+export function getPatchInstallMaxConcurrent(): number {
+  return Math.max(1, Number(process.env.PATCH_INSTALL_MAX_CONCURRENT ?? 5));
+}
+
+export { getPatchInstallMaxConcurrent as patchInstallMaxConcurrent };
+
+export const FLEET_OS_INSTALL_TAG_CAP = 100;
+
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -127,6 +136,70 @@ export type EnqueuePatchResult =
   | { ok: true; id: string }
   | { ok: false; reason: "already-inflight" };
 
+export async function listMissingOsKbIds(assetId: string): Promise<string[]> {
+  const rows = await db
+    .select({ kbId: windowsMissingUpdates.kbId })
+    .from(windowsMissingUpdates)
+    .where(eq(windowsMissingUpdates.assetId, assetId));
+  return rows.map((r) => r.kbId);
+}
+
+export type FleetOsSkipReason =
+  | "no-ip"
+  | "no-missing"
+  | "already-inflight"
+  | "not-found";
+
+export async function enqueueFleetOsPatchInstalls(input: {
+  tags: string[];
+  requestedBy: string;
+}): Promise<{
+  enqueued: string[];
+  skipped: { tag: string; reason: FleetOsSkipReason }[];
+}> {
+  const enqueued: string[] = [];
+  const skipped: { tag: string; reason: FleetOsSkipReason }[] = [];
+  const seen = new Set<string>();
+
+  for (const raw of input.tags) {
+    const tag = raw.trim();
+    if (!tag || seen.has(tag)) continue;
+    seen.add(tag);
+
+    const target = await resolveDeployTarget(tag);
+    if (!target) {
+      skipped.push({ tag, reason: "no-ip" });
+      continue;
+    }
+
+    const kbIds = await listMissingOsKbIds(target.assetId);
+    if (kbIds.length === 0) {
+      skipped.push({ tag, reason: "no-missing" });
+      continue;
+    }
+
+    const built = await buildPatchSelection(target.assetId, kbIds, []);
+    if (!built.ok) {
+      skipped.push({ tag, reason: "no-missing" });
+      continue;
+    }
+
+    const enq = await enqueuePatchInstall({
+      assetId: target.assetId,
+      targetIp: target.ip,
+      selection: built.selection,
+      requestedBy: input.requestedBy,
+    });
+    if (!enq.ok) {
+      skipped.push({ tag, reason: "already-inflight" });
+      continue;
+    }
+    enqueued.push(enq.id);
+  }
+
+  return { enqueued, skipped };
+}
+
 export async function enqueuePatchInstall(input: {
   assetId: string;
   targetIp: string;
@@ -183,6 +256,14 @@ export async function claimNextPatchInstall(
         sql`coalesce(${patchInstallJobs.startedAt}, ${patchInstallJobs.claimedAt}) < ${cutoffIso}`,
       ),
     );
+
+  const [countRow] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(patchInstallJobs)
+    .where(inArray(patchInstallJobs.status, ["claimed", "running"]));
+  if ((countRow?.n ?? 0) >= getPatchInstallMaxConcurrent()) {
+    return null;
+  }
 
   const claimedAtIso = new Date().toISOString();
   const rows = (await db.execute(sql`
