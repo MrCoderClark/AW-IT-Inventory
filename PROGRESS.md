@@ -7,11 +7,27 @@ via a feature branch + PR.
 
 ---
 
-## 🚧 Spec 33: Outbound ticket email (`feat/spec-33-outbound-ticket-email`)
+## 🚧 Spec 33: Ticket email-in (`feat/spec-33-ticket-email-in`)
 
-Implemented on branch (merge pending): email assignee on assign / user comment /
-status via aw-auth notify + Resend — outbound only; email-in still Later. Design:
-[2026-10-21-outbound-ticket-email-design.md](docs/superpowers/specs/2026-10-21-outbound-ticket-email-design.md).
+Reply-only inbound is implemented on this branch and stays 🚧 until merge.
+`POST /api/ingest/email` appends a user comment when From is the assignee or
+requester. No create-from-mail.
+Design: `docs/superpowers/specs/2026-10-21-ticket-email-in-design.md`.
+
+**Ops (before it works):** point the mailbox MX at Resend Receiving, set the
+webhook URL to `https://<web>/api/ingest/email`, and from `web/` run
+`npm run db:push` so `ticket_email_messages` exists. Web needs
+`RESEND_WEBHOOK_SECRET` and `RESEND_API_KEY` (receive only; send stays on
+aw-auth). An unset API key makes every delivery **500**, and Resend retries
+until it stops.
+
+Webhook results: invalid signature **401**; fetch null or a process throw
+**500** (Resend retries); ignored, duplicate, and commented **200**.
+
+## Shipped ✅ — Spec 33: Outbound ticket email (merged #116)
+
+Email assignee on assign / user comment / status via aw-auth notify + Resend.
+Design: `docs/superpowers/specs/2026-10-21-outbound-ticket-email-design.md`.
 
 ## Shipped ✅ — Spec 34 v2c: Ticket draft assist (merged #115)
 
@@ -29,8 +45,7 @@ Completes Spec 33 phase 2 on `main`:
 - **Per-alert-rule auto-create** (#113) — tri-state Inherit/On/Off on Spec 30 rules;
   `meta.alertRuleId` on metric notifications. **Needs `npm run db:push`** if not done.
 
-Later: **outbound ticket email** (shipped on branch above, 🚧 until merge); then
-email-in; end-user portal.
+Later: **email-in** (implemented on the branch above; not merged); then end-user portal.
 
 ## Shipped ✅ — Reporting engine (spec 26, merged #84–#87)
 

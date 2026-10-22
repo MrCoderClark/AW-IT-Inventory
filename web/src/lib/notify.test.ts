@@ -143,28 +143,40 @@ describe("sendTicketEmail (spec 33)", () => {
     vi.restoreAllMocks();
   });
 
-  it("posts to /v1/notify/ticket and returns true when sent", async () => {
+  it("posts to /v1/notify/ticket and returns sent when aw-auth delivers", async () => {
     const fetchMock = mockFetch({ ok: true, sent: true });
     vi.stubGlobal("fetch", fetchMock);
     const { sendTicketEmail } = await import("./notify");
-    expect(await sendTicketEmail(TICKET_PAYLOAD)).toBe(true);
+    expect(await sendTicketEmail(TICKET_PAYLOAD)).toEqual({ sent: true });
     const urls = fetchMock.mock.calls.map((c) => String(c[0]));
     expect(urls.some((u) => u.includes("/v1/notify/ticket"))).toBe(true);
   });
 
-  it("returns false when aw-auth accepted but sent=false", async () => {
-    vi.stubGlobal("fetch", mockFetch({ ok: true, sent: false }));
+  it("returns the Resend message id when aw-auth includes one", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockFetch({ ok: true, sent: true, messageId: "re_abc" }),
+    );
     const { sendTicketEmail } = await import("./notify");
-    expect(await sendTicketEmail(TICKET_PAYLOAD)).toBe(false);
+    expect(await sendTicketEmail(TICKET_PAYLOAD)).toEqual({
+      sent: true,
+      messageId: "re_abc",
+    });
   });
 
-  it("skips the call and returns false when h2tecs-web creds are unset", async () => {
+  it("returns sent false when aw-auth accepted but sent=false", async () => {
+    vi.stubGlobal("fetch", mockFetch({ ok: true, sent: false }));
+    const { sendTicketEmail } = await import("./notify");
+    expect(await sendTicketEmail(TICKET_PAYLOAD)).toEqual({ sent: false });
+  });
+
+  it("skips the call and returns sent false when h2tecs-web creds are unset", async () => {
     delete process.env.H2TECS_WEB_CLIENT_ID;
     delete process.env.H2TECS_WEB_CLIENT_SECRET;
     const spy = vi.fn();
     vi.stubGlobal("fetch", spy);
     const { sendTicketEmail } = await import("./notify");
-    expect(await sendTicketEmail(TICKET_PAYLOAD)).toBe(false);
+    expect(await sendTicketEmail(TICKET_PAYLOAD)).toEqual({ sent: false });
     expect(spy).not.toHaveBeenCalled();
   });
 });

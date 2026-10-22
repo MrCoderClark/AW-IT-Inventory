@@ -565,7 +565,7 @@ class TicketNotifyView(APIView):
                 status=status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
 
-        sent = send_ticket_event(
+        sent, message_id = send_ticket_event(
             event,
             ticket,
             recipients,
@@ -573,7 +573,10 @@ class TicketNotifyView(APIView):
             actor_email=actor_email if isinstance(actor_email, str) else None,
             ticket_url=ticket_url if isinstance(ticket_url, str) else None,
         )
-        return Response({"ok": True, "sent": sent})
+        payload: dict = {"ok": True, "sent": sent}
+        if message_id:
+            payload["messageId"] = message_id
+        return Response(payload)
 
 
 class LogoutView(APIView):

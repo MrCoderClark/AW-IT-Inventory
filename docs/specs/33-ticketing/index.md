@@ -97,13 +97,19 @@ List KPI strip: **Open / In Progress / Waiting / Resolved** (`waiting` =
    auto-create override** (shipped).
 3. **v2.5 — outbound ticket email** — [design](../../superpowers/specs/2026-10-21-outbound-ticket-email-design.md):
    assignee notified on assign / user comment / status via aw-auth + Resend
-   (shipped on feat/spec-33-outbound-ticket-email).
-4. **Later** — email-in; end-user portal.
+   (shipped #116).
+4. **v3 — email-in (reply-only)** — [design](../../superpowers/specs/2026-10-21-ticket-email-in-design.md):
+   Resend webhook → comment when From is assignee/requester; no create-from-mail
+   (implemented on `feat/spec-33-ticket-email-in`; not merged). Ops: Resend MX,
+   webhook `https://<web>/api/ingest/email`, and `npm run db:push` for
+   `ticket_email_messages`.
+5. **Later** — create-from-mail; attachments; end-user portal.
 
 ## Out of scope / non-goals (v1)
 
-- Email-in (parked). Outbound assignee email shipped on
-  `feat/spec-33-outbound-ticket-email`; no email-in or reply threads.
+- Email-in reply-only is implemented on `feat/spec-33-ticket-email-in` (not on
+  main). Create-from-mail and attachments stay later. Outbound assignee email
+  shipped (#116).
 - SLA clocks, escalation, “SLA Breached” KPIs.
 - AI triage / auto-triage / confidence UI.
 - End-user self-service.

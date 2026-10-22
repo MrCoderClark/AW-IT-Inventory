@@ -332,15 +332,19 @@ export async function addTicketComment(
     body: string;
     kind?: "user" | "system";
   },
+  tx?: Tx,
 ): Promise<string | null> {
-  const [ticket] = await db
+  // Optional tx lets a caller (inbound email) insert the comment in the same
+  // transaction as its own writes. `db` is the default for direct callers.
+  const q = (tx ?? db) as typeof db;
+  const [ticket] = await q
     .select({ id: tickets.id })
     .from(tickets)
     .where(eq(tickets.id, ticketId))
     .limit(1);
   if (!ticket) return null;
 
-  const [row] = await db
+  const [row] = await q
     .insert(ticketComments)
     .values({
       ticketId,
@@ -350,7 +354,7 @@ export async function addTicketComment(
     })
     .returning({ id: ticketComments.id });
 
-  await db
+  await q
     .update(tickets)
     .set({ updatedAt: new Date() })
     .where(eq(tickets.id, ticketId));
