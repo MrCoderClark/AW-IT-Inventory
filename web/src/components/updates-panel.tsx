@@ -1,7 +1,15 @@
 "use client";
 
 import * as React from "react";
-import { ArrowRight, Loader2, Package, RefreshCw, ShieldAlert } from "lucide-react";
+import { useRouter } from "next/navigation";
+import {
+  ArrowRight,
+  Loader2,
+  Package,
+  Power,
+  RefreshCw,
+  ShieldAlert,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -10,6 +18,10 @@ import {
   requestMissingUpdateCheck,
   requestPatchInstall,
 } from "@/app/(app)/patch-install-actions";
+import {
+  requestCancelReboot,
+  requestRebootSchedule,
+} from "@/app/(app)/reboot-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,13 +36,15 @@ import { Dot, Panel, fmtDate, fmtDateTime } from "@/components/detail-ui";
 import type { ComputerPatches } from "@/db/patches";
 import type { MissingCheckListItem } from "@/db/missing-update-checks";
 import type { PatchInstallListItem } from "@/db/patch-install";
+import type { RebootListItem } from "@/db/reboot";
 
 /**
  * Per-computer Updates tab (spec 31): inventory + Missing + optional Install
  * selected (phase 3, AC-18) for `software:deploy` admins.
  *
  * While a Check / install is in flight, polls a snapshot action and updates
- * local state only — no full page refresh.
+ * local state only — no full page refresh. Reboot schedule uses router.refresh
+ * (reboot jobs are not in the live snapshot yet).
  */
 
 function lastUpdateLabel(days: number | null | undefined): string {
@@ -49,6 +63,15 @@ const JOB_STATUS: Record<string, string> = {
   canceled: "Canceled",
 };
 
+const REBOOT_STATUS: Record<string, string> = {
+  pending: "Scheduled",
+  claimed: "Rebooting…",
+  running: "Rebooting…",
+  succeeded: "Succeeded",
+  failed: "Failed",
+  canceled: "Canceled",
+};
+
 const ACTIVE = new Set(["pending", "claimed", "running"]);
 
 function isActive(status: string): boolean {
@@ -61,19 +84,25 @@ export function UpdatesPanel({
   canInstall = false,
   patchJobs: patchJobsProp = [],
   checkJobs: checkJobsProp = [],
+  rebootJobs = [],
 }: {
   patches: ComputerPatches | null;
   assetTag: string;
   canInstall?: boolean;
   patchJobs?: PatchInstallListItem[];
   checkJobs?: MissingCheckListItem[];
+  rebootJobs?: RebootListItem[];
 }) {
+  const router = useRouter();
   const [patches, setPatches] = React.useState(patchesProp);
   const [patchJobs, setPatchJobs] = React.useState(patchJobsProp);
   const [checkJobs, setCheckJobs] = React.useState(checkJobsProp);
   const [osSel, setOsSel] = React.useState<Set<string>>(new Set());
   const [appSel, setAppSel] = React.useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const [alsoReboot, setAlsoReboot] = React.useState(false);
+  const [installRebootAt, setInstallRebootAt] = React.useState("");
+  const [standaloneRebootAt, setStandaloneRebootAt] = React.useState("");
   const [busy, startBusy] = React.useTransition();
   const [flashMissing, setFlashMissing] = React.useState(false);
   const prevPatchStatus = React.useRef<Map<string, string>>(new Map());
@@ -91,6 +120,7 @@ export function UpdatesPanel({
 
   const inflight = patchJobs.some((j) => isActive(j.status));
   const checkInflight = checkJobs.some((j) => isActive(j.status));
+  const rebootInflight = rebootJobs.some((j) => isActive(j.status));
   const live = inflight || checkInflight;
 
   const applySnapshot = React.useCallback(
@@ -243,22 +273,68 @@ export function UpdatesPanel({
 
   const selectedCount = osSel.size + appSel.size;
 
+  function resetInstallDialog() {
+    setAlsoReboot(false);
+    setInstallRebootAt("");
+  }
+
   function doInstall() {
     startBusy(async () => {
+      const rebootAtIso =
+        alsoReboot && installRebootAt.trim()
+          ? new Date(installRebootAt).toISOString()
+          : undefined;
       const res = await requestPatchInstall({
         assetTag,
         osKbIds: [...osSel],
         packageIds: [...appSel],
+        rebootAtIso,
       });
       setConfirmOpen(false);
+      resetInstallDialog();
       if (!res.ok) {
         toast.error(res.error);
         return;
       }
-      toast.success("Patch install queued");
+      toast.success(
+        rebootAtIso ? "Patch install and reboot scheduled" : "Patch install queued",
+      );
+      if (res.rebootWarning) {
+        toast.message(res.rebootWarning);
+      }
       setOsSel(new Set());
       setAppSel(new Set());
       await refreshSnapshot();
+      if (rebootAtIso) router.refresh();
+    });
+  }
+
+  function doScheduleReboot() {
+    if (!standaloneRebootAt.trim()) return;
+    startBusy(async () => {
+      const res = await requestRebootSchedule({
+        assetTag,
+        scheduledAtIso: new Date(standaloneRebootAt).toISOString(),
+      });
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Reboot scheduled");
+      setStandaloneRebootAt("");
+      router.refresh();
+    });
+  }
+
+  function doCancelReboot(jobId: string) {
+    startBusy(async () => {
+      const res = await requestCancelReboot({ id: jobId, assetTag });
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Reboot canceled");
+      router.refresh();
     });
   }
 
@@ -512,6 +588,86 @@ export function UpdatesPanel({
         </div>
       )}
 
+      {canInstall && (
+        <Panel icon={<Power />} title="Scheduled reboot">
+          <p className="mb-3 text-sm text-muted-foreground">
+            Schedule a <strong>forced</strong> reboot at a specific date and time.
+            The collector restarts the computer over WinRM with no desktop countdown.
+          </p>
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-xs font-medium text-muted-foreground">
+                Reboot date and time
+              </span>
+              <input
+                type="datetime-local"
+                className="rounded-md border bg-background px-2 py-1.5 text-sm"
+                value={standaloneRebootAt}
+                onChange={(e) => setStandaloneRebootAt(e.target.value)}
+                disabled={rebootInflight || busy}
+                aria-label="Reboot date and time"
+              />
+            </label>
+            <Button
+              disabled={!standaloneRebootAt.trim() || rebootInflight || busy}
+              onClick={doScheduleReboot}
+            >
+              {busy ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Power className="size-4" />
+              )}
+              Schedule reboot
+            </Button>
+          </div>
+          {rebootInflight && (
+            <p className="mt-2 text-sm text-muted-foreground">
+              A reboot is already scheduled or in progress on this computer.
+            </p>
+          )}
+        </Panel>
+      )}
+
+      {canInstall && rebootJobs.length > 0 && (
+        <Panel icon={<Power />} title="Reboot history">
+          <ul className="divide-y rounded-lg border">
+            {rebootJobs.map((j) => (
+              <li
+                key={j.id}
+                className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
+              >
+                <div>
+                  <span className="font-medium">
+                    {REBOOT_STATUS[j.status] ?? j.status}
+                  </span>
+                  {j.sourcePatchInstallJobId ? (
+                    <span className="text-muted-foreground"> · after install</span>
+                  ) : null}
+                  <span className="text-muted-foreground"> · {j.requestedBy}</span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    {fmtDateTime(j.scheduledAt)}
+                    {j.waitingForCollector ? " · waiting for collector" : ""}
+                    {j.error ? ` · ${j.error}` : ""}
+                  </span>
+                </div>
+                {(j.status === "pending" ||
+                  j.status === "claimed" ||
+                  j.status === "running") && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => doCancelReboot(j.id)}
+                  >
+                    Cancel
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      )}
+
       {canInstall && patchJobs.length > 0 && (
         <Panel icon={<RefreshCw />} title="Install history">
           <ul className="divide-y rounded-lg border">
@@ -553,22 +709,70 @@ export function UpdatesPanel({
         </Panel>
       )}
 
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+      <Dialog
+        open={confirmOpen}
+        onOpenChange={(open) => {
+          setConfirmOpen(open);
+          if (!open) resetInstallDialog();
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Install selected updates?</DialogTitle>
             <DialogDescription>
               {osSel.size} OS update{osSel.size === 1 ? "" : "s"} and {appSel.size}{" "}
               app upgrade{appSel.size === 1 ? "" : "s"} will be installed over
-              WinRM. The host will <strong>not</strong> be rebooted
-              automatically.
+              WinRM.{" "}
+              {alsoReboot ? (
+                <>
+                  After install succeeds, the host will get a{" "}
+                  <strong>forced</strong> reboot at the time below (or ASAP if
+                  install finishes late).
+                </>
+              ) : (
+                <>
+                  The host will <strong>not</strong> be rebooted automatically.
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
+          <div className="flex flex-col gap-3 py-1">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="size-4 accent-primary"
+                checked={alsoReboot}
+                onChange={(e) => {
+                  setAlsoReboot(e.target.checked);
+                  if (!e.target.checked) setInstallRebootAt("");
+                }}
+                aria-label="Also reboot at"
+              />
+              Also reboot at…
+            </label>
+            {alsoReboot && (
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-xs font-medium text-muted-foreground">
+                  Reboot after install
+                </span>
+                <input
+                  type="datetime-local"
+                  className="rounded-md border bg-background px-2 py-1.5 text-sm"
+                  value={installRebootAt}
+                  onChange={(e) => setInstallRebootAt(e.target.value)}
+                  aria-label="Reboot after install"
+                />
+              </label>
+            )}
+          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmOpen(false)}>
               Cancel
             </Button>
-            <Button disabled={busy} onClick={doInstall}>
+            <Button
+              disabled={busy || (alsoReboot && !installRebootAt.trim())}
+              onClick={doInstall}
+            >
               {busy && <Loader2 className="size-4 animate-spin" />}
               Install
             </Button>

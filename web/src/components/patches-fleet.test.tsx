@@ -126,6 +126,33 @@ describe("PatchesFleet", () => {
     expect(screen.getByText("3 of 3 computers")).toBeTruthy();
   });
 
+  it("fleet confirm passes rebootAtIso when checked", async () => {
+    vi.mocked(requestFleetOsPatchInstall).mockResolvedValue({
+      ok: true,
+      enqueued: ["jid"],
+      skipped: [],
+    });
+    const user = userEvent.setup();
+    render(<PatchesFleet rows={ROWS} canDeploy />);
+    await user.click(screen.getByLabelText(/Select Needs reboot/i));
+    await user.click(
+      screen.getByRole("button", { name: /Install OS updates/i }),
+    );
+    const dialog = screen.getByRole("dialog");
+    await user.click(within(dialog).getByLabelText(/Also reboot at/i));
+    await user.type(
+      within(dialog).getByLabelText(/Reboot after install/i),
+      "2026-12-01T14:30",
+    );
+    await user.click(within(dialog).getByRole("button", { name: /^Install$/i }));
+    await waitFor(() =>
+      expect(requestFleetOsPatchInstall).toHaveBeenCalledWith({
+        assetTags: ["B"],
+        rebootAtIso: new Date("2026-12-01T14:30").toISOString(),
+      }),
+    );
+  });
+
   it("the needs-attention filter hides a clean computer", async () => {
     const user = userEvent.setup();
     render(<PatchesFleet rows={ROWS} />);

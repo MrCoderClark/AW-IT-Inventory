@@ -83,8 +83,15 @@ export function PatchesFleet({
   const [needsAttentionOnly, setNeedsAttentionOnly] = React.useState(false);
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const [alsoReboot, setAlsoReboot] = React.useState(false);
+  const [rebootAt, setRebootAt] = React.useState("");
   const [summary, setSummary] = React.useState<string | null>(null);
   const [busy, startBusy] = React.useTransition();
+
+  function resetConfirmDialog() {
+    setAlsoReboot(false);
+    setRebootAt("");
+  }
 
   const view = React.useMemo(() => {
     let r = rows;
@@ -137,15 +144,22 @@ export function PatchesFleet({
 
   function openInstallConfirm() {
     setSummary(null);
+    resetConfirmDialog();
     setConfirmOpen(true);
   }
 
   function doInstall() {
     startBusy(async () => {
+      const rebootAtIso =
+        alsoReboot && rebootAt.trim()
+          ? new Date(rebootAt).toISOString()
+          : undefined;
       const res = await requestFleetOsPatchInstall({
         assetTags: [...selected],
+        rebootAtIso,
       });
       setConfirmOpen(false);
+      resetConfirmDialog();
       if (!res.ok) {
         toast.error(res.error);
         return;
@@ -340,7 +354,13 @@ export function PatchesFleet({
         </Table>
       </div>
 
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+      <Dialog
+        open={confirmOpen}
+        onOpenChange={(open) => {
+          setConfirmOpen(open);
+          if (!open) resetConfirmDialog();
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
@@ -349,15 +369,57 @@ export function PatchesFleet({
             </DialogTitle>
             <DialogDescription>
               Each selected computer will get all of its currently missing OS
-              updates over WinRM. Hosts will <strong>not</strong> be rebooted
-              automatically. Installs run with a fleet concurrency limit.
+              updates over WinRM.{" "}
+              {alsoReboot ? (
+                <>
+                  After each install succeeds, hosts get a <strong>forced</strong>{" "}
+                  reboot at the time below (or ASAP if install finishes late).
+                </>
+              ) : (
+                <>
+                  Hosts will <strong>not</strong> be rebooted automatically.
+                </>
+              )}{" "}
+              Installs run with a fleet concurrency limit.
             </DialogDescription>
           </DialogHeader>
+          <div className="flex flex-col gap-3 py-1">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="size-4 accent-primary"
+                checked={alsoReboot}
+                onChange={(e) => {
+                  setAlsoReboot(e.target.checked);
+                  if (!e.target.checked) setRebootAt("");
+                }}
+                aria-label="Also reboot at"
+              />
+              Also reboot at…
+            </label>
+            {alsoReboot && (
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-xs font-medium text-muted-foreground">
+                  Reboot after install
+                </span>
+                <input
+                  type="datetime-local"
+                  className="rounded-md border bg-background px-2 py-1.5 text-sm"
+                  value={rebootAt}
+                  onChange={(e) => setRebootAt(e.target.value)}
+                  aria-label="Reboot after install"
+                />
+              </label>
+            )}
+          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmOpen(false)}>
               Cancel
             </Button>
-            <Button disabled={busy} onClick={doInstall}>
+            <Button
+              disabled={busy || (alsoReboot && !rebootAt.trim())}
+              onClick={doInstall}
+            >
               {busy && <Loader2 className="size-4 animate-spin" />}
               Install
             </Button>
