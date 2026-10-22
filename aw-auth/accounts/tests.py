@@ -239,11 +239,13 @@ class TicketNotifyResendTest(TestCase):
 
     def setUp(self):
         os.environ["RESEND_API_KEY"] = "re_test_key"
-        os.environ["EMAIL_FROM"] = "H2Tecs <tickets@example.com>"
+        os.environ["EMAIL_FROM"] = "H2Tecs <no-reply@example.com>"
+        os.environ.pop("TICKET_EMAIL_FROM", None)
 
     def tearDown(self):
         os.environ.pop("RESEND_API_KEY", None)
         os.environ.pop("EMAIL_FROM", None)
+        os.environ.pop("TICKET_EMAIL_FROM", None)
 
     @patch.object(notifications, "resolve_admin_emails", return_value=["admin@x.com"])
     @patch("accounts.notifications.urllib.request.urlopen")
@@ -273,12 +275,35 @@ class TicketNotifyResendTest(TestCase):
         self.assertIsNone(message_id)
         body = json.loads(mock_urlopen.call_args.args[0].data)
         self.assertEqual(body["to"], ["tech@co.com"])
+        self.assertEqual(body["from"], "H2Tecs <no-reply@example.com>")
         mock_admins.assert_not_called()
         self.assertIn("#42", body["subject"])
         self.assertIn("assigned", body["subject"].lower())
         self.assertIn("Disk full", body["text"])
         self.assertIn("https://inventory.example/tickets/t1", body["text"])
         self.assertIn("<", body["html"])  # has HTML
+
+    @patch("accounts.notifications.urllib.request.urlopen")
+    def test_uses_ticket_email_from_when_set(self, mock_urlopen):
+        import json
+
+        os.environ["TICKET_EMAIL_FROM"] = "H2Tecs Helpdesk <help@tickets.example.com>"
+        resp = MagicMock()
+        resp.status = 200
+        mock_urlopen.return_value.__enter__.return_value = resp
+
+        sent, _ = notifications.send_ticket_event(
+            "status",
+            {"id": "t1", "number": 7, "subject": "x", "status": "open"},
+            ["tech@co.com"],
+            "open → resolved",
+        )
+
+        self.assertTrue(sent)
+        body = json.loads(mock_urlopen.call_args.args[0].data)
+        self.assertEqual(
+            body["from"], "H2Tecs Helpdesk <help@tickets.example.com>"
+        )
 
     @patch("accounts.notifications.urllib.request.urlopen")
     def test_returns_false_without_recipients(self, mock_urlopen):

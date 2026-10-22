@@ -103,15 +103,17 @@ def _send_resend(
     recipients: list[str] | None = None,
     attachments: list[dict] | None = None,
     headers: dict[str, str] | None = None,
+    email_from: str | None = None,
 ) -> tuple[bool, str | None]:
     """POST one email to Resend. Returns ``(sent, id)``.
 
     ``id`` is Resend's JSON ``id`` on a 2xx response, otherwise None. No
     recipients, or no API key: logs and returns ``(False, None)``.
+    ``email_from`` overrides ``EMAIL_FROM`` when set (ticket helpdesk From).
     """
     api_key = os.environ.get("RESEND_API_KEY", "")
-    email_from = os.environ.get("EMAIL_FROM", "")
-    if not api_key or not email_from:
+    from_addr = (email_from or "").strip() or os.environ.get("EMAIL_FROM", "")
+    if not api_key or not from_addr:
         logger.warning("%s not sent: RESEND_API_KEY / EMAIL_FROM not configured.", label)
         return False, None
 
@@ -121,7 +123,7 @@ def _send_resend(
         return False, None
 
     message: dict = {
-        "from": email_from,
+        "from": from_addr,
         "to": to,
         "subject": subject,
         "text": body,
@@ -554,6 +556,10 @@ def send_ticket_event(
         html_parts.append(f'<p><a href="{safe_url}">Open ticket</a></p>')
     html = "\n".join(html_parts)
 
+    # Prefer TICKET_EMAIL_FROM so helpdesk mail can Reply into Receiving
+    # (e.g. help@tickets.example.com) while alerts keep EMAIL_FROM / no-reply.
+    ticket_from = (os.environ.get("TICKET_EMAIL_FROM") or "").strip() or None
+
     return _send_resend(
         subject,
         body,
@@ -561,6 +567,7 @@ def send_ticket_event(
         html=html,
         recipients=recipients,
         headers={"X-Ticket-Number": str(number)},
+        email_from=ticket_from,
     )
 
 
