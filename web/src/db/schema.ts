@@ -1401,6 +1401,53 @@ export const patchInstallJobs = pgTable(
 
 export type PatchInstallJobRow = typeof patchInstallJobs.$inferSelect;
 
+/** Scheduled forced reboot queue (spec 31 v2). Standalone or linked to patch install. */
+export const rebootJobs = pgTable(
+  "reboot_jobs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    targetIp: text("target_ip").notNull(),
+    scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull(),
+    sourcePatchInstallJobId: uuid("source_patch_install_job_id").references(
+      () => patchInstallJobs.id,
+      { onDelete: "set null" },
+    ),
+    status: text("status")
+      .$type<
+        "pending" | "claimed" | "running" | "succeeded" | "failed" | "canceled"
+      >()
+      .notNull()
+      .default("pending"),
+    requestedBy: text("requested_by").notNull(),
+    workerId: text("worker_id"),
+    result: jsonb("result").$type<Record<string, unknown>>(),
+    error: text("error"),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("reboot_jobs_pending_due_idx")
+      .on(t.status, t.scheduledAt)
+      .where(sql`${t.status} = 'pending'`),
+    index("reboot_jobs_inflight_idx")
+      .on(t.assetId)
+      .where(sql`${t.status} in ('pending','claimed','running')`),
+    index("reboot_jobs_source_install_idx").on(t.sourcePatchInstallJobId),
+  ],
+);
+
+export type RebootJobRow = typeof rebootJobs.$inferSelect;
+
 // One-host missing-update Search (spec 31 phase 4 closeout). Same claim shape as
 // patch install; runs PS_MISSING_UPDATES then posts /api/ingest/missing-updates.
 export const missingUpdateChecks = pgTable(
