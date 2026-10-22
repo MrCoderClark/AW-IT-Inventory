@@ -26,6 +26,13 @@ export const PATCH_INSTALL_STUCK_TIMEOUT_MS = Number(
   process.env.PATCH_INSTALL_STUCK_JOB_TIMEOUT_MS ?? 20 * 60 * 1000,
 );
 
+/** Max simultaneous patch installs (claimed|running) fleet-wide; env `PATCH_INSTALL_MAX_CONCURRENT`. */
+export function getPatchInstallMaxConcurrent(): number {
+  return Math.max(1, Number(process.env.PATCH_INSTALL_MAX_CONCURRENT ?? 5));
+}
+
+export { getPatchInstallMaxConcurrent as patchInstallMaxConcurrent };
+
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -183,6 +190,14 @@ export async function claimNextPatchInstall(
         sql`coalesce(${patchInstallJobs.startedAt}, ${patchInstallJobs.claimedAt}) < ${cutoffIso}`,
       ),
     );
+
+  const [countRow] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(patchInstallJobs)
+    .where(inArray(patchInstallJobs.status, ["claimed", "running"]));
+  if ((countRow?.n ?? 0) >= getPatchInstallMaxConcurrent()) {
+    return null;
+  }
 
   const claimedAtIso = new Date().toISOString();
   const rows = (await db.execute(sql`

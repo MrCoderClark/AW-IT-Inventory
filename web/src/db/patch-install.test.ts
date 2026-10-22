@@ -95,6 +95,7 @@ const SEL = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  delete process.env.PATCH_INSTALL_MAX_CONCURRENT;
   H.state.selects = [];
   H.state.insertReturns = [];
   H.state.updateReturns = [];
@@ -172,6 +173,7 @@ describe("claimNextPatchInstall (AC-17)", () => {
   it("returns the claimed job with frozen selection", async () => {
     H.state.execResult = [{ id: JID }];
     H.state.selects = [
+      [{ n: 0 }],
       [
         {
           id: JID,
@@ -190,6 +192,33 @@ describe("claimNextPatchInstall (AC-17)", () => {
       workerId: "w1",
       claimedAt: "2026-10-19T10:00:00.000Z",
     });
+  });
+});
+
+describe("claimNextPatchInstall — fleet concurrency", () => {
+  it("returns null when claimed|running count is at max", async () => {
+    process.env.PATCH_INSTALL_MAX_CONCURRENT = "2";
+    H.state.selects = [[{ n: 2 }]];
+    expect(await claimNextPatchInstall("w1")).toBeNull();
+    expect(H.executeMock).not.toHaveBeenCalled();
+  });
+
+  it("claims when under max", async () => {
+    process.env.PATCH_INSTALL_MAX_CONCURRENT = "2";
+    H.state.selects = [
+      [{ n: 1 }],
+      [
+        {
+          id: JID,
+          assetTag: "PC-1",
+          targetIp: "192.168.70.5",
+          selection: SEL,
+          claimedAt: new Date("2026-10-19T10:00:00.000Z"),
+        },
+      ],
+    ];
+    H.state.execResult = [{ id: JID }];
+    expect(await claimNextPatchInstall("w1")).toMatchObject({ id: JID });
   });
 });
 
