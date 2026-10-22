@@ -73,12 +73,14 @@ vi.mock("@/db/index", () => ({
   },
 }));
 
+import { isWorkerLive } from "@/db/scan";
 import {
   enqueueRebootJob,
   claimNextReboot,
   updateRebootStatus,
   cancelRebootJob,
   syncLinkedRebootsForInstall,
+  listRebootJobsForAssetTag,
 } from "./reboot";
 
 const JID = "0959927f-1046-4582-9a70-60a4175f206b";
@@ -86,6 +88,7 @@ const FENCE = { workerId: "w1", claimedAt: "2026-10-19T10:00:00.000Z" };
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(isWorkerLive).mockResolvedValue(true);
   delete process.env.REBOOT_STUCK_JOB_TIMEOUT_MS;
   H.state.selects = [];
   H.state.insertReturns = [];
@@ -217,6 +220,62 @@ describe("cancelRebootJob", () => {
   it("cancels an in-flight job", async () => {
     H.state.updateReturns = [[{ id: JID }]];
     expect(await cancelRebootJob(JID)).toBe(true);
+  });
+});
+
+describe("listRebootJobsForAssetTag", () => {
+  it("maps rows and ISO dates; waitingForCollector when pending and worker down", async () => {
+    vi.mocked(isWorkerLive).mockResolvedValueOnce(false);
+    H.state.selects = [
+      [
+        {
+          id: JID,
+          status: "pending",
+          scheduledAt: new Date("2026-10-19T12:00:00.000Z"),
+          sourcePatchInstallJobId: null,
+          requestedBy: "alice",
+          error: null,
+          finishedAt: null,
+        },
+        {
+          id: "22222222-2222-4222-8222-222222222222",
+          status: "succeeded",
+          scheduledAt: new Date("2026-10-18T12:00:00.000Z"),
+          sourcePatchInstallJobId: "install-1",
+          requestedBy: "bob",
+          error: null,
+          finishedAt: new Date("2026-10-18T13:00:00.000Z"),
+        },
+      ],
+    ];
+    expect(await listRebootJobsForAssetTag("PC-1", 10)).toEqual([
+      {
+        id: JID,
+        status: "pending",
+        scheduledAt: "2026-10-19T12:00:00.000Z",
+        sourcePatchInstallJobId: null,
+        requestedBy: "alice",
+        error: null,
+        finishedAt: null,
+        waitingForCollector: true,
+      },
+      {
+        id: "22222222-2222-4222-8222-222222222222",
+        status: "succeeded",
+        scheduledAt: "2026-10-18T12:00:00.000Z",
+        sourcePatchInstallJobId: "install-1",
+        requestedBy: "bob",
+        error: null,
+        finishedAt: "2026-10-18T13:00:00.000Z",
+        waitingForCollector: false,
+      },
+    ]);
+    expect(H.selectMock).toHaveBeenCalled();
+  });
+
+  it("returns empty list when no jobs", async () => {
+    H.state.selects = [[]];
+    expect(await listRebootJobsForAssetTag("PC-99")).toEqual([]);
   });
 });
 
