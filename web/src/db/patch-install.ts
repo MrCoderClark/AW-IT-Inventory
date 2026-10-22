@@ -5,6 +5,7 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "./index";
 import { enqueueMissingUpdateCheck } from "./missing-update-checks";
 import { notifyPatchInstallResult } from "./notifications";
+import { syncLinkedRebootsForInstall } from "./reboot";
 import { enqueueScan, isWorkerLive } from "./scan";
 import { resolveDeployTarget } from "./software-deploy";
 import {
@@ -376,6 +377,9 @@ export async function updatePatchInstallStatus(
         requestedBy: row.requestedBy,
       });
     }
+    if (u.status === "succeeded" || u.status === "failed") {
+      await syncLinkedRebootsForInstall(jobId, u.status);
+    }
     if (u.status === "succeeded") {
       // Drop installed OS ids from Missing immediately. When reboot is required,
       // WUA Search still lists them until reboot — so skip auto Check updates
@@ -499,7 +503,11 @@ export async function cancelPatchInstall(jobId: string): Promise<boolean> {
       ),
     )
     .returning({ id: patchInstallJobs.id });
-  return updated.length > 0;
+  if (updated.length) {
+    await syncLinkedRebootsForInstall(jobId, "canceled");
+    return true;
+  }
+  return false;
 }
 
 export async function getPatchInstallJob(

@@ -249,7 +249,7 @@ export async function syncLinkedRebootsForInstall(
 ): Promise<void> {
   if (installStatus === "succeeded") return;
   const now = new Date();
-  await db
+  const canceled = await db
     .update(rebootJobs)
     .set({ status: "canceled", finishedAt: now, updatedAt: now })
     .where(
@@ -257,7 +257,22 @@ export async function syncLinkedRebootsForInstall(
         eq(rebootJobs.sourcePatchInstallJobId, installJobId),
         inArray(rebootJobs.status, [...IN_FLIGHT]),
       ),
-    );
+    )
+    .returning({
+      id: rebootJobs.id,
+      assetId: rebootJobs.assetId,
+      requestedBy: rebootJobs.requestedBy,
+      scheduledAt: rebootJobs.scheduledAt,
+    });
+  for (const row of canceled) {
+    await notifyRebootResult({
+      jobId: row.id,
+      assetId: row.assetId,
+      status: "canceled",
+      requestedBy: row.requestedBy,
+      scheduledAtIso: row.scheduledAt.toISOString(),
+    });
+  }
 }
 
 export type RebootListItem = {

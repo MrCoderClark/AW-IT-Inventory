@@ -314,10 +314,26 @@ describe("syncLinkedRebootsForInstall", () => {
     expect(H.state.updateSets[0]).toMatchObject({ status: "canceled" });
   });
 
-  it("cancels on canceled", async () => {
+  it("cancels on canceled and notifies requester", async () => {
+    H.state.updateReturns = [
+      [
+        {
+          id: JID,
+          assetId: "a1",
+          requestedBy: "me@x.com",
+          scheduledAt: new Date("2026-10-22T18:00:00.000Z"),
+        },
+      ],
+    ];
     await syncLinkedRebootsForInstall("install-1", "canceled");
     expect(H.updateMock).toHaveBeenCalled();
-    expect(H.state.updateSets[0]).toMatchObject({ status: "canceled" });
+    expect(notifyMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobId: JID,
+        status: "canceled",
+        requestedBy: "me@x.com",
+      }),
+    );
   });
 
   it("no-ops on succeeded", async () => {
