@@ -3,6 +3,7 @@ import "server-only";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "./index";
+import { notifyRebootResult } from "./notifications";
 import { isWorkerLive } from "./scan";
 import { assets, patchInstallJobs, rebootJobs, type RebootJobRow } from "./schema";
 
@@ -180,9 +181,27 @@ export async function updateRebootStatus(
         inArray(rebootJobs.status, ["claimed", "running"]),
       ),
     )
-    .returning({ id: rebootJobs.id });
+    .returning({
+      id: rebootJobs.id,
+      assetId: rebootJobs.assetId,
+      requestedBy: rebootJobs.requestedBy,
+      scheduledAt: rebootJobs.scheduledAt,
+    });
 
-  if (updated.length) return "ok";
+  if (updated.length) {
+    if (u.status === "succeeded" || u.status === "failed") {
+      const row = updated[0];
+      await notifyRebootResult({
+        jobId: row.id,
+        assetId: row.assetId,
+        status: u.status,
+        requestedBy: row.requestedBy,
+        scheduledAtIso: row.scheduledAt.toISOString(),
+        error: u.error ?? null,
+      });
+    }
+    return "ok";
+  }
 
   const [exists] = await db
     .select({ id: rebootJobs.id })
@@ -204,8 +223,24 @@ export async function cancelRebootJob(jobId: string): Promise<boolean> {
         inArray(rebootJobs.status, [...IN_FLIGHT]),
       ),
     )
-    .returning({ id: rebootJobs.id });
-  return updated.length > 0;
+    .returning({
+      id: rebootJobs.id,
+      assetId: rebootJobs.assetId,
+      requestedBy: rebootJobs.requestedBy,
+      scheduledAt: rebootJobs.scheduledAt,
+    });
+  if (updated.length) {
+    const row = updated[0];
+    await notifyRebootResult({
+      jobId: row.id,
+      assetId: row.assetId,
+      status: "canceled",
+      requestedBy: row.requestedBy,
+      scheduledAtIso: row.scheduledAt.toISOString(),
+    });
+    return true;
+  }
+  return false;
 }
 
 export async function syncLinkedRebootsForInstall(

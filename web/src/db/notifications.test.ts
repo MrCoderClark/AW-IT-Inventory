@@ -77,6 +77,7 @@ import {
   notifyDeployResult,
   notifyInstallResult,
   notifyPatchInstallResult,
+  notifyRebootResult,
   notifyScriptRunResult,
   pruneNotifications,
   sweepWarrantyNotifications,
@@ -492,6 +493,62 @@ describe("notifyPatchInstallResult audience", () => {
       appCount: 0,
       error: null,
       requestedBy: "schedule:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+    });
+    expect(H.insertValues.at(-1)).toMatchObject({
+      audience: "admins",
+      recipientEmail: null,
+    });
+  });
+});
+
+describe("notifyRebootResult audience", () => {
+  const asset = [{ tag: "PC-1", name: "Reception PC" }];
+  it("email → user", async () => {
+    H.selectQueue.push(asset);
+    H.insertReturning.push([
+      {
+        id: "n1",
+        type: "reboot",
+        severity: "info",
+        title: "t",
+        body: "b",
+        href: "/assets/PC-1",
+        assetId: "a1",
+        createdAt: new Date("2026-10-06T12:00:00Z"),
+      },
+    ]);
+    await notifyRebootResult({
+      jobId: "r1",
+      assetId: "a1",
+      status: "succeeded",
+      requestedBy: "tech@opus.local",
+      scheduledAtIso: "2026-10-22T18:00:00.000Z",
+    });
+    expect(H.insertValues.at(-1)).toMatchObject({
+      audience: "user",
+      recipientEmail: "tech@opus.local",
+    });
+  });
+  it("schedule → admins", async () => {
+    H.selectQueue.push(asset);
+    H.insertReturning.push([
+      {
+        id: "n2",
+        type: "reboot",
+        severity: "info",
+        title: "t",
+        body: "b",
+        href: "/assets/PC-1",
+        assetId: "a1",
+        createdAt: new Date("2026-10-06T12:00:00Z"),
+      },
+    ]);
+    await notifyRebootResult({
+      jobId: "r2",
+      assetId: "a1",
+      status: "succeeded",
+      requestedBy: "schedule:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      scheduledAtIso: "2026-10-22T18:00:00.000Z",
     });
     expect(H.insertValues.at(-1)).toMatchObject({
       audience: "admins",

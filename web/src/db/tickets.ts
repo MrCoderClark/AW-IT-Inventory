@@ -65,6 +65,8 @@ export function categoryFromNotificationType(type: NotificationType): string {
     case "software-deploy-failed":
     case "patch-install":
     case "patch-install-failed":
+    case "reboot":
+    case "reboot-failed":
     case "script-run":
     case "script-run-failed":
     case "printer-install":

@@ -223,6 +223,8 @@ export type NotificationType =
   | "software-deploy-failed"
   | "patch-install"
   | "patch-install-failed"
+  | "reboot"
+  | "reboot-failed"
   | "script-run"
   | "script-run-failed"
   | "ai-assist"
@@ -245,6 +247,8 @@ export const ALL_NOTIFICATION_TYPES = [
   "software-deploy-failed",
   "patch-install",
   "patch-install-failed",
+  "reboot",
+  "reboot-failed",
   "script-run",
   "script-run-failed",
   "ai-assist",

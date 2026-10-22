@@ -62,8 +62,11 @@ const H = vi.hoisted(() => {
   };
 });
 
+const notifyMock = vi.hoisted(() => vi.fn(async () => undefined));
+
 vi.mock("server-only", () => ({}));
 vi.mock("@/db/scan", () => ({ isWorkerLive: vi.fn().mockResolvedValue(true) }));
+vi.mock("./notifications", () => ({ notifyRebootResult: notifyMock }));
 vi.mock("@/db/index", () => ({
   db: {
     select: H.selectMock,
@@ -201,10 +204,22 @@ describe("claimNextReboot", () => {
 
 describe("updateRebootStatus — fenced", () => {
   it("returns ok on successful update", async () => {
-    H.state.updateReturns = [[{ id: JID }]];
+    H.state.updateReturns = [
+      [
+        {
+          id: JID,
+          assetId: "a1",
+          requestedBy: "me@x.com",
+          scheduledAt: new Date("2026-10-22T18:00:00.000Z"),
+        },
+      ],
+    ];
     expect(
       await updateRebootStatus(JID, { ...FENCE, status: "succeeded" }),
     ).toBe("ok");
+    expect(notifyMock).toHaveBeenCalledWith(
+      expect.objectContaining({ jobId: JID, status: "succeeded" }),
+    );
   });
 
   it("is stale when the claim was lost", async () => {
@@ -213,13 +228,26 @@ describe("updateRebootStatus — fenced", () => {
     expect(
       await updateRebootStatus(JID, { ...FENCE, status: "succeeded" }),
     ).toBe("stale");
+    expect(notifyMock).not.toHaveBeenCalled();
   });
 });
 
 describe("cancelRebootJob", () => {
   it("cancels an in-flight job", async () => {
-    H.state.updateReturns = [[{ id: JID }]];
+    H.state.updateReturns = [
+      [
+        {
+          id: JID,
+          assetId: "a1",
+          requestedBy: "me@x.com",
+          scheduledAt: new Date("2026-10-22T18:00:00.000Z"),
+        },
+      ],
+    ];
     expect(await cancelRebootJob(JID)).toBe(true);
+    expect(notifyMock).toHaveBeenCalledWith(
+      expect.objectContaining({ jobId: JID, status: "canceled" }),
+    );
   });
 });
 

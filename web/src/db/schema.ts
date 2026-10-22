@@ -989,6 +989,8 @@ export const notifications = pgTable(
         | "software-deploy-failed"
         | "patch-install"
         | "patch-install-failed"
+        | "reboot"
+        | "reboot-failed"
         | "script-run"
         | "script-run-failed"
         | "ai-assist"
