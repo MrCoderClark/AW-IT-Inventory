@@ -1,10 +1,18 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { PatchesFleet } from "./patches-fleet";
 import type { FleetPatchRow } from "@/db/patches";
+import { requestFleetOsPatchInstall } from "@/app/(app)/patch-install-actions";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
+}));
+vi.mock("@/app/(app)/patch-install-actions", () => ({
+  requestFleetOsPatchInstall: vi.fn(),
+}));
 
 const ROWS: FleetPatchRow[] = [
   {
@@ -43,6 +51,38 @@ const ROWS: FleetPatchRow[] = [
 ];
 
 describe("PatchesFleet", () => {
+  beforeEach(() => {
+    vi.mocked(requestFleetOsPatchInstall).mockReset();
+  });
+
+  it("hides Install OS updates without canDeploy", () => {
+    render(<PatchesFleet rows={ROWS} canDeploy={false} />);
+    expect(
+      screen.queryByRole("button", { name: /Install OS updates/i }),
+    ).toBeNull();
+  });
+
+  it("disables Install when nothing selected", () => {
+    render(<PatchesFleet rows={ROWS} canDeploy />);
+    const btn = screen.getByRole("button", { name: /Install OS updates/i });
+    expect((btn as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("confirm copy mentions OS updates and no reboot", async () => {
+    const user = userEvent.setup();
+    render(<PatchesFleet rows={ROWS} canDeploy />);
+    await user.click(screen.getByLabelText(/Select Needs reboot/i));
+    await user.click(
+      screen.getByRole("button", { name: /Install OS updates/i }),
+    );
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText(/Install OS updates on 1 computer/i)).toBeTruthy();
+    expect(within(dialog).getByText(/missing OS updates/i)).toBeTruthy();
+    expect(within(dialog).getByText(/not/i)).toBeTruthy();
+    expect(within(dialog).getByText(/rebooted automatically/i)).toBeTruthy();
+    expect(within(dialog).getByText(/fleet concurrency limit/i)).toBeTruthy();
+  });
+
   it("renders every computer with a count", () => {
     render(<PatchesFleet rows={ROWS} />);
     expect(screen.getByText("Clean PC")).toBeTruthy();
