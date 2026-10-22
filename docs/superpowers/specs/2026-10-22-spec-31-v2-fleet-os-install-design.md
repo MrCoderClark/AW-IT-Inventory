@@ -1,7 +1,7 @@
 # Spec 31 v2 — Fleet OS multi-install from `/patches`
 
 **Date**: 2026-10-22  
-**Status**: Draft (design approved in chat; awaiting spec file review)  
+**Status**: Accepted (implemented on `feat/spec-31-v2-fleet-os-install`)  
 **Parent**: [Spec 31 patch management](../../specs/31-patch-management/index.md)  
 **Branch**: `feat/spec-31-v2-fleet-os-install` (implementation; this doc on `docs/spec-31-v2-fleet-os-install`)
 

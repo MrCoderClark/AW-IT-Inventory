@@ -7,6 +7,12 @@ via a feature branch + PR.
 
 ---
 
+## 🚧 Spec 31 v2: Fleet OS multi-install (`feat/spec-31-v2-fleet-os-install`)
+
+Multi-select on `/patches`, **Install OS updates** for all missing OS per host, global
+concurrency cap (`PATCH_INSTALL_MAX_CONCURRENT`). Stays 🚧 until merge.
+Design: `docs/superpowers/specs/2026-10-22-spec-31-v2-fleet-os-install-design.md`.
+
 ## 🚧 Spec 33: Ticket email-in (`feat/spec-33-ticket-email-in`)
 
 Reply-only inbound is implemented on this branch and stays 🚧 until merge.

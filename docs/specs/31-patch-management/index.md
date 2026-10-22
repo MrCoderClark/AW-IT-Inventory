@@ -402,9 +402,10 @@ fleet visibility gap called out in phase 1.
 
 ### Out of scope / v2 (not this spec)
 
-Defer deliberately — do not block marking 31 complete:
+**First v2 slice:** [Fleet OS multi-install from `/patches`](../../superpowers/specs/2026-10-22-spec-31-v2-fleet-os-install-design.md) — multi-select computers, enqueue all missing OS updates per host, global concurrency cap. Implemented on `feat/spec-31-v2-fleet-os-install` (🚧 until merge).
 
-- Fleet multi-install from `/patches`
+Still deferred — do not block marking 31 complete:
+
 - Optional "reboot when done" on install jobs
 - WSUS / target-group scoping
 - `.msu` install via Software Library (use spec 23 for packaged push)
