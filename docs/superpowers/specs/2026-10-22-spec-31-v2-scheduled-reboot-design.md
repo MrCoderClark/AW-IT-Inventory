@@ -1,7 +1,7 @@
 # Spec 31 v2 — Scheduled reboot (install-linked + standalone)
 
 **Date**: 2026-10-22  
-**Status**: Accepted (spec reviewed; implementation plan ready)  
+**Status**: Accepted (implemented on `feat/spec-31-v2-scheduled-reboot`)  
 **Parent**: [Spec 31 patch management](../../specs/31-patch-management/index.md)  
 **Related**: [Fleet OS multi-install](./2026-10-22-spec-31-v2-fleet-os-install-design.md)  
 **Branch**: `feat/spec-31-v2-scheduled-reboot` (implementation)

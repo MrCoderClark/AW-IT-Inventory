@@ -7,6 +7,13 @@ via a feature branch + PR.
 
 ---
 
+## 🚧 Spec 31 v2: Scheduled reboot (`feat/spec-31-v2-scheduled-reboot`)
+
+Standalone **Schedule reboot** on the Updates tab plus optional **Also reboot at…** when
+enqueueing OS install (Updates or fleet `/patches`). `reboot_jobs` queue; collector reboots
+at `scheduledAt` over WinRM. Stays 🚧 until merge.
+Design: `docs/superpowers/specs/2026-10-22-spec-31-v2-scheduled-reboot-design.md`.
+
 ## 🚧 Spec 31 v2: Fleet OS multi-install (`feat/spec-31-v2-fleet-os-install`)
 
 Multi-select on `/patches`, **Install OS updates** for all missing OS per host, global
