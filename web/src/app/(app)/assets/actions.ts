@@ -18,7 +18,9 @@ import {
 import {
   assignAssetTx,
   isOpenAssignmentRace,
+  recordAssignmentAudits,
   returnAssetTx,
+  type AssignmentAudit,
 } from "@/db/assignments";
 import { locationLeafStatus } from "@/db/queries";
 import { dismissMonitor } from "@/db/monitors";
@@ -213,7 +215,7 @@ export async function createAsset(raw: unknown): Promise<ActionResult> {
   if (leafError) return leafError;
 
   const now = new Date();
-  let created: { tag: string } | undefined;
+  let created: { tag: string; audit?: AssignmentAudit } | undefined;
   try {
     // The tag-retry loop and the detail insert share one transaction, so a
     // detail row is never orphaned and a failed insert rolls the asset back.
@@ -246,12 +248,15 @@ export async function createAsset(raw: unknown): Promise<ActionResult> {
       if (!row) throw new TagClashError();
       await upsertDetails(tx, input.type, row.id, details.data);
       // Route the initial assignee through the engine so the custody log opens
-      // in the same transaction as the asset.
+      // in the same transaction as the asset. The audit row is written after
+      // this transaction commits.
+      let audit: AssignmentAudit | undefined;
       if (input.assigneeId) {
         const res = await assignAssetTx(tx, row.id, input.assigneeId, user.email);
         if (!res.ok) throw new AssignFailure(assignFailureResult(res.error));
+        audit = res.audit;
       }
-      return { tag: row.tag };
+      return { tag: row.tag, audit };
     });
   } catch (err) {
     if (err instanceof TagClashError)
@@ -264,6 +269,8 @@ export async function createAsset(raw: unknown): Promise<ActionResult> {
   }
   if (!created)
     return { ok: false, error: "Couldn't generate a unique tag. Try again." };
+
+  if (created.audit) await recordAssignmentAudits([created.audit]);
 
   revalidateFor(input.type);
   revalidatePath(`/assets/${created.tag}`);
@@ -294,12 +301,14 @@ export async function updateAsset(
   if (leafError) return leafError;
 
   const now = new Date();
-  let existed = false;
-  let updatedId: string | null = null;
+  let saved:
+    | { found: true; id: string; audits: AssignmentAudit[] }
+    | { found: false }
+    | undefined;
   try {
     // Update the asset and upsert its detail row together; type is locked on
     // edit, so an existing asset with no detail row yet gains one here.
-    existed = await db.transaction(async (tx) => {
+    saved = await db.transaction(async (tx) => {
       const updated = await tx
         .update(assets)
         .set({
@@ -319,23 +328,26 @@ export async function updateAsset(
         })
         .where(eq(assets.tag, tag))
         .returning({ id: assets.id, assigneeId: assets.assigneeId });
-      if (!updated.length) return false;
-      updatedId = updated[0].id;
+      if (!updated.length) return { found: false as const };
       await upsertDetails(tx, input.type, updated[0].id, details.data);
 
       // Reconcile the assignee change (the returned assigneeId is the pre-update
       // value, since it isn't in the SET above): open, switch, or return.
+      // Audit payloads are returned and written after this transaction commits.
+      const audits: AssignmentAudit[] = [];
       const current = updated[0].assigneeId;
       const desired = input.assigneeId;
       if (desired !== current) {
         if (desired) {
           const res = await assignAssetTx(tx, updated[0].id, desired, user.email);
           if (!res.ok) throw new AssignFailure(assignFailureResult(res.error));
+          if (res.audit) audits.push(res.audit);
         } else {
-          await returnAssetTx(tx, updated[0].id, user.email);
+          const res = await returnAssetTx(tx, updated[0].id, user.email);
+          if (res.audits?.length) audits.push(...res.audits);
         }
       }
-      return true;
+      return { found: true as const, id: updated[0].id, audits };
     });
   } catch (err) {
     if (err instanceof AssignFailure) return err.result;
@@ -345,13 +357,15 @@ export async function updateAsset(
     throw err;
   }
 
-  if (!existed) return { ok: false, error: "That asset no longer exists." };
+  if (!saved?.found) return { ok: false, error: "That asset no longer exists." };
 
-  if (input.type === "Computer" && updatedId) {
+  if (saved.audits.length) await recordAssignmentAudits(saved.audits);
+
+  if (input.type === "Computer") {
     await upsertAuditEvent({
       sourceTable: "asset_updates",
       sourceId: randomUUID(),
-      assetId: updatedId,
+      assetId: saved.id,
       action: "asset_update",
       operator: user.email,
       source: "admin_console",

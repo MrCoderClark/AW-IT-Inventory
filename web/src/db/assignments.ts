@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 
 import { upsertAuditEvent } from "./computer-audit";
 import { db } from "./index";
@@ -31,6 +31,34 @@ export type AssignError =
   | "already-assigned";
 
 export type AssignResult = { ok: true } | { ok: false; error: AssignError };
+
+/**
+ * A Computer assignment change to record after the assignment transaction
+ * commits. Built inside the transaction (it needs the row id and names) and
+ * written by `recordAssignmentAudits` on the global pool. Writing it inside
+ * the transaction deadlocks: `computer_audit_events.asset_id` references
+ * `assets.id`, so the audit insert waits for an asset row this same
+ * transaction has not committed yet.
+ */
+export type AssignmentAudit = {
+  assignmentId: string;
+  assetId: string;
+  actorEmail: string;
+  summary: string;
+  details: Record<string, unknown>;
+};
+
+/** Success from `assignAssetTx`, including an audit when a Computer changed hands. */
+export type AssignTxResult =
+  | { ok: true; audit?: AssignmentAudit }
+  | { ok: false; error: AssignError };
+
+/** Success from `returnAssetTx`. `audits` is omitted when there is nothing to record. */
+export type ReturnTxResult = {
+  ok: true;
+  changed: boolean;
+  audits?: AssignmentAudit[];
+};
 
 /** A transaction handle (same query surface as `db`), so the engine core can run
    inside a caller's transaction — the asset form assignee change shares the
@@ -74,13 +102,7 @@ function assignmentSummary(
   return "Assignment changed";
 }
 
-async function auditAssignmentChange(input: {
-  assignmentId: string;
-  assetId: string;
-  actorEmail: string;
-  summary: string;
-  details: Record<string, unknown>;
-}): Promise<void> {
+async function auditAssignmentChange(input: AssignmentAudit): Promise<void> {
   await upsertAuditEvent({
     sourceTable: ASSIGNMENT_AUDIT_TABLE,
     sourceId: input.assignmentId,
@@ -92,6 +114,69 @@ async function auditAssignmentChange(input: {
     details: input.details,
     status: "succeeded",
   });
+}
+
+/** Write assignment audits. Call only after the custody transaction has committed. */
+export async function recordAssignmentAudits(
+  audits: readonly AssignmentAudit[],
+): Promise<void> {
+  for (const audit of audits) {
+    await auditAssignmentChange(audit);
+  }
+}
+
+/**
+ * Audit Computer returns that were closed outside `returnAssetTx` (person
+ * archive). `rows` are assignments that have already committed. Other asset
+ * types are skipped.
+ */
+export async function recordComputerReturnAudits(
+  rows: { assignmentId: string; assetId: string; personId: string }[],
+  actorEmail: string,
+): Promise<void> {
+  const pending = rows.filter((row) => row.assignmentId && row.assetId);
+  if (!pending.length) return;
+
+  const typed = await db
+    .select({ id: assets.id, type: assets.type })
+    .from(assets)
+    .where(
+      inArray(
+        assets.id,
+        [...new Set(pending.map((row) => row.assetId))],
+      ),
+    );
+  const computers = new Set(
+    typed.filter((asset) => asset.type === "Computer").map((asset) => asset.id),
+  );
+  const computerRows = pending.filter((row) => computers.has(row.assetId));
+  if (!computerRows.length) return;
+
+  const holders = await db
+    .select({ id: people.id, name: people.name })
+    .from(people)
+    .where(
+      inArray(
+        people.id,
+        [...new Set(computerRows.map((row) => row.personId))],
+      ),
+    );
+  const names = new Map(
+    holders.map((holder) => [holder.id, personLabel(holder.name)]),
+  );
+
+  await recordAssignmentAudits(
+    computerRows.map((row) => {
+      const fromName = names.get(row.personId) ?? null;
+      return {
+        assignmentId: row.assignmentId,
+        assetId: row.assetId,
+        actorEmail,
+        summary: assignmentSummary("return", fromName, null, true),
+        details: { personId: row.personId, fromName },
+      };
+    }),
+  );
 }
 
 export function isOpenAssignmentRace(err: unknown): boolean {
@@ -128,23 +213,26 @@ export async function assignAsset(
   when: Date = new Date(),
 ): Promise<AssignResult> {
   try {
-    return await db.transaction((tx) =>
+    const res = await db.transaction((tx) =>
       assignAssetTx(tx, assetId, personId, actorEmail, when),
     );
+    if (res.ok && res.audit) await recordAssignmentAudits([res.audit]);
+    return res.ok ? { ok: true } : res;
   } catch (err) {
     if (isOpenAssignmentRace(err)) return { ok: false, error: "already-assigned" };
     throw err;
   }
 }
 
-/** The assign core, run against a caller-provided transaction (AC-5, AC-11). */
+/** The assign core, run against a caller-provided transaction (AC-5, AC-11).
+ *  Returns an audit payload for a Computer change and does not write it. */
 export async function assignAssetTx(
   tx: Tx,
   assetId: string,
   personId: string,
   actorEmail: string,
   when: Date = new Date(),
-): Promise<AssignResult> {
+): Promise<AssignTxResult> {
   if (!UUID_RE.test(assetId)) return { ok: false, error: "asset-not-found" };
   if (!UUID_RE.test(personId)) return { ok: false, error: "person-not-found" };
 
@@ -209,18 +297,21 @@ export async function assignAssetTx(
   if (asset.type === "Computer" && created?.id) {
     const toName = personLabel(person.name);
     const fromName = personLabel(open?.personName);
-    await auditAssignmentChange({
-      assignmentId: created.id,
-      assetId,
-      actorEmail,
-      summary: assignmentSummary("assign", fromName, toName, Boolean(open)),
-      details: {
-        fromPersonId: open?.personId ?? null,
-        fromName,
-        toPersonId: personId,
-        toName,
+    return {
+      ok: true,
+      audit: {
+        assignmentId: created.id,
+        assetId,
+        actorEmail,
+        summary: assignmentSummary("assign", fromName, toName, Boolean(open)),
+        details: {
+          fromPersonId: open?.personId ?? null,
+          fromName,
+          toPersonId: personId,
+          toName,
+        },
       },
-    });
+    };
   }
 
   return { ok: true };
@@ -237,16 +328,21 @@ export async function returnAsset(
   actorEmail: string,
   when: Date = new Date(),
 ): Promise<{ ok: true; changed: boolean }> {
-  return db.transaction((tx) => returnAssetTx(tx, assetId, actorEmail, when));
+  const res = await db.transaction((tx) =>
+    returnAssetTx(tx, assetId, actorEmail, when),
+  );
+  if (res.audits?.length) await recordAssignmentAudits(res.audits);
+  return { ok: true, changed: res.changed };
 }
 
-/** The return core, run against a caller-provided transaction (AC-6, AC-11). */
+/** The return core, run against a caller-provided transaction (AC-6, AC-11).
+ *  Returns audit payloads for Computer returns and does not write them. */
 export async function returnAssetTx(
   tx: Tx,
   assetId: string,
   actorEmail: string,
   when: Date = new Date(),
-): Promise<{ ok: true; changed: boolean }> {
+): Promise<ReturnTxResult> {
   if (!UUID_RE.test(assetId)) return { ok: true, changed: false };
 
   const [asset] = await tx
@@ -271,6 +367,7 @@ export async function returnAssetTx(
     .set({ assigneeId: null, updatedAt: when })
     .where(eq(assets.id, assetId));
 
+  const audits: AssignmentAudit[] = [];
   if (asset?.type === "Computer") {
     for (const row of closed) {
       const [holder] = await tx
@@ -279,7 +376,7 @@ export async function returnAssetTx(
         .where(eq(people.id, row.personId))
         .limit(1);
       const fromName = personLabel(holder?.name);
-      await auditAssignmentChange({
+      audits.push({
         assignmentId: row.id,
         assetId,
         actorEmail,
@@ -289,7 +386,9 @@ export async function returnAssetTx(
     }
   }
 
-  return { ok: true, changed: closed.length > 0 };
+  return audits.length
+    ? { ok: true, changed: true, audits }
+    : { ok: true, changed: closed.length > 0 };
 }
 
 /* ---------------- Read paths (AC-4, AC-7) ---------------- */

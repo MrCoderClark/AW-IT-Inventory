@@ -78,7 +78,14 @@ const H = vi.hoisted(() => {
   return { state, select, update, insert, del, transaction };
 });
 
+const upsertAuditMock = vi.hoisted(() =>
+  vi.fn(async () => ({ ok: true as const, id: "audit-1" })),
+);
+
 vi.mock("server-only", () => ({}));
+vi.mock("@/db/computer-audit", () => ({
+  upsertAuditEvent: (...args: unknown[]) => upsertAuditMock(...args),
+}));
 vi.mock("@/db/index", () => ({
   db: {
     select: H.select,
@@ -264,6 +271,49 @@ describe("archivePerson (AC-8)", () => {
   it("returns false for a malformed id", async () => {
     expect(await archivePerson("nope", "admin@opus.local")).toBe(false);
     expect(H.transaction).not.toHaveBeenCalled();
+  });
+
+  it("audits computer returns after the archive transaction commits", async () => {
+    const COMPUTER = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const MONITOR = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    const ASG_C = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    const ASG_M = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    H.state.updateReturnings = [
+      [{ id: UUID }],
+      [
+        { id: ASG_C, assetId: COMPUTER, personId: UUID },
+        { id: ASG_M, assetId: MONITOR, personId: UUID },
+      ],
+    ];
+    H.state.selectResults = [
+      [
+        { id: COMPUTER, type: "Computer" },
+        { id: MONITOR, type: "Monitor" },
+      ],
+      [{ id: UUID, name: "Ada Lovelace" }],
+    ];
+
+    const run = H.transaction.getMockImplementation();
+    H.transaction.mockImplementationOnce(async (cb: (tx: unknown) => Promise<unknown>) => {
+      const result = await run!(cb);
+      expect(upsertAuditMock).not.toHaveBeenCalled();
+      return result;
+    });
+
+    const res = await archivePerson(UUID, "admin@opus.local");
+    expect(res).toBe(true);
+    expect(upsertAuditMock).toHaveBeenCalledTimes(1);
+    expect(upsertAuditMock).toHaveBeenCalledWith({
+      sourceTable: "asset_assignments",
+      sourceId: ASG_C,
+      assetId: COMPUTER,
+      action: "assignment_change",
+      operator: "admin@opus.local",
+      source: "admin_console",
+      summary: "Returned from Ada Lovelace",
+      details: { personId: UUID, fromName: "Ada Lovelace" },
+      status: "succeeded",
+    });
   });
 });
 

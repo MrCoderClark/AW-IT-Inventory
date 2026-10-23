@@ -33,10 +33,11 @@ const h = vi.hoisted(() => {
   // (spec 16, AC-11); spy on its transaction-aware cores.
   const assignAssetTx = vi.fn();
   const returnAssetTx = vi.fn();
+  const recordAssignmentAudits = vi.fn(async () => undefined);
   const upsertAudit = vi.fn(async () => ({ ok: true as const, id: "audit-1" }));
   return {
     returning, chain, db, getCurrentUser, hasPermission, revalidatePath,
-    assignAssetTx, returnAssetTx, upsertAudit,
+    assignAssetTx, returnAssetTx, recordAssignmentAudits, upsertAudit,
   };
 });
 
@@ -52,6 +53,7 @@ vi.mock("next/cache", () => ({ revalidatePath: h.revalidatePath }));
 vi.mock("@/db/assignments", () => ({
   assignAssetTx: h.assignAssetTx,
   returnAssetTx: h.returnAssetTx,
+  recordAssignmentAudits: h.recordAssignmentAudits,
   // The FK tests below exercise the real FK path (23503), not this race, so a
   // constant false keeps them unchanged.
   isOpenAssignmentRace: () => false,
@@ -309,6 +311,39 @@ describe("assignee reroute through the assignment engine (spec 16, AC-11)", () =
     const insertPayload = (h.chain.values as ReturnType<typeof vi.fn>).mock
       .calls[0][0] as Record<string, unknown>;
     expect(insertPayload).not.toHaveProperty("assigneeId");
+    expect(h.recordAssignmentAudits).not.toHaveBeenCalled();
+  });
+
+  it("writes a Computer assignment audit after the create transaction commits", async () => {
+    const audit = {
+      assignmentId: "asg-1",
+      assetId: "asset-id",
+      actorEmail: "admin@x",
+      summary: "Assigned to Ada",
+      details: { toPersonId: PERSON, toName: "Ada" },
+    };
+    h.returning.mockResolvedValue([{ tag: "H2TECS-PC-ABC12", id: "asset-id" }]);
+    h.assignAssetTx.mockResolvedValue({ ok: true, audit });
+    const order: string[] = [];
+    h.db.transaction.mockImplementationOnce(async (cb: (tx: unknown) => Promise<unknown>) => {
+      const result = await cb(h.db);
+      order.push("commit");
+      return result;
+    });
+    h.recordAssignmentAudits.mockImplementationOnce(async () => {
+      order.push("audit");
+    });
+
+    const res = await createAsset({
+      ...validInput,
+      type: "Computer",
+      name: "Front Desk",
+      assigneeId: PERSON,
+    });
+
+    expect(res.ok).toBe(true);
+    expect(order).toEqual(["commit", "audit"]);
+    expect(h.recordAssignmentAudits).toHaveBeenCalledWith([audit]);
   });
 
   it("createAsset rolls back and reports an archived assignee", async () => {
@@ -318,6 +353,7 @@ describe("assignee reroute through the assignment engine (spec 16, AC-11)", () =
     const res = await createAsset({ ...validInput, assigneeId: PERSON });
     expect(res.ok).toBe(false);
     expect(res.ok === false && res.error).toMatch(/archived/i);
+    expect(h.recordAssignmentAudits).not.toHaveBeenCalled();
   });
 
   it("createAsset does not call the engine when there is no assignee", async () => {
@@ -335,6 +371,75 @@ describe("assignee reroute through the assignment engine (spec 16, AC-11)", () =
       PERSON,
       "admin@x",
     );
+  });
+
+  it("writes an assignment audit after the update transaction commits", async () => {
+    const audit = {
+      assignmentId: "asg-1",
+      assetId: "asset-id",
+      actorEmail: "admin@x",
+      summary: "Assigned to Ada",
+      details: { toName: "Ada" },
+    };
+    h.returning.mockResolvedValue([{ id: "asset-id", assigneeId: null }]);
+    h.assignAssetTx.mockResolvedValue({ ok: true, audit });
+    const order: string[] = [];
+    h.db.transaction.mockImplementationOnce(
+      async (cb: (tx: unknown) => Promise<unknown>) => {
+        const result = await cb(h.db);
+        order.push("commit");
+        return result;
+      },
+    );
+    h.recordAssignmentAudits.mockImplementationOnce(async () => {
+      order.push("audit");
+    });
+
+    const res = await updateAsset("H2TECS-PC-ABC12", {
+      ...validInput,
+      type: "Computer",
+      name: "Front Desk",
+      assigneeId: PERSON,
+    });
+
+    expect(res.ok).toBe(true);
+    expect(order[0]).toBe("commit");
+    expect(order).toContain("audit");
+    expect(h.recordAssignmentAudits).toHaveBeenCalledWith([audit]);
+  });
+
+  it("writes a return audit after the update transaction commits", async () => {
+    const audit = {
+      assignmentId: "asg-1",
+      assetId: "asset-id",
+      actorEmail: "admin@x",
+      summary: "Returned from Ada",
+      details: { personId: PERSON, fromName: "Ada" },
+    };
+    h.returning.mockResolvedValue([{ id: "asset-id", assigneeId: PERSON }]);
+    h.returnAssetTx.mockResolvedValue({ ok: true, changed: true, audits: [audit] });
+    const order: string[] = [];
+    h.db.transaction.mockImplementationOnce(
+      async (cb: (tx: unknown) => Promise<unknown>) => {
+        const result = await cb(h.db);
+        order.push("commit");
+        return result;
+      },
+    );
+    h.recordAssignmentAudits.mockImplementationOnce(async () => {
+      order.push("audit");
+    });
+
+    const res = await updateAsset("H2TECS-PC-ABC12", {
+      ...validInput,
+      type: "Computer",
+      name: "Front Desk",
+      assigneeId: "",
+    });
+
+    expect(res.ok).toBe(true);
+    expect(order[0]).toBe("commit");
+    expect(h.recordAssignmentAudits).toHaveBeenCalledWith([audit]);
   });
 
   it("updateAsset returns the device to the pool when the assignee is cleared", async () => {
