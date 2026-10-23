@@ -303,15 +303,22 @@ describe("archivePerson (AC-8)", () => {
     const res = await archivePerson(UUID, "admin@opus.local");
     expect(res).toBe(true);
     expect(upsertAuditMock).toHaveBeenCalledTimes(1);
+    const written = (upsertAuditMock.mock.calls as unknown as object[][])[0][0] as {
+      sourceId: string;
+    };
+    expect(written.sourceId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    );
+    expect(written.sourceId).not.toBe(ASG_C);
     expect(upsertAuditMock).toHaveBeenCalledWith({
       sourceTable: "asset_assignments",
-      sourceId: ASG_C,
+      sourceId: written.sourceId,
       assetId: COMPUTER,
       action: "assignment_change",
       operator: "admin@opus.local",
       source: "admin_console",
       summary: "Returned from Ada Lovelace",
-      details: { personId: UUID, fromName: "Ada Lovelace" },
+      details: { personId: UUID, fromName: "Ada Lovelace", assignmentId: ASG_C },
       status: "succeeded",
     });
   });

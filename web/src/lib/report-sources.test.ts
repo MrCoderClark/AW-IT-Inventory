@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import { AUDIT_ACTIONS } from "./computer-audit-actions";
-import { REPORT_SOURCES } from "./report-sources";
+import {
+  REPORT_SOURCES,
+  reportSourceNeedsAuditRead,
+  visibleReportSources,
+} from "./report-sources";
 
 const FIELD_IDS = [
   "occurredAt",
@@ -33,5 +37,15 @@ describe("computerAuditEvents catalog", () => {
     expect(byId.source.enumValues).toEqual(["admin_console", "scheduled", "collector"]);
     expect(byId.flagged.type).toBe("bool");
     expect(byId.location.type).toBe("text");
+  });
+
+  it("hides the source from viewers without audit:read", () => {
+    expect(reportSourceNeedsAuditRead("computerAuditEvents")).toBe(true);
+    expect(reportSourceNeedsAuditRead("assets")).toBe(false);
+    const hidden = visibleReportSources(false).map((source) => source.id);
+    const shown = visibleReportSources(true).map((source) => source.id);
+    expect(hidden).not.toContain("computerAuditEvents");
+    expect(shown).toContain("computerAuditEvents");
+    expect(shown.filter((id) => id !== "computerAuditEvents")).toEqual(hidden);
   });
 });

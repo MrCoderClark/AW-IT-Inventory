@@ -8,6 +8,7 @@ import { ReportBuilder } from "@/components/report-builder";
 import { Button } from "@/components/ui/button";
 import { getReport, listReportCategories } from "@/db/report-engine";
 import { hasPermission, requireUser } from "@/lib/auth/session";
+import { reportSourceNeedsAuditRead } from "@/lib/report-sources";
 
 // The builder runs reports live from the fleet — never serve a stale snapshot.
 export const dynamic = "force-dynamic";
@@ -30,11 +31,21 @@ export default async function Page({
   }
 
   const { id } = await searchParams;
+  const canReadAudit = hasPermission(user, "audit:read");
   const [existing, categories] = await Promise.all([
     id ? getReport(id) : Promise.resolve(null),
     listReportCategories(),
   ]);
   if (id && !existing) notFound();
+  if (existing && reportSourceNeedsAuditRead(existing.source) && !canReadAudit) {
+    return (
+      <PagePlaceholder
+        title="Report builder"
+        description="You don't have permission to view computer audit events. Ask an administrator for the audit:read role."
+        icon={Lock}
+      />
+    );
+  }
 
   const canWrite = hasPermission(user, "report:write");
 
@@ -57,6 +68,7 @@ export default async function Page({
 
       <ReportBuilder
         canWrite={canWrite}
+        canReadAudit={canReadAudit}
         categories={categories}
         initial={
           existing

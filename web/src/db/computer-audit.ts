@@ -1,11 +1,12 @@
 import "server-only";
 
-import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 
 import type { AuditAction, AuditSource, AuditStatus } from "@/lib/computer-audit-actions";
 
 import { db } from "./index";
-import { assets, computerAuditEvents, locations } from "./schema";
+import { getSubtreeIds } from "./queries";
+import { assets, computerAuditEvents } from "./schema";
 
 /**
  * Computer audit log (spec 26). Dual-write helpers upsert on enqueue and update
@@ -260,27 +261,36 @@ function eventWhere(filters: AuditListFilters, from: Date) {
   );
 }
 
+/** Location ids in the filter subtree, or null when the list is unfiltered.
+ *  [] means the location does not exist, so the caller matches nothing. */
+async function locationSubtree(locationId: string | undefined): Promise<string[] | null> {
+  if (!locationId) return null;
+  return getSubtreeIds(locationId);
+}
+
 /**
  * Audit rows for the page, newest first. Joins `assets` for tag/name/serial.
- * When `locationId` is set, also inner-joins `locations` and keeps events whose
- * asset sits directly in that location. Omitted `from` means the last 30 days.
+ * When `locationId` is set, keeps events whose asset sits in that location or
+ * any descendant (same subtree rule as the asset lists). Omitted `from` means
+ * the last 30 days.
  */
 export async function listAuditEvents(
   filters: AuditListFilters = {},
 ): Promise<AuditListItem[]> {
+  const subtree = await locationSubtree(filters.locationId);
+  if (subtree && subtree.length === 0) return [];
+
   const from = defaultFrom(filters.from);
-  const where = eventWhere(filters, from);
-  const base = db
+  const where = and(
+    eventWhere(filters, from),
+    subtree ? inArray(assets.locationId, subtree) : undefined,
+  );
+  const ordered = db
     .select(listColumns)
     .from(computerAuditEvents)
-    .innerJoin(assets, eq(computerAuditEvents.assetId, assets.id));
-
-  const ordered = filters.locationId
-    ? base
-        .innerJoin(locations, eq(assets.locationId, locations.id))
-        .where(and(where, eq(locations.id, filters.locationId)))
-        .orderBy(desc(computerAuditEvents.occurredAt))
-    : base.where(where).orderBy(desc(computerAuditEvents.occurredAt));
+    .innerJoin(assets, eq(computerAuditEvents.assetId, assets.id))
+    .where(where)
+    .orderBy(desc(computerAuditEvents.occurredAt));
 
   const rows = await page(ordered, filters);
   return rows.map(toListItem);
@@ -291,6 +301,11 @@ export async function listAuditEvents(
  * events in that window with `occurredAt` on or after UTC midnight.
  */
 export async function getAuditKpis(filters: AuditKpiFilters = {}): Promise<AuditKpis> {
+  const subtree = await locationSubtree(filters.locationId);
+  if (subtree && subtree.length === 0) {
+    return { total: 0, today: 0, uniqueOperators: 0, flagged: 0 };
+  }
+
   const from = defaultFrom(filters.from);
   const day = startOfUtcDay();
   const selection = {
@@ -302,17 +317,13 @@ export async function getAuditKpis(filters: AuditKpiFilters = {}): Promise<Audit
   const timeWhere = and(
     gte(computerAuditEvents.occurredAt, from),
     filters.to ? lte(computerAuditEvents.occurredAt, filters.to) : undefined,
+    subtree ? inArray(assets.locationId, subtree) : undefined,
   );
-  const base = db
+  const rows = await db
     .select(selection)
     .from(computerAuditEvents)
-    .innerJoin(assets, eq(computerAuditEvents.assetId, assets.id));
-
-  const rows = filters.locationId
-    ? await base
-        .innerJoin(locations, eq(assets.locationId, locations.id))
-        .where(and(timeWhere, eq(locations.id, filters.locationId)))
-    : await base.where(timeWhere);
+    .innerJoin(assets, eq(computerAuditEvents.assetId, assets.id))
+    .where(timeWhere);
 
   const row = rows[0];
   return {

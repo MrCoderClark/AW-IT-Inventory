@@ -101,6 +101,43 @@ describe("runReportAction — report:read gate", () => {
     expect(runMock).toHaveBeenCalledOnce();
   });
 
+  it("refuses computerAuditEvents without audit:read and still runs other sources", async () => {
+    getUserMock.mockResolvedValue({ id: "u1" });
+    hasPermMock.mockImplementation(
+      (_user: unknown, perm: string) => perm === "report:read",
+    );
+    const auditSpec = {
+      source: "computerAuditEvents",
+      columns: ["occurredAt", "summary"],
+      filters: [],
+    };
+
+    const denied = await runReportAction("computerAuditEvents", auditSpec);
+    expect(denied.ok).toBe(false);
+    expect(runMock).not.toHaveBeenCalled();
+
+    const assets = await runReportAction("assets", assetsSpec);
+    expect(assets.ok).toBe(true);
+    expect(runMock).toHaveBeenCalledOnce();
+  });
+
+  it("runs computerAuditEvents when the caller has report:read and audit:read", async () => {
+    getUserMock.mockResolvedValue({ id: "u1" });
+    hasPermMock.mockImplementation(
+      (_user: unknown, perm: string) => perm === "report:read" || perm === "audit:read",
+    );
+    runMock.mockResolvedValue({ columns: [], rows: [], totalRows: 0 });
+
+    const res = await runReportAction("computerAuditEvents", {
+      source: "computerAuditEvents",
+      columns: ["occurredAt", "summary"],
+      filters: [],
+    });
+
+    expect(res.ok).toBe(true);
+    expect(runMock).toHaveBeenCalledOnce();
+  });
+
   it("rejects an empty spec (no columns, no grouping) before running", async () => {
     getUserMock.mockResolvedValue({ id: "u1" });
     hasPermMock.mockReturnValue(true);
@@ -128,6 +165,26 @@ describe("saveReportAction — report:write gate", () => {
     hasPermMock.mockReturnValue(true);
 
     const res = await saveReportAction({ name: "  ", source: "assets", spec: assetsSpec });
+
+    expect(res.ok).toBe(false);
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses to save computerAuditEvents without audit:read", async () => {
+    getUserMock.mockResolvedValue({ id: "u1", email: "a@b.c" });
+    hasPermMock.mockImplementation(
+      (_user: unknown, perm: string) => perm === "report:write",
+    );
+
+    const res = await saveReportAction({
+      name: "Audit",
+      source: "computerAuditEvents",
+      spec: {
+        source: "computerAuditEvents",
+        columns: ["occurredAt", "summary"],
+        filters: [],
+      },
+    });
 
     expect(res.ok).toBe(false);
     expect(createMock).not.toHaveBeenCalled();
@@ -191,6 +248,19 @@ describe("saveScheduleAction — report:write gate + validation", () => {
     getMock.mockResolvedValue(null);
 
     const res = await saveScheduleAction({ reportId: "gone", schedule });
+
+    expect(res.ok).toBe(false);
+    expect(upsertSchedMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses to schedule a computer audit report without audit:read", async () => {
+    getUserMock.mockResolvedValue({ id: "u1", email: "a@b.c" });
+    hasPermMock.mockImplementation(
+      (_user: unknown, perm: string) => perm === "report:write",
+    );
+    getMock.mockResolvedValue({ id: "r1", source: "computerAuditEvents" });
+
+    const res = await saveScheduleAction({ reportId: "r1", schedule });
 
     expect(res.ok).toBe(false);
     expect(upsertSchedMock).not.toHaveBeenCalled();

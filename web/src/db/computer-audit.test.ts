@@ -97,6 +97,10 @@ const H = vi.hoisted(() => {
 });
 
 vi.mock("server-only", () => ({}));
+const subtreeMock = vi.hoisted(() => vi.fn(async (id: string) => [id]));
+vi.mock("./queries", () => ({
+  getSubtreeIds: (id: string) => subtreeMock(id),
+}));
 vi.mock("@/db/index", () => ({
   db: {
     select: H.selectMock,
@@ -146,6 +150,28 @@ function whereIsos(): string[] {
   return H.state.wheres.flatMap(datesIn).map((d) => d.toISOString());
 }
 
+function stringsIn(root: unknown): string[] {
+  const found: string[] = [];
+  const seen = new Set<object>();
+  const stack: unknown[] = [root];
+  while (stack.length > 0) {
+    const cur = stack.pop();
+    if (typeof cur === "string") {
+      found.push(cur);
+      continue;
+    }
+    if (!cur || typeof cur !== "object") continue;
+    if (seen.has(cur)) continue;
+    seen.add(cur);
+    if (Array.isArray(cur)) {
+      for (const item of cur) stack.push(item);
+      continue;
+    }
+    for (const value of Object.values(cur)) stack.push(value);
+  }
+  return found;
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   H.state.selects = [];
@@ -160,6 +186,8 @@ beforeEach(() => {
   H.state.wheres = [];
   H.state.limits = [];
   H.state.offsets = [];
+  subtreeMock.mockReset();
+  subtreeMock.mockImplementation(async (id: string) => [id]);
 });
 
 afterEach(() => {
@@ -437,6 +465,29 @@ describe("listAuditEvents", () => {
     expect(H.state.limits).toEqual([25]);
     expect(H.state.offsets).toEqual([50]);
   });
+
+  it("keeps assets in the location subtree, not only the exact node", async () => {
+    const child = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+    subtreeMock.mockResolvedValue([LOC, child]);
+    H.state.selects = [[]];
+
+    await listAuditEvents({
+      locationId: LOC,
+      from: new Date("2026-10-01T00:00:00.000Z"),
+    });
+
+    expect(subtreeMock).toHaveBeenCalledWith(LOC);
+    const ids = H.state.wheres.flatMap(stringsIn);
+    expect(ids).toContain(LOC);
+    expect(ids).toContain(child);
+  });
+
+  it("returns no rows when the location does not exist", async () => {
+    subtreeMock.mockResolvedValue([]);
+
+    await expect(listAuditEvents({ locationId: LOC })).resolves.toEqual([]);
+    expect(H.selectMock).not.toHaveBeenCalled();
+  });
 });
 
 describe("getAuditKpis", () => {
@@ -480,5 +531,17 @@ describe("getAuditKpis", () => {
     await getAuditKpis({});
 
     expect(whereIsos()).toContain(DEFAULT_FROM.toISOString());
+  });
+
+  it("returns zeros when the location does not exist", async () => {
+    subtreeMock.mockResolvedValue([]);
+
+    await expect(getAuditKpis({ locationId: LOC })).resolves.toEqual({
+      total: 0,
+      today: 0,
+      uniqueOperators: 0,
+      flagged: 0,
+    });
+    expect(H.selectMock).not.toHaveBeenCalled();
   });
 });

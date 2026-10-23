@@ -14,7 +14,7 @@ import { Card } from "@/components/ui/card";
 import { getReport, runReportBySpec } from "@/db/report-engine";
 import { getScheduleForReport } from "@/db/report-schedules";
 import { describeSchedule } from "@/lib/report-schedule";
-import { REPORT_SOURCES } from "@/lib/report-sources";
+import { REPORT_SOURCES, reportSourceNeedsAuditRead } from "@/lib/report-sources";
 import type { ReportResult } from "@/lib/report-spec";
 import { hasPermission, requireUser } from "@/lib/auth/session";
 
@@ -41,6 +41,18 @@ export default async function Page({
   const { id } = await params;
   const report = await getReport(id);
   if (!report) notFound();
+  if (
+    reportSourceNeedsAuditRead(report.source) &&
+    !hasPermission(user, "audit:read")
+  ) {
+    return (
+      <PagePlaceholder
+        title="Report"
+        description="You don't have permission to view computer audit events. Ask an administrator for the audit:read role."
+        icon={Lock}
+      />
+    );
+  }
 
   const canWrite = hasPermission(user, "report:write");
   const sourceLabel = REPORT_SOURCES[report.source]?.label ?? report.source;

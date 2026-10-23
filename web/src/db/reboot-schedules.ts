@@ -1,5 +1,7 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
+
 import { and, eq, inArray, or, sql } from "drizzle-orm";
 
 import {
@@ -48,13 +50,13 @@ async function auditScheduleChange(input: {
 }): Promise<void> {
   await upsertAuditEvent({
     sourceTable: SCHEDULE_AUDIT_TABLE,
-    sourceId: input.scheduleId,
+    sourceId: randomUUID(),
     assetId: input.assetId,
     action: "reboot_schedule",
     operator: input.operator,
     source: "admin_console",
     summary: input.summary,
-    details: input.details,
+    details: { ...input.details, scheduleId: input.scheduleId },
     status: input.status,
   });
 }

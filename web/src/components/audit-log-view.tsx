@@ -66,7 +66,7 @@ function actionLabel(action: string): string {
 
 function sourceLabel(source: string): string {
   if (source === "admin_console") return "Admin Console";
-  if (source === "scheduled") return "Scheduled";
+  if (source === "scheduled") return "Automated Policy Engine";
   if (source === "collector") return "Collector";
   return source.replace(/[_-]+/g, " ");
 }

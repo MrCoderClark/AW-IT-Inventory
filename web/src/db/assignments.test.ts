@@ -356,6 +356,7 @@ describe("returnAssetTx (AC-6, AC-11)", () => {
           actorEmail: "admin@x",
           summary: "Returned from Ada Lovelace",
           details: { personId: PERSON, fromName: "Ada Lovelace" },
+          append: true,
         },
       ],
     });
@@ -375,15 +376,28 @@ describe("returnAssetTx (AC-6, AC-11)", () => {
 
     const res = await returnAsset(ASSET, "admin@x");
     expect(res).toEqual({ ok: true, changed: true });
+    expect(upsertAuditMock).toHaveBeenCalledTimes(1);
+    const written = (upsertAuditMock.mock.calls as unknown as object[][])[0][0] as {
+      sourceId: string;
+      details: { assignmentId: string };
+    };
+    expect(written.sourceId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    );
+    expect(written.sourceId).not.toBe(ASG);
     expect(upsertAuditMock).toHaveBeenCalledWith({
       sourceTable: "asset_assignments",
-      sourceId: ASG,
+      sourceId: written.sourceId,
       assetId: ASSET,
       action: "assignment_change",
       operator: "admin@x",
       source: "admin_console",
       summary: "Returned from Ada Lovelace",
-      details: { personId: PERSON, fromName: "Ada Lovelace" },
+      details: {
+        personId: PERSON,
+        fromName: "Ada Lovelace",
+        assignmentId: ASG,
+      },
       status: "succeeded",
     });
   });

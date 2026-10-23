@@ -1,5 +1,7 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
+
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 
 import { upsertAuditEvent } from "./computer-audit";
@@ -46,6 +48,8 @@ export type AssignmentAudit = {
   actorEmail: string;
   summary: string;
   details: Record<string, unknown>;
+  /** Returns append a new row. Assigns keep the assignment id as `sourceId`. */
+  append?: boolean;
 };
 
 /** Success from `assignAssetTx`, including an audit when a Computer changed hands. */
@@ -105,13 +109,15 @@ function assignmentSummary(
 async function auditAssignmentChange(input: AssignmentAudit): Promise<void> {
   await upsertAuditEvent({
     sourceTable: ASSIGNMENT_AUDIT_TABLE,
-    sourceId: input.assignmentId,
+    sourceId: input.append ? randomUUID() : input.assignmentId,
     assetId: input.assetId,
     action: "assignment_change",
     operator: input.actorEmail,
     source: assignmentSource(input.actorEmail),
     summary: input.summary,
-    details: input.details,
+    details: input.append
+      ? { ...input.details, assignmentId: input.assignmentId }
+      : input.details,
     status: "succeeded",
   });
 }
@@ -174,6 +180,7 @@ export async function recordComputerReturnAudits(
         actorEmail,
         summary: assignmentSummary("return", fromName, null, true),
         details: { personId: row.personId, fromName },
+        append: true,
       };
     }),
   );
@@ -382,6 +389,7 @@ export async function returnAssetTx(
         actorEmail,
         summary: assignmentSummary("return", fromName, null, true),
         details: { personId: row.personId, fromName },
+        append: true,
       });
     }
   }

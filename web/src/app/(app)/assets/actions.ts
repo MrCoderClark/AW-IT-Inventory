@@ -277,6 +277,59 @@ export async function createAsset(raw: unknown): Promise<ActionResult> {
   return { ok: true, message: `Created ${created.tag}.`, tag: created.tag };
 }
 
+/** Computer columns that count as an asset edit. Assignee is excluded: the
+ *  assignment engine already writes `assignment_change` for holder-only saves. */
+const COMPUTER_AUDIT_FIELDS = [
+  "name",
+  "status",
+  "serial",
+  "model",
+  "locationId",
+  "vendor",
+  "spec",
+  "costCenter",
+  "purchaseDate",
+  "warrantyUntil",
+  "ipAddress",
+  "formFactor",
+  "operatingSystem",
+  "cpu",
+  "ramGb",
+  "storage",
+] as const;
+
+function blankStored(value: unknown): boolean {
+  return value == null || value === "";
+}
+
+function sameStored(prev: unknown, next: unknown): boolean {
+  if (blankStored(prev) && blankStored(next)) return true;
+  if (prev instanceof Date) return sameStored(prev.toISOString().slice(0, 10), next);
+  if (next instanceof Date) return sameStored(prev, next.toISOString().slice(0, 10));
+  return String(prev).trim() === String(next).trim();
+}
+
+function computerFieldsChanged(
+  prev: object,
+  input: {
+    name: string;
+    status: string;
+    serial: string | null;
+    model: string | null;
+    locationId: string | null;
+    vendor: string | null;
+    spec: string | null;
+    costCenter: string | null;
+    purchaseDate: string | null;
+    warrantyUntil: string | null;
+  },
+  details: Record<string, unknown>,
+): boolean {
+  const row = prev as Record<string, unknown>;
+  const next: Record<string, unknown> = { ...input, ...details };
+  return COMPUTER_AUDIT_FIELDS.some((key) => !sameStored(row[key], next[key]));
+}
+
 /**
  * Update an asset keyed by its immutable tag. Type is locked on edit (never in
  * the SET), so the tag prefix and the asset type stay in agreement.
@@ -302,13 +355,47 @@ export async function updateAsset(
 
   const now = new Date();
   let saved:
-    | { found: true; id: string; audits: AssignmentAudit[] }
+    | {
+        found: true;
+        id: string;
+        audits: AssignmentAudit[];
+        computerChanged: boolean;
+      }
     | { found: false }
     | undefined;
   try {
     // Update the asset and upsert its detail row together; type is locked on
     // edit, so an existing asset with no detail row yet gains one here.
     saved = await db.transaction(async (tx) => {
+      let computerChanged = false;
+      if (input.type === "Computer") {
+        const [prev] = await tx
+          .select({
+            name: assets.name,
+            status: assets.status,
+            serial: assets.serial,
+            model: assets.model,
+            locationId: assets.locationId,
+            vendor: assets.vendor,
+            spec: assets.spec,
+            costCenter: assets.costCenter,
+            purchaseDate: assets.purchaseDate,
+            warrantyUntil: assets.warrantyUntil,
+            ipAddress: computerDetails.ipAddress,
+            formFactor: computerDetails.formFactor,
+            operatingSystem: computerDetails.operatingSystem,
+            cpu: computerDetails.cpu,
+            ramGb: computerDetails.ramGb,
+            storage: computerDetails.storage,
+          })
+          .from(assets)
+          .leftJoin(computerDetails, eq(computerDetails.assetId, assets.id))
+          .where(eq(assets.tag, tag))
+          .limit(1);
+        if (!prev) return { found: false as const };
+        computerChanged = computerFieldsChanged(prev, input, details.data);
+      }
+
       const updated = await tx
         .update(assets)
         .set({
@@ -347,7 +434,12 @@ export async function updateAsset(
           if (res.audits?.length) audits.push(...res.audits);
         }
       }
-      return { found: true as const, id: updated[0].id, audits };
+      return {
+        found: true as const,
+        id: updated[0].id,
+        audits,
+        computerChanged,
+      };
     });
   } catch (err) {
     if (err instanceof AssignFailure) return err.result;
@@ -361,7 +453,7 @@ export async function updateAsset(
 
   if (saved.audits.length) await recordAssignmentAudits(saved.audits);
 
-  if (input.type === "Computer") {
+  if (saved.computerChanged) {
     await upsertAuditEvent({
       sourceTable: "asset_updates",
       sourceId: randomUUID(),

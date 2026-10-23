@@ -172,6 +172,19 @@ export const REPORT_SOURCES: Record<string, ReportSource> = {
 
 export const REPORT_SOURCE_LIST: ReportSource[] = Object.values(REPORT_SOURCES);
 
+/** Spec 26 source that exposes the computer audit log. Needs `audit:read`. */
+export const AUDIT_REPORT_SOURCE_ID = "computerAuditEvents";
+
+export function reportSourceNeedsAuditRead(source: string): boolean {
+  return source === AUDIT_REPORT_SOURCE_ID;
+}
+
+/** Builder catalog. Hides the audit source unless the viewer has `audit:read`. */
+export function visibleReportSources(canReadAudit: boolean): ReportSource[] {
+  if (canReadAudit) return REPORT_SOURCE_LIST;
+  return REPORT_SOURCE_LIST.filter((source) => !reportSourceNeedsAuditRead(source.id));
+}
+
 /** The field catalog (id → ReportField) for a source, for `runReport`/validation. */
 export function fieldMap(sourceId: string): Record<string, ReportField> {
   const src = REPORT_SOURCES[sourceId];

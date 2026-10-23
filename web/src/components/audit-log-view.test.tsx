@@ -183,7 +183,7 @@ describe("AuditLogView", () => {
     expect(text).toBe(
       [
         "Time,Asset,Serial,Action,Operator,Source,Status,Details",
-        "2026-10-22T12:00:00.000Z,H2TECS-COMP-OTHER,ABC123,Reboot,system,Scheduled,Failed,Scheduled reboot",
+        "2026-10-22T12:00:00.000Z,H2TECS-COMP-OTHER,ABC123,Reboot,system,Automated Policy Engine,Failed,Scheduled reboot",
       ].join("\r\n"),
     );
     expect(text).not.toContain("Assigned to Ada Lovelace");

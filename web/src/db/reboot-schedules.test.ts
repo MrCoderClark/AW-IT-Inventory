@@ -208,7 +208,6 @@ describe("upsertRebootSchedule", () => {
     expect(upsertAuditMock).toHaveBeenCalledWith(
       expect.objectContaining({
         sourceTable: "reboot_schedules",
-        sourceId: SCHED,
         assetId: ASSET,
         action: "reboot_schedule",
         operator: "ada",
@@ -216,12 +215,20 @@ describe("upsertRebootSchedule", () => {
         summary: "Saved daily reboot at 15:30 America/New_York",
         status: "succeeded",
         details: expect.objectContaining({
+          scheduleId: SCHED,
           cadence: "daily",
           localTime: "15:30",
           enabled: true,
         }),
       }),
     );
+    const savedAudit = (upsertAuditMock.mock.calls as unknown as object[][])[0][0] as {
+      sourceId: string;
+    };
+    expect(savedAudit.sourceId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    );
+    expect(savedAudit.sourceId).not.toBe(SCHED);
   });
 
   it("cancels the previous schedule child before booking the next", async () => {
@@ -374,14 +381,17 @@ describe("setRebootScheduleEnabled", () => {
     expect(upsertAuditMock).toHaveBeenCalledWith(
       expect.objectContaining({
         sourceTable: "reboot_schedules",
-        sourceId: SCHED,
         action: "reboot_schedule",
         operator: "ada",
         summary: "Disabled recurring reboot",
         status: "succeeded",
-        details: { enabled: false },
+        details: expect.objectContaining({ scheduleId: SCHED, enabled: false }),
       }),
     );
+    const disabledAudit = (upsertAuditMock.mock.calls as unknown as object[][])[0][0] as {
+      sourceId: string;
+    };
+    expect(disabledAudit.sourceId).not.toBe(SCHED);
   });
 
   it("enable books the next job", async () => {
@@ -423,14 +433,18 @@ describe("deleteRebootSchedule", () => {
     expect(upsertAuditMock).toHaveBeenCalledWith(
       expect.objectContaining({
         sourceTable: "reboot_schedules",
-        sourceId: SCHED,
         assetId: ASSET,
         action: "reboot_schedule",
         operator: "ada",
         summary: "Deleted recurring reboot schedule",
         status: "canceled",
+        details: expect.objectContaining({ scheduleId: SCHED, deleted: true }),
       }),
     );
+    const deletedAudit = (upsertAuditMock.mock.calls as unknown as object[][])[0][0] as {
+      sourceId: string;
+    };
+    expect(deletedAudit.sourceId).not.toBe(SCHED);
   });
 
   it("returns false when no schedule exists", async () => {
