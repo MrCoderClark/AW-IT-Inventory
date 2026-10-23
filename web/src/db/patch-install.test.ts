@@ -52,8 +52,13 @@ const H = vi.hoisted(() => {
   }));
 
   const executeMock = vi.fn(() => Promise.resolve(state.execResult));
+  const deleteMock = vi.fn(() => ({
+    where: () => Promise.resolve([]),
+  }));
   const notifyMock = vi.fn();
   const resolveDeployTargetMock = vi.fn();
+  const enqueueScanMock = vi.fn().mockResolvedValue("scan-1");
+  const enqueueMissingCheckMock = vi.fn().mockResolvedValue({ ok: true, id: "c1" });
 
   return {
     state,
@@ -61,13 +66,23 @@ const H = vi.hoisted(() => {
     insertMock,
     updateMock,
     executeMock,
+    deleteMock,
     notifyMock,
     resolveDeployTargetMock,
+    enqueueScanMock,
+    enqueueMissingCheckMock,
   };
 });
 
 vi.mock("server-only", () => ({}));
-vi.mock("@/db/scan", () => ({ isWorkerLive: vi.fn().mockResolvedValue(true) }));
+vi.mock("@/db/scan", () => ({
+  isWorkerLive: vi.fn().mockResolvedValue(true),
+  enqueueScan: (...args: unknown[]) => H.enqueueScanMock(...args),
+}));
+vi.mock("@/db/missing-update-checks", () => ({
+  enqueueMissingUpdateCheck: (...args: unknown[]) =>
+    H.enqueueMissingCheckMock(...args),
+}));
 vi.mock("@/db/notifications", () => ({
   notifyPatchInstallResult: H.notifyMock,
 }));
@@ -76,6 +91,7 @@ vi.mock("@/db/index", () => ({
     select: H.selectMock,
     insert: H.insertMock,
     update: H.updateMock,
+    delete: H.deleteMock,
     execute: H.executeMock,
   },
 }));
@@ -239,7 +255,15 @@ describe("claimNextPatchInstall — fleet concurrency", () => {
 describe("updatePatchInstallStatus — fenced (AC-17)", () => {
   it("notifies on success", async () => {
     H.state.updateReturns = [
-      [{ id: JID, assetId: "a1", selection: SEL, requestedBy: "me@x.com" }],
+      [
+        {
+          id: JID,
+          assetId: "a1",
+          targetIp: "192.168.70.5",
+          selection: SEL,
+          requestedBy: "me@x.com",
+        },
+      ],
     ];
     expect(
       await updatePatchInstallStatus(JID, { ...FENCE, status: "succeeded" }),
@@ -255,12 +279,139 @@ describe("updatePatchInstallStatus — fenced (AC-17)", () => {
     );
   });
 
+  it("enqueues scan + Check updates when selection has both", async () => {
+    H.state.updateReturns = [
+      [
+        {
+          id: JID,
+          assetId: "a1",
+          targetIp: "192.168.70.5",
+          selection: SEL,
+          requestedBy: "me@x.com",
+        },
+      ],
+    ];
+    await updatePatchInstallStatus(JID, { ...FENCE, status: "succeeded" });
+    expect(H.enqueueScanMock).toHaveBeenCalledWith({
+      scope: "selected",
+      targets: ["192.168.70.5"],
+      requestedBy: "patch-install:me@x.com",
+    });
+    expect(H.enqueueMissingCheckMock).toHaveBeenCalledWith({
+      assetId: "a1",
+      targetIp: "192.168.70.5",
+      requestedBy: "patch-install:me@x.com",
+    });
+  });
+
+  it("enqueues only a scan for app-only success", async () => {
+    H.state.updateReturns = [
+      [
+        {
+          id: JID,
+          assetId: "a1",
+          targetIp: "192.168.70.5",
+          selection: { os: [], apps: SEL.apps },
+          requestedBy: "me@x.com",
+        },
+      ],
+    ];
+    await updatePatchInstallStatus(JID, { ...FENCE, status: "succeeded" });
+    expect(H.enqueueScanMock).toHaveBeenCalled();
+    expect(H.enqueueMissingCheckMock).not.toHaveBeenCalled();
+  });
+
+  it("enqueues only Check updates for OS-only success", async () => {
+    H.state.updateReturns = [
+      [
+        {
+          id: JID,
+          assetId: "a1",
+          targetIp: "192.168.70.5",
+          selection: { os: SEL.os, apps: [] },
+          requestedBy: "me@x.com",
+        },
+      ],
+    ];
+    // remaining missing rows after delete (none → count 0)
+    H.state.selects = [[]];
+    await updatePatchInstallStatus(JID, {
+      ...FENCE,
+      status: "succeeded",
+      result: {
+        items: [{ kind: "os", id: "KB1", ok: true, exitCode: 2 }],
+        rebootRequired: false,
+      },
+    });
+    expect(H.enqueueScanMock).not.toHaveBeenCalled();
+    expect(H.enqueueMissingCheckMock).toHaveBeenCalledWith({
+      assetId: "a1",
+      targetIp: "192.168.70.5",
+      requestedBy: "patch-install:me@x.com",
+    });
+    expect(H.deleteMock).toHaveBeenCalled();
+  });
+
+  it("clears installed OS from Missing and skips Check when reboot required", async () => {
+    H.state.updateReturns = [
+      [
+        {
+          id: JID,
+          assetId: "a1",
+          targetIp: "192.168.70.5",
+          selection: { os: SEL.os, apps: [] },
+          requestedBy: "me@x.com",
+        },
+      ],
+    ];
+    H.state.selects = [[]];
+    await updatePatchInstallStatus(JID, {
+      ...FENCE,
+      status: "succeeded",
+      result: {
+        items: [{ kind: "os", id: "KB5127648", ok: true, exitCode: 2 }],
+        rebootRequired: true,
+      },
+    });
+    expect(H.deleteMock).toHaveBeenCalled();
+    expect(H.state.updateSets).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ pendingReboot: true, missingCount: 0 }),
+      ]),
+    );
+    expect(H.enqueueMissingCheckMock).not.toHaveBeenCalled();
+    expect(H.enqueueScanMock).not.toHaveBeenCalled();
+  });
+
+  it("does not enqueue follow-ups on failure", async () => {
+    H.state.updateReturns = [
+      [
+        {
+          id: JID,
+          assetId: "a1",
+          targetIp: "192.168.70.5",
+          selection: SEL,
+          requestedBy: "me@x.com",
+        },
+      ],
+    ];
+    await updatePatchInstallStatus(JID, {
+      ...FENCE,
+      status: "failed",
+      error: "timeout",
+    });
+    expect(H.enqueueScanMock).not.toHaveBeenCalled();
+    expect(H.enqueueMissingCheckMock).not.toHaveBeenCalled();
+  });
+
   it("is stale when the claim was lost", async () => {
     H.state.updateReturns = [[]];
     H.state.selects = [[{ id: JID }]];
     expect(
       await updatePatchInstallStatus(JID, { ...FENCE, status: "succeeded" }),
     ).toBe("stale");
+    expect(H.enqueueScanMock).not.toHaveBeenCalled();
+    expect(H.enqueueMissingCheckMock).not.toHaveBeenCalled();
   });
 });
 

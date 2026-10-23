@@ -4,7 +4,9 @@ import { revalidatePath } from "next/cache";
 
 import {
   enqueueMissingUpdateCheck,
+  listMissingUpdateChecksForAssetTag,
   resolveDeployTarget as resolveCheckTarget,
+  type MissingCheckListItem,
 } from "@/db/missing-update-checks";
 import {
   buildPatchSelection,
@@ -13,8 +15,11 @@ import {
   enqueuePatchInstall,
   FLEET_OS_INSTALL_TAG_CAP,
   getPatchInstallJob,
+  listPatchInstallsForAssetTag,
   resolveDeployTarget,
+  type PatchInstallListItem,
 } from "@/db/patch-install";
+import { getComputerPatches, type ComputerPatches } from "@/db/patches";
 import { getCurrentUser, hasPermission } from "@/lib/auth/session";
 
 /**
@@ -179,4 +184,29 @@ export async function requestMissingUpdateCheck(input: {
 
   revalidatePath(`/assets/${tag}`);
   return { ok: true, id: enq.id };
+}
+
+/** Live Updates-tab snapshot (no full page reload). Any signed-in user. */
+export async function pollUpdatesSnapshot(assetTag: string): Promise<
+  | {
+      ok: true;
+      patches: ComputerPatches | null;
+      patchJobs: PatchInstallListItem[];
+      checkJobs: MissingCheckListItem[];
+    }
+  | ActionErr
+> {
+  const user = await getCurrentUser();
+  if (!user) {
+    return { ok: false, error: "Not signed in.", code: "forbidden" };
+  }
+  const tag = (assetTag ?? "").trim();
+  if (!tag) return { ok: false, error: "Missing asset.", code: "badrequest" };
+
+  const [patches, patchJobs, checkJobs] = await Promise.all([
+    getComputerPatches(tag),
+    listPatchInstallsForAssetTag(tag, 20),
+    listMissingUpdateChecksForAssetTag(tag, 10),
+  ]);
+  return { ok: true, patches, patchJobs, checkJobs };
 }
