@@ -198,6 +198,11 @@ class Config(BaseModel):
     # script_schedules that are due. Web materializes each into a batch. 0 = off.
     script_schedule_interval_minutes: int = 15
 
+    # Recurring reboot schedules (spec 31 v2): how often (minutes) to poll web
+    # for enabled schedules missing an in-flight child. Web materializes each
+    # into a reboot_jobs row. 0 = off. Default every 1 minute.
+    reboot_schedule_interval_minutes: int = 1
+
     # Device metric sampling (spec 29): how often (minutes) to read CPU/RAM/disk/
     # uptime from every manually-entered computer over WinRM. A light, frequent loop
     # separate from the full scan. 0 = off. Default every 15 minutes.

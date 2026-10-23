@@ -38,6 +38,7 @@ from reachability import (
     run_reachability_check,
     run_report_delivery,
     run_retention_prune,
+    run_reboot_schedules,
     run_script_schedules,
     run_warranty_sweep,
 )
@@ -1052,6 +1053,13 @@ def _build_scheduler(config: Config, tokens: "TokenCache"):
             console.print(f"  [red]script schedules job error:[/red] {e}")
             tokens.invalidate()
 
+    def reboot_schedules_job() -> None:
+        try:
+            run_reboot_schedules(config, tokens.get())
+        except Exception as e:  # noqa: BLE001 — must never kill the scheduler
+            console.print(f"  [red]reboot schedules job error:[/red] {e}")
+            tokens.invalidate()
+
     def metrics_job() -> None:
         try:
             from collect_metrics import sample_metrics
@@ -1188,6 +1196,20 @@ def _build_scheduler(config: Config, tokens: "TokenCache"):
             f"every {config.script_schedule_interval_minutes}m"
         )
 
+    # Recurring reboot schedules (spec 31 v2): poll web for schedules needing a child job.
+    reboot_sched_scheduled = "off"
+    if config.reboot_schedule_interval_minutes > 0:
+        scheduler.add_job(
+            reboot_schedules_job,
+            IntervalTrigger(
+                minutes=config.reboot_schedule_interval_minutes, timezone=tz
+            ),
+            id="reboot-schedules",
+            replace_existing=True,
+            misfire_grace_time=300,
+        )
+        reboot_sched_scheduled = f"every {config.reboot_schedule_interval_minutes}m"
+
     # Device metric sampling (spec 29): CPU/RAM/disk/uptime from every known computer
     # on an interval, a light loop separate from the full scan. 0 = off.
     metrics_scheduled = "off"
@@ -1227,6 +1249,7 @@ def _build_scheduler(config: Config, tokens: "TokenCache"):
         f"warranty sweep {', '.join(warranty_scheduled) if warranty_scheduled else 'off'} · "
         f"report delivery {delivery_scheduled} · "
         f"script schedules {script_sched_scheduled} · "
+        f"reboot schedules {reboot_sched_scheduled} · "
         f"metrics {metrics_scheduled} · "
         f"missing-patches {missing_scheduled}."
     )

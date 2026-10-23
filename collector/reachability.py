@@ -313,6 +313,25 @@ def run_script_schedules(config: Config, token: str) -> None:
         console.print(f"  [yellow]script schedules failed:[/yellow] {e}")
 
 
+def run_reboot_schedules(config: Config, token: str) -> None:
+    """Trigger due reboot-schedule materialization (spec 31 v2).
+
+    Web holds schedules; this POST materializes each enabled row missing an
+    in-flight child into a reboot_jobs row. Poll cadence is
+    ``reboot_schedule_interval_minutes``. Uses deploy:agent (same as reboot claim).
+    """
+    try:
+        resp = httpx.post(
+            f"{config.ingest_url}/api/reboot/schedules/due",
+            json={},
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=60,
+        )
+        resp.raise_for_status()
+    except Exception as e:  # noqa: BLE001 — must never kill the scheduler
+        console.print(f"  [yellow]reboot schedules failed:[/yellow] {e}")
+
+
 def run_retention_prune(config: Config, token: str) -> None:
     """Prune reachability history older than the retention window (AC-10)."""
     try:
