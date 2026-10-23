@@ -20,7 +20,11 @@ import {
   type PatchInstallListItem,
 } from "@/db/patch-install";
 import { getComputerPatches, type ComputerPatches } from "@/db/patches";
-import { enqueueRebootJob } from "@/db/reboot";
+import {
+  enqueueRebootJob,
+  listRebootJobsForAssetTag,
+  type RebootListItem,
+} from "@/db/reboot";
 import { getCurrentUser, hasPermission } from "@/lib/auth/session";
 
 /**
@@ -266,6 +270,7 @@ export async function pollUpdatesSnapshot(assetTag: string): Promise<
       patches: ComputerPatches | null;
       patchJobs: PatchInstallListItem[];
       checkJobs: MissingCheckListItem[];
+      rebootJobs: RebootListItem[];
     }
   | ActionErr
 > {
@@ -276,10 +281,11 @@ export async function pollUpdatesSnapshot(assetTag: string): Promise<
   const tag = (assetTag ?? "").trim();
   if (!tag) return { ok: false, error: "Missing asset.", code: "badrequest" };
 
-  const [patches, patchJobs, checkJobs] = await Promise.all([
+  const [patches, patchJobs, checkJobs, rebootJobs] = await Promise.all([
     getComputerPatches(tag),
     listPatchInstallsForAssetTag(tag, 20),
     listMissingUpdateChecksForAssetTag(tag, 10),
+    listRebootJobsForAssetTag(tag, 20),
   ]);
-  return { ok: true, patches, patchJobs, checkJobs };
+  return { ok: true, patches, patchJobs, checkJobs, rebootJobs };
 }

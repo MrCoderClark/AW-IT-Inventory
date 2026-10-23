@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   Loader2,
@@ -42,9 +41,8 @@ import type { RebootListItem } from "@/db/reboot";
  * Per-computer Updates tab (spec 31): inventory + Missing + optional Install
  * selected (phase 3, AC-18) for `software:deploy` admins.
  *
- * While a Check / install is in flight, polls a snapshot action and updates
- * local state only — no full page refresh. Reboot schedule uses router.refresh
- * (reboot jobs are not in the live snapshot yet).
+ * While a Check / install / reboot is in flight, polls a snapshot action and
+ * updates local state only — no full page refresh.
  */
 
 function lastUpdateLabel(days: number | null | undefined): string {
@@ -84,7 +82,7 @@ export function UpdatesPanel({
   canInstall = false,
   patchJobs: patchJobsProp = [],
   checkJobs: checkJobsProp = [],
-  rebootJobs = [],
+  rebootJobs: rebootJobsProp = [],
 }: {
   patches: ComputerPatches | null;
   assetTag: string;
@@ -93,10 +91,10 @@ export function UpdatesPanel({
   checkJobs?: MissingCheckListItem[];
   rebootJobs?: RebootListItem[];
 }) {
-  const router = useRouter();
   const [patches, setPatches] = React.useState(patchesProp);
   const [patchJobs, setPatchJobs] = React.useState(patchJobsProp);
   const [checkJobs, setCheckJobs] = React.useState(checkJobsProp);
+  const [rebootJobs, setRebootJobs] = React.useState(rebootJobsProp);
   const [osSel, setOsSel] = React.useState<Set<string>>(new Set());
   const [appSel, setAppSel] = React.useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = React.useState(false);
@@ -107,6 +105,7 @@ export function UpdatesPanel({
   const [flashMissing, setFlashMissing] = React.useState(false);
   const prevPatchStatus = React.useRef<Map<string, string>>(new Map());
   const prevCheckStatus = React.useRef<Map<string, string>>(new Map());
+  const prevRebootStatus = React.useRef<Map<string, string>>(new Map());
   const prevMissingAt = React.useRef<string | null>(
     patchesProp?.missingCollectedAt ?? null,
   );
@@ -116,18 +115,20 @@ export function UpdatesPanel({
     setPatches(patchesProp);
     setPatchJobs(patchJobsProp);
     setCheckJobs(checkJobsProp);
-  }, [patchesProp, patchJobsProp, checkJobsProp]);
+    setRebootJobs(rebootJobsProp);
+  }, [patchesProp, patchJobsProp, checkJobsProp, rebootJobsProp]);
 
   const inflight = patchJobs.some((j) => isActive(j.status));
   const checkInflight = checkJobs.some((j) => isActive(j.status));
   const rebootInflight = rebootJobs.some((j) => isActive(j.status));
-  const live = inflight || checkInflight;
+  const live = inflight || checkInflight || rebootInflight;
 
   const applySnapshot = React.useCallback(
     (next: {
       patches: ComputerPatches | null;
       patchJobs: PatchInstallListItem[];
       checkJobs: MissingCheckListItem[];
+      rebootJobs: RebootListItem[];
     }) => {
       // Toast when a job leaves in-flight.
       for (const j of next.patchJobs) {
@@ -147,11 +148,23 @@ export function UpdatesPanel({
             toast.error(j.error || "Check for updates failed");
         }
       }
+      for (const j of next.rebootJobs) {
+        const prev = prevRebootStatus.current.get(j.id);
+        if (prev && isActive(prev) && !isActive(j.status)) {
+          if (j.status === "succeeded") toast.success("Reboot finished");
+          else if (j.status === "failed")
+            toast.error(j.error || "Reboot failed");
+          else if (j.status === "canceled") toast.message("Reboot canceled");
+        }
+      }
       prevPatchStatus.current = new Map(
         next.patchJobs.map((j) => [j.id, j.status]),
       );
       prevCheckStatus.current = new Map(
         next.checkJobs.map((j) => [j.id, j.status]),
+      );
+      prevRebootStatus.current = new Map(
+        next.rebootJobs.map((j) => [j.id, j.status]),
       );
 
       const nextMissingAt = next.patches?.missingCollectedAt ?? null;
@@ -168,18 +181,10 @@ export function UpdatesPanel({
       setPatches(next.patches);
       setPatchJobs(next.patchJobs);
       setCheckJobs(next.checkJobs);
+      setRebootJobs(next.rebootJobs);
     },
     [],
   );
-  const hasInFlight = inflight || rebootInflight || checkInflight;
-
-  // History is server-rendered; poll while any job is active so terminal
-  // status (and the bell) match without a manual reload.
-  React.useEffect(() => {
-    if (!hasInFlight) return;
-    const t = setInterval(() => router.refresh(), 3000);
-    return () => clearInterval(t);
-  }, [hasInFlight, router]);
 
   // Seed status maps once so we don't toast for already-finished history.
   React.useEffect(() => {
@@ -193,7 +198,12 @@ export function UpdatesPanel({
         checkJobsProp.map((j) => [j.id, j.status]),
       );
     }
-  }, [patchJobsProp, checkJobsProp]);
+    if (prevRebootStatus.current.size === 0) {
+      prevRebootStatus.current = new Map(
+        rebootJobsProp.map((j) => [j.id, j.status]),
+      );
+    }
+  }, [patchJobsProp, checkJobsProp, rebootJobsProp]);
 
   React.useEffect(() => {
     if (!live) return;
@@ -314,7 +324,6 @@ export function UpdatesPanel({
       setOsSel(new Set());
       setAppSel(new Set());
       await refreshSnapshot();
-      if (rebootAtIso) router.refresh();
     });
   }
 
@@ -331,7 +340,7 @@ export function UpdatesPanel({
       }
       toast.success("Reboot scheduled");
       setStandaloneRebootAt("");
-      router.refresh();
+      await refreshSnapshot();
     });
   }
 
@@ -343,7 +352,7 @@ export function UpdatesPanel({
         return;
       }
       toast.success("Reboot canceled");
-      router.refresh();
+      await refreshSnapshot();
     });
   }
 
@@ -718,76 +727,78 @@ export function UpdatesPanel({
         </Panel>
       )}
 
-      <Dialog
-        open={confirmOpen}
-        onOpenChange={(open) => {
-          setConfirmOpen(open);
-          if (!open) resetInstallDialog();
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Install selected updates?</DialogTitle>
-            <DialogDescription>
-              {osSel.size} OS update{osSel.size === 1 ? "" : "s"} and {appSel.size}{" "}
-              app upgrade{appSel.size === 1 ? "" : "s"} will be installed over
-              WinRM.{" "}
-              {alsoReboot ? (
-                <>
-                  After install succeeds, the host will get a{" "}
-                  <strong>forced</strong> reboot at the time below (or ASAP if
-                  install finishes late).
-                </>
-              ) : (
-                <>
-                  The host will <strong>not</strong> be rebooted automatically.
-                </>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-3 py-1">
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="size-4 accent-primary"
-                checked={alsoReboot}
-                onChange={(e) => {
-                  setAlsoReboot(e.target.checked);
-                  if (!e.target.checked) setInstallRebootAt("");
-                }}
-                aria-label="Also reboot at"
-              />
-              Also reboot at…
-            </label>
-            {alsoReboot && (
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="text-xs font-medium text-muted-foreground">
-                  Reboot after install
-                </span>
+      {confirmOpen ? (
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            setConfirmOpen(open);
+            if (!open) resetInstallDialog();
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Install selected updates?</DialogTitle>
+              <DialogDescription>
+                {osSel.size} OS update{osSel.size === 1 ? "" : "s"} and{" "}
+                {appSel.size} app upgrade{appSel.size === 1 ? "" : "s"} will be
+                installed over WinRM.{" "}
+                {alsoReboot ? (
+                  <>
+                    After install succeeds, the host will get a{" "}
+                    <strong>forced</strong> reboot at the time below (or ASAP if
+                    install finishes late).
+                  </>
+                ) : (
+                  <>
+                    The host will <strong>not</strong> be rebooted automatically.
+                  </>
+                )}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-col gap-3 py-1">
+              <label className="flex items-center gap-2 text-sm">
                 <input
-                  type="datetime-local"
-                  className="rounded-md border bg-background px-2 py-1.5 text-sm"
-                  value={installRebootAt}
-                  onChange={(e) => setInstallRebootAt(e.target.value)}
-                  aria-label="Reboot after install"
+                  type="checkbox"
+                  className="size-4 accent-primary"
+                  checked={alsoReboot}
+                  onChange={(e) => {
+                    setAlsoReboot(e.target.checked);
+                    if (!e.target.checked) setInstallRebootAt("");
+                  }}
+                  aria-label="Also reboot at"
                 />
+                Also reboot at…
               </label>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              disabled={busy || (alsoReboot && !installRebootAt.trim())}
-              onClick={doInstall}
-            >
-              {busy && <Loader2 className="size-4 animate-spin" />}
-              Install
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+              {alsoReboot && (
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Reboot after install
+                  </span>
+                  <input
+                    type="datetime-local"
+                    className="rounded-md border bg-background px-2 py-1.5 text-sm"
+                    value={installRebootAt}
+                    onChange={(e) => setInstallRebootAt(e.target.value)}
+                    aria-label="Reboot after install"
+                  />
+                </label>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setConfirmOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                disabled={busy || (alsoReboot && !installRebootAt.trim())}
+                onClick={doInstall}
+              >
+                {busy && <Loader2 className="size-4 animate-spin" />}
+                Install
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      ) : null}
     </div>
   );
 }
