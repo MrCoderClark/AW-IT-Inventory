@@ -1,10 +1,10 @@
 # Spec 31 v2 — Recurring reboot (per-computer daily / weekly)
 
 **Date**: 2026-10-23  
-**Status**: Accepted (design)  
+**Status**: Implemented on `feat/spec-31-v2-recurring-reboot` (🚧 until merge)  
 **Parent**: [Spec 31 patch management](../../specs/31-patch-management/index.md)  
 **Related**: [Scheduled reboot (one-shot)](./2026-10-22-spec-31-v2-scheduled-reboot-design.md)  
-**Branch**: `docs/spec-31-v2-recurring-reboot-design` (spec); implementation on a later `feat/…` branch
+**Branch**: `feat/spec-31-v2-recurring-reboot`
 
 ## Goal
 
