@@ -68,10 +68,16 @@ const H = vi.hoisted(() => {
 });
 
 const notifyMock = vi.hoisted(() => vi.fn(async () => undefined));
+const onScheduleJobTerminalMock = vi.hoisted(() =>
+  vi.fn(async () => undefined),
+);
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/db/scan", () => ({ isWorkerLive: vi.fn().mockResolvedValue(true) }));
 vi.mock("./notifications", () => ({ notifyRebootResult: notifyMock }));
+vi.mock("./reboot-schedules", () => ({
+  onScheduleJobTerminal: onScheduleJobTerminalMock,
+}));
 vi.mock("@/db/index", () => ({
   db: {
     select: H.selectMock,
@@ -250,6 +256,7 @@ describe("updateRebootStatus — fenced", () => {
           assetId: "a1",
           requestedBy: "me@x.com",
           scheduledAt: new Date("2026-10-22T18:00:00.000Z"),
+          sourceScheduleId: null,
         },
       ],
     ];
@@ -268,6 +275,46 @@ describe("updateRebootStatus — fenced", () => {
       await updateRebootStatus(JID, { ...FENCE, status: "succeeded" }),
     ).toBe("stale");
     expect(notifyMock).not.toHaveBeenCalled();
+    expect(onScheduleJobTerminalMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("updateRebootStatus — schedule rematerialize", () => {
+  const SCHED = "33333333-3333-4333-8333-333333333333";
+  const row = {
+    id: JID,
+    assetId: "a1",
+    requestedBy: "me@x.com",
+    scheduledAt: new Date("2026-10-22T18:00:00.000Z"),
+  };
+
+  it("calls onScheduleJobTerminal once when succeeded with sourceScheduleId", async () => {
+    H.state.updateReturns = [[{ ...row, sourceScheduleId: SCHED }]];
+    await updateRebootStatus(JID, { ...FENCE, status: "succeeded" });
+    expect(onScheduleJobTerminalMock).toHaveBeenCalledTimes(1);
+    expect(onScheduleJobTerminalMock).toHaveBeenCalledWith(JID);
+  });
+
+  it("calls onScheduleJobTerminal when failed with sourceScheduleId", async () => {
+    H.state.updateReturns = [[{ ...row, sourceScheduleId: SCHED }]];
+    await updateRebootStatus(JID, {
+      ...FENCE,
+      status: "failed",
+      error: "timeout",
+    });
+    expect(onScheduleJobTerminalMock).toHaveBeenCalledWith(JID);
+  });
+
+  it("does not rematerialize when sourceScheduleId is null", async () => {
+    H.state.updateReturns = [[{ ...row, sourceScheduleId: null }]];
+    await updateRebootStatus(JID, { ...FENCE, status: "succeeded" });
+    expect(onScheduleJobTerminalMock).not.toHaveBeenCalled();
+  });
+
+  it("does not rematerialize on running", async () => {
+    H.state.updateReturns = [[{ ...row, sourceScheduleId: SCHED }]];
+    await updateRebootStatus(JID, { ...FENCE, status: "running" });
+    expect(onScheduleJobTerminalMock).not.toHaveBeenCalled();
   });
 });
 
@@ -280,6 +327,7 @@ describe("cancelRebootJob", () => {
           assetId: "a1",
           requestedBy: "me@x.com",
           scheduledAt: new Date("2026-10-22T18:00:00.000Z"),
+          sourceScheduleId: null,
         },
       ],
     ];
@@ -287,6 +335,24 @@ describe("cancelRebootJob", () => {
     expect(notifyMock).toHaveBeenCalledWith(
       expect.objectContaining({ jobId: JID, status: "canceled" }),
     );
+    expect(onScheduleJobTerminalMock).not.toHaveBeenCalled();
+  });
+
+  it("calls onScheduleJobTerminal when canceled job has sourceScheduleId", async () => {
+    const SCHED = "33333333-3333-4333-8333-333333333333";
+    H.state.updateReturns = [
+      [
+        {
+          id: JID,
+          assetId: "a1",
+          requestedBy: "me@x.com",
+          scheduledAt: new Date("2026-10-22T18:00:00.000Z"),
+          sourceScheduleId: SCHED,
+        },
+      ],
+    ];
+    expect(await cancelRebootJob(JID)).toBe(true);
+    expect(onScheduleJobTerminalMock).toHaveBeenCalledWith(JID);
   });
 });
 

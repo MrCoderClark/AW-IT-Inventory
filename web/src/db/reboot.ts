@@ -188,11 +188,12 @@ export async function updateRebootStatus(
       assetId: rebootJobs.assetId,
       requestedBy: rebootJobs.requestedBy,
       scheduledAt: rebootJobs.scheduledAt,
+      sourceScheduleId: rebootJobs.sourceScheduleId,
     });
 
   if (updated.length) {
+    const row = updated[0];
     if (u.status === "succeeded" || u.status === "failed") {
-      const row = updated[0];
       await notifyRebootResult({
         jobId: row.id,
         assetId: row.assetId,
@@ -201,6 +202,10 @@ export async function updateRebootStatus(
         scheduledAtIso: row.scheduledAt.toISOString(),
         error: u.error ?? null,
       });
+      if (row.sourceScheduleId) {
+        const { onScheduleJobTerminal } = await import("./reboot-schedules");
+        await onScheduleJobTerminal(jobId);
+      }
     }
     return "ok";
   }
@@ -230,6 +235,7 @@ export async function cancelRebootJob(jobId: string): Promise<boolean> {
       assetId: rebootJobs.assetId,
       requestedBy: rebootJobs.requestedBy,
       scheduledAt: rebootJobs.scheduledAt,
+      sourceScheduleId: rebootJobs.sourceScheduleId,
     });
   if (updated.length) {
     const row = updated[0];
@@ -240,6 +246,10 @@ export async function cancelRebootJob(jobId: string): Promise<boolean> {
       requestedBy: row.requestedBy,
       scheduledAtIso: row.scheduledAt.toISOString(),
     });
+    if (row.sourceScheduleId) {
+      const { onScheduleJobTerminal } = await import("./reboot-schedules");
+      await onScheduleJobTerminal(jobId);
+    }
     return true;
   }
   return false;
