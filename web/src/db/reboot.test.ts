@@ -369,6 +369,7 @@ describe("listRebootJobsForAssetTag", () => {
           requestedBy: "alice",
           error: null,
           finishedAt: null,
+          sourceScheduleId: "sched-1",
         },
         {
           id: "22222222-2222-4222-8222-222222222222",
@@ -391,6 +392,7 @@ describe("listRebootJobsForAssetTag", () => {
         error: null,
         finishedAt: null,
         waitingForCollector: true,
+        fromSchedule: true,
       },
       {
         id: "22222222-2222-4222-8222-222222222222",
@@ -401,6 +403,7 @@ describe("listRebootJobsForAssetTag", () => {
         error: null,
         finishedAt: "2026-10-18T13:00:00.000Z",
         waitingForCollector: false,
+        fromSchedule: false,
       },
     ]);
     expect(H.selectMock).toHaveBeenCalled();

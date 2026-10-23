@@ -5,8 +5,10 @@ import { revalidatePath } from "next/cache";
 import { cancelRebootJob, enqueueRebootJob } from "@/db/reboot";
 import {
   deleteRebootSchedule,
+  getRebootScheduleForAssetTag,
   setRebootScheduleEnabled,
   upsertRebootSchedule,
+  type ScheduleListItem,
 } from "@/db/reboot-schedules";
 import { resolveDeployTarget } from "@/db/patch-install";
 import { getCurrentUser, hasPermission } from "@/lib/auth/session";
@@ -134,7 +136,9 @@ export async function upsertRebootScheduleAction(input: {
   weekdays?: number[];
   localTime: string;
   timezone: string;
-}): Promise<ActionOk | ActionErr> {
+}): Promise<
+  { ok: true; id: string; schedule: ScheduleListItem | null } | ActionErr
+> {
   const user = await getCurrentUser();
   if (!user || !hasPermission(user, "software:deploy")) return FORBIDDEN;
 
@@ -167,8 +171,9 @@ export async function upsertRebootScheduleAction(input: {
     };
   }
 
+  const schedule = await getRebootScheduleForAssetTag(resolved.tag);
   revalidatePath(`/assets/${resolved.tag}`);
-  return { ok: true, id: upserted.id };
+  return { ok: true, id: upserted.id, schedule };
 }
 
 export async function setRebootScheduleEnabledAction(input: {

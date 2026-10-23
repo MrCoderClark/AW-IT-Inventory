@@ -292,6 +292,8 @@ export type RebootListItem = {
   status: RebootJobRow["status"];
   scheduledAt: string;
   sourcePatchInstallJobId: string | null;
+  /** True when this job was materialized from a recurring schedule. */
+  fromSchedule: boolean;
   requestedBy: string;
   error: string | null;
   finishedAt: string | null;
@@ -308,6 +310,7 @@ export async function listRebootJobsForAssetTag(
       status: rebootJobs.status,
       scheduledAt: rebootJobs.scheduledAt,
       sourcePatchInstallJobId: rebootJobs.sourcePatchInstallJobId,
+      sourceScheduleId: rebootJobs.sourceScheduleId,
       requestedBy: rebootJobs.requestedBy,
       error: rebootJobs.error,
       finishedAt: rebootJobs.finishedAt,
@@ -325,6 +328,7 @@ export async function listRebootJobsForAssetTag(
     status: r.status,
     scheduledAt: r.scheduledAt.toISOString(),
     sourcePatchInstallJobId: r.sourcePatchInstallJobId,
+    fromSchedule: Boolean(r.sourceScheduleId),
     requestedBy: r.requestedBy,
     error: r.error,
     finishedAt: r.finishedAt ? r.finishedAt.toISOString() : null,

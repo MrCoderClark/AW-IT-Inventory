@@ -10,6 +10,7 @@ const {
   upsertScheduleMock,
   setEnabledMock,
   deleteScheduleMock,
+  getScheduleMock,
   revalidatePathMock,
 } = vi.hoisted(() => ({
   getUserMock: vi.fn(),
@@ -20,6 +21,7 @@ const {
   upsertScheduleMock: vi.fn(),
   setEnabledMock: vi.fn(),
   deleteScheduleMock: vi.fn(),
+  getScheduleMock: vi.fn(),
   revalidatePathMock: vi.fn(),
 }));
 
@@ -31,6 +33,7 @@ vi.mock("@/db/reboot-schedules", () => ({
   upsertRebootSchedule: upsertScheduleMock,
   setRebootScheduleEnabled: setEnabledMock,
   deleteRebootSchedule: deleteScheduleMock,
+  getRebootScheduleForAssetTag: getScheduleMock,
 }));
 vi.mock("@/db/patch-install", () => ({
   resolveDeployTarget: resolveTargetMock,
@@ -157,8 +160,22 @@ describe("upsertRebootScheduleAction", () => {
   it("upserts when target and schedule fields are valid", async () => {
     resolveTargetMock.mockResolvedValue({ assetId: "a1", ip: "10.0.0.1" });
     upsertScheduleMock.mockResolvedValue({ ok: true, id: "sch1" });
+    const saved = {
+      id: "sch1",
+      assetId: "a1",
+      cadence: "daily" as const,
+      weekdays: null,
+      localTime: "03:00",
+      timezone: "America/New_York",
+      enabled: true,
+      requestedBy: "me@opus.local",
+      nextJobId: "job-1",
+      nextRunAtIso: "2026-10-24T07:00:00.000Z",
+    };
+    getScheduleMock.mockResolvedValue(saved);
     const res = await upsertRebootScheduleAction(dailySchedule);
-    expect(res).toEqual({ ok: true, id: "sch1" });
+    expect(res).toEqual({ ok: true, id: "sch1", schedule: saved });
+    expect(getScheduleMock).toHaveBeenCalledWith("PC1");
     expect(upsertScheduleMock).toHaveBeenCalledWith({
       assetId: "a1",
       targetIp: "10.0.0.1",
