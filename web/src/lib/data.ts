@@ -9,6 +9,7 @@ import {
   AppWindow,
   ShieldCheck,
   FileText,
+  ScrollText,
   Settings,
   ScanLine,
   ListChecks,
@@ -515,6 +516,7 @@ export const NAV_MANAGE: NavItem[] = [
   { label: "Compliance", href: "/compliance", icon: ShieldCheck },
   { label: "Patches", href: "/patches", icon: RefreshCw },
   { label: "Reports", href: "/reports", icon: FileText },
+  { label: "Audit log", href: "/audit", icon: ScrollText, perm: "audit:read" },
   { label: "Scans", href: "/scans", icon: ScanLine, perm: "scan:read" },
   { label: "Scan Jobs", href: "/scans/jobs", icon: ListChecks, perm: "scan:read" },
   // Spec 34 v2a: any signed-in user has a filtered feed (ops broadcasts stay admin-only).

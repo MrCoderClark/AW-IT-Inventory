@@ -8,8 +8,8 @@ import { AppSidebar } from "./app-sidebar";
  * Component tests for the light sidebar (spec 17.01, AC-1.3) + the RBAC nav
  * visibility audit. Locks in that the nav links render, the current-path link is
  * marked active (aria-current), and that permission-gated Manage items (Admin,
- * Software Library, Scans, …) are hidden from users who lack the matching
- * permission — so a link is never shown for a page the user can't open.
+ * Software Library, Scans, Audit log, …) are hidden from users who lack the
+ * matching permission — so a link is never shown for a page the user can't open.
  */
 
 const { permsRef } = vi.hoisted(() => ({
@@ -29,6 +29,7 @@ const ALL_PERMS = [
   "scan:read",
   "software:deploy",
   "user:admin",
+  "audit:read",
 ];
 
 beforeEach(() => {
@@ -93,6 +94,10 @@ describe("AppSidebar — permission gating (RBAC audit)", () => {
       "href",
       "/tickets",
     );
+    expect(screen.getByRole("link", { name: "Audit log" })).toHaveAttribute(
+      "href",
+      "/audit",
+    );
   });
 
   it("hides user:admin items from a non-admin", () => {
@@ -103,6 +108,7 @@ describe("AppSidebar — permission gating (RBAC audit)", () => {
     expect(screen.queryByRole("link", { name: "Roles" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Alert rules" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Ticketing" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Audit log" })).toBeNull();
     // Notifications feed is available to every signed-in user (filtered).
     expect(screen.getByRole("link", { name: "Notifications" })).toBeInTheDocument();
     // Non-admin items the user still has stay visible.
@@ -130,6 +136,27 @@ describe("AppSidebar — permission gating (RBAC audit)", () => {
       "/patches",
     );
     expect(screen.getByRole("link", { name: "Reports" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Audit log" })).toBeNull();
+  });
+
+  it("shows Audit log only when audit:read is present", () => {
+    permsRef.current = ["asset:read", "audit:read"];
+    const { unmount } = render(<AppSidebar />);
+    expect(screen.getByRole("link", { name: "Audit log" })).toHaveAttribute(
+      "href",
+      "/audit",
+    );
+    unmount();
+
+    permsRef.current = [
+      "asset:read",
+      "asset:write",
+      "scan:read",
+      "software:deploy",
+      "user:admin",
+    ];
+    render(<AppSidebar />);
+    expect(screen.queryByRole("link", { name: "Audit log" })).toBeNull();
   });
 
   it("shows People and Media to a user with asset:write", () => {
