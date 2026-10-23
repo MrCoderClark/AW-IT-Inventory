@@ -1,11 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
 import { ArrowRight, Loader2, Package, RefreshCw, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 
 import {
+  pollUpdatesSnapshot,
   requestCancelPatchInstall,
   requestMissingUpdateCheck,
   requestPatchInstall,
@@ -28,6 +28,9 @@ import type { PatchInstallListItem } from "@/db/patch-install";
 /**
  * Per-computer Updates tab (spec 31): inventory + Missing + optional Install
  * selected (phase 3, AC-18) for `software:deploy` admins.
+ *
+ * While a Check / install is in flight, polls a snapshot action and updates
+ * local state only — no full page refresh.
  */
 
 function lastUpdateLabel(days: number | null | undefined): string {
@@ -46,12 +49,18 @@ const JOB_STATUS: Record<string, string> = {
   canceled: "Canceled",
 };
 
+const ACTIVE = new Set(["pending", "claimed", "running"]);
+
+function isActive(status: string): boolean {
+  return ACTIVE.has(status);
+}
+
 export function UpdatesPanel({
-  patches,
+  patches: patchesProp,
   assetTag,
   canInstall = false,
-  patchJobs = [],
-  checkJobs = [],
+  patchJobs: patchJobsProp = [],
+  checkJobs: checkJobsProp = [],
 }: {
   patches: ComputerPatches | null;
   assetTag: string;
@@ -59,20 +68,114 @@ export function UpdatesPanel({
   patchJobs?: PatchInstallListItem[];
   checkJobs?: MissingCheckListItem[];
 }) {
-  const router = useRouter();
+  const [patches, setPatches] = React.useState(patchesProp);
+  const [patchJobs, setPatchJobs] = React.useState(patchJobsProp);
+  const [checkJobs, setCheckJobs] = React.useState(checkJobsProp);
   const [osSel, setOsSel] = React.useState<Set<string>>(new Set());
   const [appSel, setAppSel] = React.useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [busy, startBusy] = React.useTransition();
+  const [flashMissing, setFlashMissing] = React.useState(false);
+  const prevPatchStatus = React.useRef<Map<string, string>>(new Map());
+  const prevCheckStatus = React.useRef<Map<string, string>>(new Map());
+  const prevMissingAt = React.useRef<string | null>(
+    patchesProp?.missingCollectedAt ?? null,
+  );
 
-  const inflight = patchJobs.some(
-    (j) =>
-      j.status === "pending" || j.status === "claimed" || j.status === "running",
+  // Keep in sync if the server re-renders the page (nav, soft navigation).
+  React.useEffect(() => {
+    setPatches(patchesProp);
+    setPatchJobs(patchJobsProp);
+    setCheckJobs(checkJobsProp);
+  }, [patchesProp, patchJobsProp, checkJobsProp]);
+
+  const inflight = patchJobs.some((j) => isActive(j.status));
+  const checkInflight = checkJobs.some((j) => isActive(j.status));
+  const live = inflight || checkInflight;
+
+  const applySnapshot = React.useCallback(
+    (next: {
+      patches: ComputerPatches | null;
+      patchJobs: PatchInstallListItem[];
+      checkJobs: MissingCheckListItem[];
+    }) => {
+      // Toast when a job leaves in-flight.
+      for (const j of next.patchJobs) {
+        const prev = prevPatchStatus.current.get(j.id);
+        if (prev && isActive(prev) && !isActive(j.status)) {
+          if (j.status === "succeeded") toast.success("Patch install finished");
+          else if (j.status === "failed")
+            toast.error(j.error || "Patch install failed");
+          else if (j.status === "canceled") toast.message("Patch install canceled");
+        }
+      }
+      for (const j of next.checkJobs) {
+        const prev = prevCheckStatus.current.get(j.id);
+        if (prev && isActive(prev) && !isActive(j.status)) {
+          if (j.status === "succeeded") toast.success("Updates checked");
+          else if (j.status === "failed")
+            toast.error(j.error || "Check for updates failed");
+        }
+      }
+      prevPatchStatus.current = new Map(
+        next.patchJobs.map((j) => [j.id, j.status]),
+      );
+      prevCheckStatus.current = new Map(
+        next.checkJobs.map((j) => [j.id, j.status]),
+      );
+
+      const nextMissingAt = next.patches?.missingCollectedAt ?? null;
+      if (
+        nextMissingAt &&
+        nextMissingAt !== prevMissingAt.current &&
+        prevMissingAt.current != null
+      ) {
+        setFlashMissing(true);
+        window.setTimeout(() => setFlashMissing(false), 1200);
+      }
+      if (nextMissingAt) prevMissingAt.current = nextMissingAt;
+
+      setPatches(next.patches);
+      setPatchJobs(next.patchJobs);
+      setCheckJobs(next.checkJobs);
+    },
+    [],
   );
-  const checkInflight = checkJobs.some(
-    (j) =>
-      j.status === "pending" || j.status === "claimed" || j.status === "running",
-  );
+
+  // Seed status maps once so we don't toast for already-finished history.
+  React.useEffect(() => {
+    if (prevPatchStatus.current.size === 0) {
+      prevPatchStatus.current = new Map(
+        patchJobsProp.map((j) => [j.id, j.status]),
+      );
+    }
+    if (prevCheckStatus.current.size === 0) {
+      prevCheckStatus.current = new Map(
+        checkJobsProp.map((j) => [j.id, j.status]),
+      );
+    }
+  }, [patchJobsProp, checkJobsProp]);
+
+  React.useEffect(() => {
+    if (!live) return;
+    let cancelled = false;
+    const tick = async () => {
+      const res = await pollUpdatesSnapshot(assetTag);
+      if (cancelled || !res.ok) return;
+      applySnapshot(res);
+    };
+    void tick();
+    const t = window.setInterval(() => void tick(), 2500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(t);
+    };
+  }, [live, assetTag, applySnapshot]);
+
+  async function refreshSnapshot() {
+    const res = await pollUpdatesSnapshot(assetTag);
+    if (res.ok) applySnapshot(res);
+  }
 
   if (!patches) {
     return (
@@ -81,6 +184,33 @@ export function UpdatesPanel({
           No patch inventory yet. Scan this computer to collect installed KBs,
           pending reboot, and available app upgrades.
         </p>
+        {canInstall && (
+          <div className="mt-3">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={checkInflight || busy}
+              onClick={() =>
+                startBusy(async () => {
+                  const res = await requestMissingUpdateCheck({ assetTag });
+                  if (!res.ok) {
+                    toast.error(res.error);
+                    return;
+                  }
+                  toast.success("Check for updates queued");
+                  await refreshSnapshot();
+                })
+              }
+            >
+              {checkInflight ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="size-3.5" />
+              )}
+              {checkInflight ? "Checking…" : "Check for updates"}
+            </Button>
+          </div>
+        )}
       </Panel>
     );
   }
@@ -128,7 +258,7 @@ export function UpdatesPanel({
       toast.success("Patch install queued");
       setOsSel(new Set());
       setAppSel(new Set());
-      router.refresh();
+      await refreshSnapshot();
     });
   }
 
@@ -140,7 +270,7 @@ export function UpdatesPanel({
         return;
       }
       toast.success("Canceled");
-      router.refresh();
+      await refreshSnapshot();
     });
   }
 
@@ -152,7 +282,7 @@ export function UpdatesPanel({
         return;
       }
       toast.success("Check for updates queued");
-      router.refresh();
+      await refreshSnapshot();
     });
   }
 
@@ -203,7 +333,13 @@ export function UpdatesPanel({
         </div>
 
         {patches.missingCollectedAt != null && (
-          <div className="mb-4">
+          <div
+            className={
+              flashMissing
+                ? "mb-4 rounded-lg ring-2 ring-primary/40 transition-[box-shadow] duration-700"
+                : "mb-4"
+            }
+          >
             <p className="mb-2 text-xs font-medium text-muted-foreground">
               Missing OS updates
               {patches.missingCollectedAt

@@ -200,4 +200,14 @@ missing_patch_interval_hours: 24
 # Wall-clock cap (seconds) per host for Search — WU/WSUS can be slow.
 missing_patch_timeout: 120
 # Wall-clock cap (seconds) for one patch-install job (all selected OS + app items).
-patch_install_timeout: 600
+# OS items run as a SYSTEM scheduled task (WUA); large cumulative updates need
+# more than 10 minutes — default 30 minutes.
+patch_install_timeout: 1800
+# Optional: when winget upgrade fails (e.g. proxy blocks the vendor site), retry
+# by downloading from a mirror. {version} = the "available" version from inventory.
+# silent_args are passed to the installer (exe: Start-Process ArgumentList; msi: msiexec).
+# type is optional (exe|msi); default is inferred from the URL extension.
+app_upgrade_mirrors:
+  VideoLAN.VLC:
+    url: "https://mirror.csclub.uwaterloo.ca/vlc/vlc/{version}/win64/vlc-{version}-win64.exe"
+    silent_args: "/L=1033 /S"

@@ -8,11 +8,25 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Literal
 
 import yaml
 from pydantic import BaseModel, Field
 
 BASE_DIR = Path(__file__).resolve().parent
+
+
+class AppUpgradeMirror(BaseModel):
+    """Fallback download when ``winget upgrade`` fails (proxy-blocked vendor CDN).
+
+    ``url`` may include ``{version}`` (from the frozen patch selection ``available``).
+    ``silent_args`` are passed to the installer (e.g. VLC ``/L=1033 /S``).
+    ``type`` is optional; when omitted, inferred from the URL (``.msi`` → msi, else exe).
+    """
+
+    url: str
+    silent_args: str = ""
+    type: Literal["exe", "msi"] | None = None
 
 
 class CredentialProfile(BaseModel):
@@ -201,7 +215,11 @@ class Config(BaseModel):
     # Wall-clock cap (seconds) per-host Search. WU/WSUS can be slow.
     missing_patch_timeout: int = 120
     # Wall-clock cap (seconds) for one patch-install job (all selected items).
-    patch_install_timeout: int = 600
+    # OS installs download+apply via a SYSTEM task; large CUs need headroom.
+    patch_install_timeout: int = 1800
+    # Optional per-package mirror URLs when winget cannot reach the vendor CDN
+    # (spec 31). Keyed by winget package id. Empty = no fallbacks.
+    app_upgrade_mirrors: dict[str, AppUpgradeMirror] = Field(default_factory=dict)
 
     @property
     def profiles_by_id(self) -> dict[str, CredentialProfile]:

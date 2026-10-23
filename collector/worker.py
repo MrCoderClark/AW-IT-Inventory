@@ -571,6 +571,9 @@ def _run_patch_install_job(
             f"    [{tag}]{'ok' if item.get('ok') else 'fail'}[/{tag}] "
             f"{item.get('kind')} {item.get('id')} (exit {item.get('exitCode')})"
         )
+        tail = (item.get("outputTail") or "").strip()
+        if not item.get("ok") and tail:
+            console.print(f"      [dim]{tail[:600]}[/dim]")
 
     if _post_patch_install_status(
         config, tokens.get(), job_id, worker_id, claimed_at, status, result=result

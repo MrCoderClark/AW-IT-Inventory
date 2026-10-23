@@ -3,14 +3,16 @@ import "server-only";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "./index";
+import { enqueueMissingUpdateCheck } from "./missing-update-checks";
 import { notifyPatchInstallResult } from "./notifications";
-import { isWorkerLive } from "./scan";
+import { enqueueScan, isWorkerLive } from "./scan";
 import { resolveDeployTarget } from "./software-deploy";
 import {
   appUpgrades,
   assets,
   patchInstallJobs,
   windowsMissingUpdates,
+  windowsUpdateState,
   type PatchInstallJobRow,
   type PatchInstallResult,
   type PatchInstallSelection,
@@ -356,6 +358,7 @@ export async function updatePatchInstallStatus(
     .returning({
       id: patchInstallJobs.id,
       assetId: patchInstallJobs.assetId,
+      targetIp: patchInstallJobs.targetIp,
       selection: patchInstallJobs.selection,
       requestedBy: patchInstallJobs.requestedBy,
     });
@@ -373,6 +376,22 @@ export async function updatePatchInstallStatus(
         requestedBy: row.requestedBy,
       });
     }
+    if (u.status === "succeeded") {
+      // Drop installed OS ids from Missing immediately. When reboot is required,
+      // WUA Search still lists them until reboot — so skip auto Check updates
+      // (it would put the rows right back).
+      try {
+        await applySuccessfulOsInstallInventory(
+          updated[0].assetId,
+          u.result,
+        );
+      } catch (err) {
+        console.error("post-patch-install missing-list update failed", err);
+      }
+      await enqueuePostInstallFollowUp(updated[0], {
+        skipMissingCheck: u.result?.rebootRequired === true,
+      });
+    }
     return "ok";
   }
 
@@ -382,6 +401,89 @@ export async function updatePatchInstallStatus(
     .where(eq(patchInstallJobs.id, jobId))
     .limit(1);
   return exists ? "stale" : "notfound";
+}
+
+/**
+ * Remove successfully installed OS KBs/GUIDs from the Missing list and refresh
+ * missingCount. Sets pendingReboot when the install result requires it.
+ */
+export async function applySuccessfulOsInstallInventory(
+  assetId: string,
+  result: PatchInstallResult | undefined,
+): Promise<void> {
+  const okOsIds = (result?.items ?? [])
+    .filter((i) => i.kind === "os" && i.ok && i.id)
+    .map((i) => i.id);
+  const rebootRequired = result?.rebootRequired === true;
+  if (!okOsIds.length && !rebootRequired) return;
+
+  if (okOsIds.length) {
+    await db
+      .delete(windowsMissingUpdates)
+      .where(
+        and(
+          eq(windowsMissingUpdates.assetId, assetId),
+          inArray(windowsMissingUpdates.kbId, okOsIds),
+        ),
+      );
+  }
+
+  const remaining = await db
+    .select({ kbId: windowsMissingUpdates.kbId })
+    .from(windowsMissingUpdates)
+    .where(eq(windowsMissingUpdates.assetId, assetId));
+
+  const patch: {
+    missingCount: number;
+    pendingReboot?: boolean;
+  } = { missingCount: remaining.length };
+  if (rebootRequired) patch.pendingReboot = true;
+
+  await db
+    .update(windowsUpdateState)
+    .set(patch)
+    .where(eq(windowsUpdateState.assetId, assetId));
+}
+
+/** Best-effort follow-up after a successful install (scan and/or Check updates). */
+export async function enqueuePostInstallFollowUp(
+  job: {
+    assetId: string;
+    targetIp: string;
+    requestedBy: string;
+    selection: PatchInstallSelection;
+  },
+  opts: { skipMissingCheck?: boolean } = {},
+): Promise<void> {
+  const ip = (job.targetIp ?? "").trim();
+  if (!ip) return;
+  const by = `patch-install:${job.requestedBy || "system"}`;
+  const hasApps = (job.selection?.apps?.length ?? 0) > 0;
+  const hasOs = (job.selection?.os?.length ?? 0) > 0;
+
+  if (hasApps) {
+    try {
+      await enqueueScan({
+        scope: "selected",
+        targets: [ip],
+        requestedBy: by,
+      });
+    } catch (err) {
+      console.error("post-patch-install scan enqueue failed", err);
+    }
+  }
+
+  if (hasOs && !opts.skipMissingCheck) {
+    try {
+      await enqueueMissingUpdateCheck({
+        assetId: job.assetId,
+        targetIp: ip,
+        requestedBy: by,
+      });
+    } catch (err) {
+      console.error("post-patch-install missing-update check enqueue failed", err);
+    }
+  }
 }
 
 export async function cancelPatchInstall(jobId: string): Promise<boolean> {

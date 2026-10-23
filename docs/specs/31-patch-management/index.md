@@ -325,7 +325,13 @@ OS path: WUA `Search` → match by KB / UpdateID → Download → Install (read-
 Search from phase 2 stays on the daily loop; install is a separate job). App
 path: `winget upgrade --id <id> --silent --accept-package-agreements
 --accept-source-agreements --disable-interactivity` via the same InstallLocation
-winget resolution as the list script.
+winget resolution as the list script. **Mirror fallback (optional):** when winget
+fails for a package listed under collector `app_upgrade_mirrors`, the worker
+downloads `{url}` with `{version}` replaced by the frozen selection `available`
+version and runs the installer with that entry's `silent_args` (exe via
+`Start-Process`; msi via `msiexec /i`). Detection/listing stays winget-only;
+operators add mirror entries when a proxy blocks the vendor CDN (e.g. VLC → a
+VideoLAN mirror).
 
 ### Requirements (phase 3)
 

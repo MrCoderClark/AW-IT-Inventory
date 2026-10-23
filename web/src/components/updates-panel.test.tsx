@@ -5,13 +5,11 @@ import { render, screen } from "@testing-library/react";
 import { UpdatesPanel } from "./updates-panel";
 import type { ComputerPatches } from "@/db/patches";
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ refresh: vi.fn() }),
-}));
 vi.mock("@/app/(app)/patch-install-actions", () => ({
   requestPatchInstall: vi.fn(),
   requestCancelPatchInstall: vi.fn(),
   requestMissingUpdateCheck: vi.fn(),
+  pollUpdatesSnapshot: vi.fn(),
 }));
 
 const SAMPLE: ComputerPatches = {
