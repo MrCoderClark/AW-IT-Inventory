@@ -58,13 +58,28 @@ const H = vi.hoisted(() => {
 
   const executeMock = vi.fn(() => Promise.resolve(state.execResult));
   const notifyMock = vi.fn();
+  const upsertAuditMock = vi.fn(async () => ({ ok: true as const, id: "audit-1" }));
+  const updateAuditMock = vi.fn(async () => true);
 
-  return { state, selectMock, insertMock, updateMock, executeMock, notifyMock };
+  return {
+    state,
+    selectMock,
+    insertMock,
+    updateMock,
+    executeMock,
+    notifyMock,
+    upsertAuditMock,
+    updateAuditMock,
+  };
 });
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/db/scan", () => ({ isWorkerLive: vi.fn().mockResolvedValue(true) }));
 vi.mock("@/db/notifications", () => ({ notifyDeployResult: H.notifyMock }));
+vi.mock("@/db/computer-audit", () => ({
+  upsertAuditEvent: (...args: unknown[]) => H.upsertAuditMock(...args),
+  updateAuditEventStatus: (...args: unknown[]) => H.updateAuditMock(...args),
+}));
 vi.mock("@/db/index", () => ({
   db: {
     select: H.selectMock,
@@ -140,6 +155,7 @@ describe("enqueueDeployment — one-in-flight guard (AC-10)", () => {
         requestedBy: "me",
       }),
     ).toEqual({ ok: false, reason: "already-inflight" });
+    expect(H.upsertAuditMock).not.toHaveBeenCalled();
   });
 
   it("enqueues when the computer is free", async () => {
@@ -154,6 +170,21 @@ describe("enqueueDeployment — one-in-flight guard (AC-10)", () => {
         requestedBy: "me",
       }),
     ).toEqual({ ok: true, id: DID });
+    expect(H.upsertAuditMock).toHaveBeenCalledWith({
+      sourceTable: "software_deployments",
+      sourceId: DID,
+      assetId: "a1",
+      action: "software_deploy",
+      operator: "me",
+      source: "admin_console",
+      summary: "Installed App 1.0",
+      details: {
+        packageId: "p1",
+        packageName: "App",
+        version: "1.0",
+      },
+      status: "pending",
+    });
   });
 });
 
@@ -194,6 +225,7 @@ describe("updateDeploymentStatus — fenced (AC-3)", () => {
       await updateDeploymentStatus(DID, { ...FENCE, status: "running" }),
     ).toBe("ok");
     expect(H.state.updateSets[0]).toMatchObject({ status: "running" });
+    expect(H.updateAuditMock).not.toHaveBeenCalled();
   });
 
   it("notifies on a successful finish", async () => {
@@ -211,6 +243,47 @@ describe("updateDeploymentStatus — fenced (AC-3)", () => {
         requestedBy: "me@x.com",
       }),
     );
+    expect(H.updateAuditMock).toHaveBeenCalledWith({
+      sourceTable: "software_deployments",
+      sourceId: DID,
+      status: "succeeded",
+      summary: "Installed App 1.0",
+    });
+  });
+
+  it("records a failed audit status without replacing the summary", async () => {
+    H.state.updateReturns = [
+      [{ id: DID, assetId: "a1", snapshot: SNAP, requestedBy: "me@x.com" }],
+    ];
+    expect(
+      await updateDeploymentStatus(DID, { ...FENCE, status: "failed", error: "boom" }),
+    ).toBe("ok");
+    expect(H.updateAuditMock).toHaveBeenCalledWith({
+      sourceTable: "software_deployments",
+      sourceId: DID,
+      status: "failed",
+    });
+  });
+
+  it("leaves the audit summary unchanged when the snapshot has no version", async () => {
+    H.state.updateReturns = [
+      [
+        {
+          id: DID,
+          assetId: "a1",
+          snapshot: { ...SNAP, version: "  " },
+          requestedBy: "me@x.com",
+        },
+      ],
+    ];
+    expect(
+      await updateDeploymentStatus(DID, { ...FENCE, status: "succeeded" }),
+    ).toBe("ok");
+    expect(H.updateAuditMock).toHaveBeenCalledWith({
+      sourceTable: "software_deployments",
+      sourceId: DID,
+      status: "succeeded",
+    });
   });
 
   it("is stale when the row exists but the claim lost", async () => {
@@ -219,6 +292,7 @@ describe("updateDeploymentStatus — fenced (AC-3)", () => {
     expect(
       await updateDeploymentStatus(DID, { ...FENCE, status: "succeeded" }),
     ).toBe("stale");
+    expect(H.updateAuditMock).not.toHaveBeenCalled();
   });
 
   it("is notfound when no row matches at all", async () => {
@@ -235,10 +309,16 @@ describe("cancelDeployment (AC-10)", () => {
     H.state.updateReturns = [[{ id: DID }]];
     expect(await cancelDeployment(DID)).toBe(true);
     expect(H.state.updateSets[0]).toMatchObject({ status: "canceled" });
+    expect(H.updateAuditMock).toHaveBeenCalledWith({
+      sourceTable: "software_deployments",
+      sourceId: DID,
+      status: "canceled",
+    });
   });
 
   it("returns false for an already-terminal / unknown deployment", async () => {
     H.state.updateReturns = [[]];
     expect(await cancelDeployment(DID)).toBe(false);
+    expect(H.updateAuditMock).not.toHaveBeenCalled();
   });
 });

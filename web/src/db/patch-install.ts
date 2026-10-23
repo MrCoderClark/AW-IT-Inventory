@@ -2,6 +2,12 @@ import "server-only";
 
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
+import {
+  formatAppUpgradeSummary,
+  formatInstallSummary,
+} from "@/lib/computer-audit-actions";
+
+import { updateAuditEventStatus, upsertAuditEvent } from "./computer-audit";
 import { db } from "./index";
 import { enqueueMissingUpdateCheck } from "./missing-update-checks";
 import { notifyPatchInstallResult } from "./notifications";
@@ -203,6 +209,48 @@ export async function enqueueFleetOsPatchInstalls(input: {
   return { enqueued, skipped };
 }
 
+/** One audit row per job. A lone app upgrade is `app_upgrade`; everything else is an OS patch install. */
+function isSingleAppUpgrade(selection: PatchInstallSelection): boolean {
+  return selection.apps.length === 1 && selection.os.length === 0;
+}
+
+function patchAuditAction(
+  selection: PatchInstallSelection,
+): "app_upgrade" | "os_patch_install" {
+  return isSingleAppUpgrade(selection) ? "app_upgrade" : "os_patch_install";
+}
+
+function patchAuditSummary(selection: PatchInstallSelection): string {
+  if (isSingleAppUpgrade(selection)) {
+    const app = selection.apps[0];
+    return formatAppUpgradeSummary(app.name, app.version, app.available);
+  }
+  const osCount = selection.os.length;
+  const appCount = selection.apps.length;
+  if (osCount > 0 && appCount === 0) {
+    if (osCount === 1) return formatInstallSummary(selection.os[0].kbId, null);
+    return `Installed ${osCount} Windows updates`;
+  }
+  if (appCount > 0 && osCount === 0) return `Updated ${appCount} apps`;
+  if (osCount === 0 && appCount === 0) return "Installed updates";
+  const osLabel = `${osCount} Windows update${osCount === 1 ? "" : "s"}`;
+  const appLabel = `${appCount} app upgrade${appCount === 1 ? "" : "s"}`;
+  return `Installed ${osLabel} and ${appLabel}`;
+}
+
+function patchAuditDetails(
+  selection: PatchInstallSelection,
+): Record<string, unknown> {
+  return {
+    osKbIds: selection.os.map((item) => item.kbId),
+    appUpgrades: selection.apps.map((item) => ({
+      id: item.packageId,
+      from: item.version,
+      to: item.available,
+    })),
+  };
+}
+
 export async function enqueuePatchInstall(input: {
   assetId: string;
   targetIp: string;
@@ -230,6 +278,17 @@ export async function enqueuePatchInstall(input: {
       requestedBy: input.requestedBy,
     })
     .returning({ id: patchInstallJobs.id });
+  await upsertAuditEvent({
+    sourceTable: "patch_install_jobs",
+    sourceId: row.id,
+    assetId: input.assetId,
+    action: patchAuditAction(input.selection),
+    operator: input.requestedBy,
+    source: "admin_console",
+    summary: patchAuditSummary(input.selection),
+    details: patchAuditDetails(input.selection),
+    status: "pending",
+  });
   return { ok: true, id: row.id };
 }
 
@@ -367,6 +426,13 @@ export async function updatePatchInstallStatus(
   if (updated.length) {
     if (u.status === "succeeded" || u.status === "failed") {
       const row = updated[0];
+      await updateAuditEventStatus({
+        sourceTable: "patch_install_jobs",
+        sourceId: row.id,
+        status: u.status,
+        summary: patchAuditSummary(row.selection),
+        details: patchAuditDetails(row.selection),
+      });
       await notifyPatchInstallResult({
         jobId: row.id,
         status: u.status,
@@ -504,6 +570,11 @@ export async function cancelPatchInstall(jobId: string): Promise<boolean> {
     )
     .returning({ id: patchInstallJobs.id });
   if (updated.length) {
+    await updateAuditEventStatus({
+      sourceTable: "patch_install_jobs",
+      sourceId: updated[0].id,
+      status: "canceled",
+    });
     await syncLinkedRebootsForInstall(jobId, "canceled");
     return true;
   }

@@ -60,6 +60,8 @@ const H = vi.hoisted(() => {
   const enqueueScanMock = vi.fn().mockResolvedValue("scan-1");
   const enqueueMissingCheckMock = vi.fn().mockResolvedValue({ ok: true, id: "c1" });
   const syncLinkedRebootsMock = vi.fn();
+  const upsertAuditMock = vi.fn(async () => ({ ok: true as const, id: "audit-1" }));
+  const updateAuditMock = vi.fn(async () => true);
 
   return {
     state,
@@ -73,6 +75,8 @@ const H = vi.hoisted(() => {
     enqueueScanMock,
     enqueueMissingCheckMock,
     syncLinkedRebootsMock,
+    upsertAuditMock,
+    updateAuditMock,
   };
 });
 
@@ -104,6 +108,10 @@ vi.mock("@/db/software-deploy", () => ({
 vi.mock("@/db/reboot", () => ({
   syncLinkedRebootsForInstall: (...args: unknown[]) =>
     H.syncLinkedRebootsMock(...args),
+}));
+vi.mock("@/db/computer-audit", () => ({
+  upsertAuditEvent: (...args: unknown[]) => H.upsertAuditMock(...args),
+  updateAuditEventStatus: (...args: unknown[]) => H.updateAuditMock(...args),
 }));
 
 import {
@@ -184,6 +192,7 @@ describe("enqueuePatchInstall — one-in-flight (AC-15)", () => {
         requestedBy: "me",
       }),
     ).toEqual({ ok: false, reason: "already-inflight" });
+    expect(H.upsertAuditMock).not.toHaveBeenCalled();
   });
 
   it("enqueues when the computer is free", async () => {
@@ -197,6 +206,69 @@ describe("enqueuePatchInstall — one-in-flight (AC-15)", () => {
         requestedBy: "me",
       }),
     ).toEqual({ ok: true, id: JID });
+    expect(H.upsertAuditMock).toHaveBeenCalledWith({
+      sourceTable: "patch_install_jobs",
+      sourceId: JID,
+      assetId: "a1",
+      action: "os_patch_install",
+      operator: "me",
+      source: "admin_console",
+      summary: "Installed 1 Windows update and 1 app upgrade",
+      details: {
+        osKbIds: ["KB1"],
+        appUpgrades: [{ id: "Google.Chrome", from: "1", to: "2" }],
+      },
+      status: "pending",
+    });
+  });
+
+  it("records a single app upgrade as app_upgrade", async () => {
+    H.state.selects = [[]];
+    H.state.insertReturns = [[{ id: JID }]];
+    await enqueuePatchInstall({
+      assetId: "a1",
+      targetIp: "1.2.3.4",
+      selection: { os: [], apps: SEL.apps },
+      requestedBy: "me",
+    });
+    expect(H.upsertAuditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "app_upgrade",
+        summary: "Updated Chrome 1 → 2",
+        details: {
+          osKbIds: [],
+          appUpgrades: [{ id: "Google.Chrome", from: "1", to: "2" }],
+        },
+        status: "pending",
+      }),
+    );
+  });
+
+  it("summarizes several OS updates on one audit row", async () => {
+    H.state.selects = [[]];
+    H.state.insertReturns = [[{ id: JID }]];
+    await enqueuePatchInstall({
+      assetId: "a1",
+      targetIp: "1.2.3.4",
+      selection: {
+        os: [
+          { kbId: "KB1", title: "One" },
+          { kbId: "KB2", title: "Two" },
+        ],
+        apps: [],
+      },
+      requestedBy: "me",
+    });
+    expect(H.upsertAuditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "os_patch_install",
+        summary: "Installed 2 Windows updates",
+        details: {
+          osKbIds: ["KB1", "KB2"],
+          appUpgrades: [],
+        },
+      }),
+    );
   });
 });
 
@@ -283,6 +355,16 @@ describe("updatePatchInstallStatus — fenced (AC-17)", () => {
         requestedBy: "me@x.com",
       }),
     );
+    expect(H.updateAuditMock).toHaveBeenCalledWith({
+      sourceTable: "patch_install_jobs",
+      sourceId: JID,
+      status: "succeeded",
+      summary: "Installed 1 Windows update and 1 app upgrade",
+      details: {
+        osKbIds: ["KB1"],
+        appUpgrades: [{ id: "Google.Chrome", from: "1", to: "2" }],
+      },
+    });
   });
 
   it("enqueues scan + Check updates when selection has both", async () => {
@@ -325,6 +407,18 @@ describe("updatePatchInstallStatus — fenced (AC-17)", () => {
     await updatePatchInstallStatus(JID, { ...FENCE, status: "succeeded" });
     expect(H.enqueueScanMock).toHaveBeenCalled();
     expect(H.enqueueMissingCheckMock).not.toHaveBeenCalled();
+    expect(H.updateAuditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceTable: "patch_install_jobs",
+        sourceId: JID,
+        status: "succeeded",
+        summary: "Updated Chrome 1 → 2",
+        details: {
+          osKbIds: [],
+          appUpgrades: [{ id: "Google.Chrome", from: "1", to: "2" }],
+        },
+      }),
+    );
   });
 
   it("enqueues only Check updates for OS-only success", async () => {
@@ -356,6 +450,13 @@ describe("updatePatchInstallStatus — fenced (AC-17)", () => {
       requestedBy: "patch-install:me@x.com",
     });
     expect(H.deleteMock).toHaveBeenCalled();
+    expect(H.updateAuditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "succeeded",
+        summary: "Installed KB1",
+        details: { osKbIds: ["KB1"], appUpgrades: [] },
+      }),
+    );
   });
 
   it("clears installed OS from Missing and skips Check when reboot required", async () => {
@@ -408,6 +509,14 @@ describe("updatePatchInstallStatus — fenced (AC-17)", () => {
     });
     expect(H.enqueueScanMock).not.toHaveBeenCalled();
     expect(H.enqueueMissingCheckMock).not.toHaveBeenCalled();
+    expect(H.updateAuditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceTable: "patch_install_jobs",
+        sourceId: JID,
+        status: "failed",
+        summary: "Installed 1 Windows update and 1 app upgrade",
+      }),
+    );
   });
 
   it("is stale when the claim was lost", async () => {
@@ -419,6 +528,8 @@ describe("updatePatchInstallStatus — fenced (AC-17)", () => {
     expect(H.enqueueScanMock).not.toHaveBeenCalled();
     expect(H.enqueueMissingCheckMock).not.toHaveBeenCalled();
     expect(H.syncLinkedRebootsMock).not.toHaveBeenCalled();
+    expect(H.updateAuditMock).not.toHaveBeenCalled();
+    expect(H.upsertAuditMock).not.toHaveBeenCalled();
   });
 
   it("syncs linked reboots on failed terminal status", async () => {
@@ -465,6 +576,11 @@ describe("cancelPatchInstall", () => {
     H.state.updateReturns = [[{ id: JID }]];
     expect(await cancelPatchInstall(JID)).toBe(true);
     expect(H.syncLinkedRebootsMock).toHaveBeenCalledWith(JID, "canceled");
+    expect(H.updateAuditMock).toHaveBeenCalledWith({
+      sourceTable: "patch_install_jobs",
+      sourceId: JID,
+      status: "canceled",
+    });
   });
 });
 
@@ -504,6 +620,16 @@ describe("enqueueFleetOsPatchInstalls", () => {
     );
     expect(result.skipped).toHaveLength(3);
     expect(H.resolveDeployTargetMock).toHaveBeenCalledWith("TAG-A");
+    expect(H.upsertAuditMock).toHaveBeenCalledTimes(1);
+    expect(H.upsertAuditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceTable: "patch_install_jobs",
+        sourceId: JID,
+        action: "os_patch_install",
+        summary: "Installed KB1",
+        operator: "admin@x.com",
+      }),
+    );
   });
 
   it("returns empty enqueued when tags empty", async () => {

@@ -2,6 +2,9 @@ import "server-only";
 
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
+import { formatInstallSummary } from "@/lib/computer-audit-actions";
+
+import { updateAuditEventStatus, upsertAuditEvent } from "./computer-audit";
 import { db } from "./index";
 import { notifyDeployResult } from "./notifications";
 import { isWorkerLive } from "./scan";
@@ -93,6 +96,24 @@ export async function enqueueDeployment(input: {
       requestedBy: input.requestedBy,
     })
     .returning({ id: softwareDeployments.id });
+  await upsertAuditEvent({
+    sourceTable: "software_deployments",
+    sourceId: row.id,
+    assetId: input.assetId,
+    action: "software_deploy",
+    operator: input.requestedBy,
+    source: "admin_console",
+    summary: formatInstallSummary(
+      input.packageSnapshot.name,
+      input.packageSnapshot.version ?? null,
+    ),
+    details: {
+      packageId: input.packageId,
+      packageName: input.packageSnapshot.name,
+      version: input.packageSnapshot.version ?? null,
+    },
+    status: "pending",
+  });
   return { ok: true, id: row.id };
 }
 
@@ -231,6 +252,17 @@ export async function updateDeploymentStatus(
     // printer-install one. Best-effort + idempotent per deployment+status.
     if (u.status === "succeeded" || u.status === "failed") {
       const row = updated[0];
+      // Result payloads have no version; the frozen snapshot does. Refresh the
+      // summary only when that version is known so a blank one stays as stored.
+      const version = row.snapshot.version?.trim() ? row.snapshot.version : null;
+      await updateAuditEventStatus({
+        sourceTable: "software_deployments",
+        sourceId: row.id,
+        status: u.status,
+        ...(u.status === "succeeded" && version
+          ? { summary: formatInstallSummary(row.snapshot.name, version) }
+          : {}),
+      });
       await notifyDeployResult({
         deploymentId: row.id,
         status: u.status,
@@ -271,7 +303,13 @@ export async function cancelDeployment(deploymentId: string): Promise<boolean> {
       ),
     )
     .returning({ id: softwareDeployments.id });
-  return updated.length > 0;
+  if (!updated.length) return false;
+  await updateAuditEventStatus({
+    sourceTable: "software_deployments",
+    sourceId: updated[0].id,
+    status: "canceled",
+  });
+  return true;
 }
 
 /** One deployment row by id, or null (for ownership/status checks in actions). */
