@@ -99,7 +99,16 @@ const H = vi.hoisted(() => {
   };
 });
 
+const upsertAuditMock = vi.hoisted(() =>
+  vi.fn(async () => ({ ok: true as const, id: "audit-1" })),
+);
+const updateAuditMock = vi.hoisted(() => vi.fn(async () => true));
+
 vi.mock("server-only", () => ({}));
+vi.mock("@/db/computer-audit", () => ({
+  upsertAuditEvent: (...args: unknown[]) => upsertAuditMock(...args),
+  updateAuditEventStatus: (...args: unknown[]) => updateAuditMock(...args),
+}));
 vi.mock("@/db/index", () => ({
   db: {
     select: H.selectMock,
@@ -141,6 +150,7 @@ describe("createRemoteSession — target guards (AC-2, AC-9)", () => {
       ok: false,
       reason: "not-found",
     });
+    expect(upsertAuditMock).not.toHaveBeenCalled();
   });
 
   it("refuses a non-Computer asset", async () => {
@@ -164,6 +174,19 @@ describe("createRemoteSession — target guards (AC-2, AC-9)", () => {
       ok: true,
       sessionId: SID,
     });
+    expect(upsertAuditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceTable: "remote_sessions",
+        sourceId: SID,
+        assetId: "a1",
+        action: "remote_session",
+        operator: "me",
+        source: "admin_console",
+        summary: "Opened remote session",
+        status: "pending",
+        details: { targetIp: "192.168.70.5", shell: "powershell" },
+      }),
+    );
   });
 
   it("maps a one-open-per-target race (23505) to already-open", async () => {
@@ -188,14 +211,22 @@ describe("requestEndSession — ownership + transitions (AC-5, AC-6)", () => {
 
   it("cancels a still-pending session outright", async () => {
     H.state.selects = [[{ id: SID, requestedBy: "me", status: "pending" }]];
+    H.state.updateReturns = [[{ id: SID }]];
     expect(await requestEndSession(SID, "me")).toBe("ok");
     expect(H.state.updateSets[0]).toMatchObject({ status: "canceled" });
+    expect(updateAuditMock).toHaveBeenCalledWith({
+      sourceTable: "remote_sessions",
+      sourceId: SID,
+      status: "canceled",
+      summary: "Remote session canceled",
+    });
   });
 
   it("moves an active session to closing", async () => {
     H.state.selects = [[{ id: SID, requestedBy: "me", status: "active" }]];
     expect(await requestEndSession(SID, "me")).toBe("ok");
     expect(H.state.updateSets[0]).toMatchObject({ status: "closing" });
+    expect(updateAuditMock).not.toHaveBeenCalled();
   });
 });
 
@@ -242,6 +273,23 @@ describe("fenced status (AC-3)", () => {
     H.state.updateReturns = [[{ id: SID }]];
     expect(await finishSession(SID, FENCE, "failed", "boom")).toBe("ok");
     expect(H.state.updateSets[0]).toMatchObject({ status: "failed", error: "boom" });
+    expect(updateAuditMock).toHaveBeenCalledWith({
+      sourceTable: "remote_sessions",
+      sourceId: SID,
+      status: "failed",
+      summary: "Remote session failed",
+    });
+  });
+
+  it("maps a closed session onto succeeded", async () => {
+    H.state.updateReturns = [[{ id: SID }]];
+    expect(await finishSession(SID, FENCE, "closed")).toBe("ok");
+    expect(updateAuditMock).toHaveBeenCalledWith({
+      sourceTable: "remote_sessions",
+      sourceId: SID,
+      status: "succeeded",
+      summary: "Remote session ended",
+    });
   });
 });
 

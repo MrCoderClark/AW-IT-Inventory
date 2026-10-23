@@ -2,6 +2,7 @@ import "server-only";
 
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
+import { updateAuditEventStatus, upsertAuditEvent } from "./computer-audit";
 import { db } from "./index";
 import { isWorkerLive } from "./scan";
 import { resolveDeployTarget } from "./software-deploy";
@@ -24,6 +25,32 @@ const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const IN_FLIGHT = ["pending", "claimed", "running"] as const;
+
+const CHECK_AUDIT_TABLE = "missing_update_checks";
+
+/** Post-install follow-ups are enqueued as `patch-install:{actor}`. */
+function missingCheckActor(requestedBy: string): {
+  operator: string;
+  source: "admin_console" | "collector";
+} {
+  const prefix = "patch-install:";
+  if (requestedBy.startsWith(prefix)) {
+    const actor = requestedBy.slice(prefix.length).trim();
+    return { operator: actor || "system", source: "collector" };
+  }
+  return { operator: requestedBy, source: "admin_console" };
+}
+
+async function auditCheckTerminal(
+  jobId: string,
+  status: "succeeded" | "failed" | "canceled",
+): Promise<void> {
+  await updateAuditEventStatus({
+    sourceTable: CHECK_AUDIT_TABLE,
+    sourceId: jobId,
+    status,
+  });
+}
 
 export { resolveDeployTarget };
 
@@ -56,6 +83,18 @@ export async function enqueueMissingUpdateCheck(input: {
       requestedBy: input.requestedBy,
     })
     .returning({ id: missingUpdateChecks.id });
+  const actor = missingCheckActor(input.requestedBy);
+  await upsertAuditEvent({
+    sourceTable: CHECK_AUDIT_TABLE,
+    sourceId: row.id,
+    assetId: input.assetId,
+    action: "missing_update_check",
+    operator: actor.operator,
+    source: actor.source,
+    summary: "Checked for updates",
+    details: { targetIp: input.targetIp },
+    status: "pending",
+  });
   return { ok: true, id: row.id };
 }
 
@@ -168,7 +207,12 @@ export async function updateMissingUpdateCheckStatus(
     )
     .returning({ id: missingUpdateChecks.id });
 
-  if (updated.length) return "ok";
+  if (updated.length) {
+    if (u.status === "succeeded" || u.status === "failed") {
+      await auditCheckTerminal(updated[0].id, u.status);
+    }
+    return "ok";
+  }
 
   const [exists] = await db
     .select({ id: missingUpdateChecks.id })
@@ -191,7 +235,11 @@ export async function cancelMissingUpdateCheck(jobId: string): Promise<boolean> 
       ),
     )
     .returning({ id: missingUpdateChecks.id });
-  return updated.length > 0;
+  if (updated.length) {
+    await auditCheckTerminal(updated[0].id, "canceled");
+    return true;
+  }
+  return false;
 }
 
 export async function getMissingUpdateCheck(

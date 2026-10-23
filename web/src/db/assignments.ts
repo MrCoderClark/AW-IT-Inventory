@@ -2,6 +2,7 @@ import "server-only";
 
 import { and, desc, eq, isNull } from "drizzle-orm";
 
+import { upsertAuditEvent } from "./computer-audit";
 import { db } from "./index";
 import { assetAssignments, assets, people } from "./schema";
 import type { AssetType, AssignmentEvent, CurrentDevice } from "@/lib/data";
@@ -45,6 +46,54 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
  * uncaught error. postgres.js exposes the SQLSTATE as `code` and the index as
  * `constraint_name`.
  */
+const ASSIGNMENT_AUDIT_TABLE = "asset_assignments";
+
+function assignmentSource(actorEmail: string): "admin_console" | "collector" {
+  if (actorEmail === "collector" || actorEmail.startsWith("scan")) return "collector";
+  return "admin_console";
+}
+
+function personLabel(name: unknown): string | null {
+  if (typeof name !== "string") return null;
+  const trimmed = name.trim();
+  return trimmed || null;
+}
+
+function assignmentSummary(
+  kind: "assign" | "return",
+  fromName: string | null,
+  toName: string | null,
+  hadPrevious: boolean,
+): string {
+  if (kind === "return") {
+    return fromName ? `Returned from ${fromName}` : "Returned device";
+  }
+  if (fromName && toName) return `Reassigned from ${fromName} to ${toName}`;
+  if (hadPrevious && toName) return `Reassigned to ${toName}`;
+  if (toName) return `Assigned to ${toName}`;
+  return "Assignment changed";
+}
+
+async function auditAssignmentChange(input: {
+  assignmentId: string;
+  assetId: string;
+  actorEmail: string;
+  summary: string;
+  details: Record<string, unknown>;
+}): Promise<void> {
+  await upsertAuditEvent({
+    sourceTable: ASSIGNMENT_AUDIT_TABLE,
+    sourceId: input.assignmentId,
+    assetId: input.assetId,
+    action: "assignment_change",
+    operator: input.actorEmail,
+    source: assignmentSource(input.actorEmail),
+    summary: input.summary,
+    details: input.details,
+    status: "succeeded",
+  });
+}
+
 export function isOpenAssignmentRace(err: unknown): boolean {
   if (typeof err !== "object" || err === null) return false;
   const e = err as { code?: unknown; constraint_name?: unknown };
@@ -100,14 +149,14 @@ export async function assignAssetTx(
   if (!UUID_RE.test(personId)) return { ok: false, error: "person-not-found" };
 
   const [asset] = await tx
-    .select({ id: assets.id })
+    .select({ id: assets.id, type: assets.type })
     .from(assets)
     .where(eq(assets.id, assetId))
     .limit(1);
   if (!asset) return { ok: false, error: "asset-not-found" };
 
   const [person] = await tx
-    .select({ id: people.id, status: people.status })
+    .select({ id: people.id, status: people.status, name: people.name })
     .from(people)
     .where(eq(people.id, personId))
     .limit(1);
@@ -117,8 +166,13 @@ export async function assignAssetTx(
   }
 
   const [open] = await tx
-    .select({ id: assetAssignments.id, personId: assetAssignments.personId })
+    .select({
+      id: assetAssignments.id,
+      personId: assetAssignments.personId,
+      personName: people.name,
+    })
     .from(assetAssignments)
+    .innerJoin(people, eq(people.id, assetAssignments.personId))
     .where(
       and(
         eq(assetAssignments.assetId, assetId),
@@ -137,17 +191,37 @@ export async function assignAssetTx(
       .where(eq(assetAssignments.id, open.id));
   }
 
-  await tx.insert(assetAssignments).values({
-    assetId,
-    personId,
-    assignedAt: when,
-    assignedBy: actorEmail,
-  });
+  const [created] = await tx
+    .insert(assetAssignments)
+    .values({
+      assetId,
+      personId,
+      assignedAt: when,
+      assignedBy: actorEmail,
+    })
+    .returning({ id: assetAssignments.id });
 
   await tx
     .update(assets)
     .set({ assigneeId: personId, updatedAt: when })
     .where(eq(assets.id, assetId));
+
+  if (asset.type === "Computer" && created?.id) {
+    const toName = personLabel(person.name);
+    const fromName = personLabel(open?.personName);
+    await auditAssignmentChange({
+      assignmentId: created.id,
+      assetId,
+      actorEmail,
+      summary: assignmentSummary("assign", fromName, toName, Boolean(open)),
+      details: {
+        fromPersonId: open?.personId ?? null,
+        fromName,
+        toPersonId: personId,
+        toName,
+      },
+    });
+  }
 
   return { ok: true };
 }
@@ -175,6 +249,12 @@ export async function returnAssetTx(
 ): Promise<{ ok: true; changed: boolean }> {
   if (!UUID_RE.test(assetId)) return { ok: true, changed: false };
 
+  const [asset] = await tx
+    .select({ type: assets.type })
+    .from(assets)
+    .where(eq(assets.id, assetId))
+    .limit(1);
+
   const closed = await tx
     .update(assetAssignments)
     .set({ unassignedAt: when, unassignedBy: actorEmail, updatedAt: when })
@@ -184,12 +264,30 @@ export async function returnAssetTx(
         isNull(assetAssignments.unassignedAt),
       ),
     )
-    .returning({ id: assetAssignments.id });
+    .returning({ id: assetAssignments.id, personId: assetAssignments.personId });
 
   await tx
     .update(assets)
     .set({ assigneeId: null, updatedAt: when })
     .where(eq(assets.id, assetId));
+
+  if (asset?.type === "Computer") {
+    for (const row of closed) {
+      const [holder] = await tx
+        .select({ name: people.name })
+        .from(people)
+        .where(eq(people.id, row.personId))
+        .limit(1);
+      const fromName = personLabel(holder?.name);
+      await auditAssignmentChange({
+        assignmentId: row.id,
+        assetId,
+        actorEmail,
+        summary: assignmentSummary("return", fromName, null, true),
+        details: { personId: row.personId, fromName },
+      });
+    }
+  }
 
   return { ok: true, changed: closed.length > 0 };
 }

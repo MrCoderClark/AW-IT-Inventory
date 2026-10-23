@@ -71,12 +71,20 @@ const notifyMock = vi.hoisted(() => vi.fn(async () => undefined));
 const onScheduleJobTerminalMock = vi.hoisted(() =>
   vi.fn(async () => undefined),
 );
+const upsertAuditMock = vi.hoisted(() =>
+  vi.fn(async () => ({ ok: true as const, id: "audit-1" })),
+);
+const updateAuditMock = vi.hoisted(() => vi.fn(async () => true));
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/db/scan", () => ({ isWorkerLive: vi.fn().mockResolvedValue(true) }));
 vi.mock("./notifications", () => ({ notifyRebootResult: notifyMock }));
 vi.mock("./reboot-schedules", () => ({
   onScheduleJobTerminal: onScheduleJobTerminalMock,
+}));
+vi.mock("@/db/computer-audit", () => ({
+  upsertAuditEvent: (...args: unknown[]) => upsertAuditMock(...args),
+  updateAuditEventStatus: (...args: unknown[]) => updateAuditMock(...args),
 }));
 vi.mock("@/db/index", () => ({
   db: {
@@ -124,6 +132,7 @@ describe("enqueueRebootJob", () => {
       }),
     ).toEqual({ ok: false, reason: "past-schedule" });
     expect(H.selectMock).not.toHaveBeenCalled();
+    expect(upsertAuditMock).not.toHaveBeenCalled();
   });
 
   it("rejects second in-flight reboot for same asset", async () => {
@@ -137,6 +146,7 @@ describe("enqueueRebootJob", () => {
         requestedBy: "me",
       }),
     ).toEqual({ ok: false, reason: "already-inflight" });
+    expect(upsertAuditMock).not.toHaveBeenCalled();
   });
 
   it("enqueues when schedule is valid and asset is free", async () => {
@@ -152,6 +162,18 @@ describe("enqueueRebootJob", () => {
         sourcePatchInstallJobId: "install-1",
       }),
     ).toEqual({ ok: true, id: JID });
+    expect(upsertAuditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceTable: "reboot_jobs",
+        sourceId: JID,
+        assetId: "a1",
+        action: "reboot",
+        operator: "me",
+        source: "admin_console",
+        summary: "Reboot after install",
+        status: "pending",
+      }),
+    );
   });
 
   it("persists sourceScheduleId on the job", async () => {
@@ -172,6 +194,18 @@ describe("enqueueRebootJob", () => {
       sourceScheduleId: sched,
       sourcePatchInstallJobId: null,
     });
+    expect(upsertAuditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceTable: "reboot_jobs",
+        sourceId: JID,
+        action: "reboot",
+        operator: "me",
+        source: "scheduled",
+        summary: "Scheduled reboot",
+        status: "pending",
+        details: expect.objectContaining({ sourceScheduleId: sched }),
+      }),
+    );
   });
 
   it("stores null sourceScheduleId when omitted", async () => {
@@ -185,6 +219,13 @@ describe("enqueueRebootJob", () => {
       requestedBy: "me",
     });
     expect(H.state.inserts[0]).toMatchObject({ sourceScheduleId: null });
+    expect(upsertAuditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: "admin_console",
+        summary: "Forced reboot",
+        operator: "me",
+      }),
+    );
   });
 });
 
@@ -266,6 +307,11 @@ describe("updateRebootStatus — fenced", () => {
     expect(notifyMock).toHaveBeenCalledWith(
       expect.objectContaining({ jobId: JID, status: "succeeded" }),
     );
+    expect(updateAuditMock).toHaveBeenCalledWith({
+      sourceTable: "reboot_jobs",
+      sourceId: JID,
+      status: "succeeded",
+    });
   });
 
   it("is stale when the claim was lost", async () => {
@@ -276,6 +322,7 @@ describe("updateRebootStatus — fenced", () => {
     ).toBe("stale");
     expect(notifyMock).not.toHaveBeenCalled();
     expect(onScheduleJobTerminalMock).not.toHaveBeenCalled();
+    expect(updateAuditMock).not.toHaveBeenCalled();
   });
 });
 
@@ -303,6 +350,11 @@ describe("updateRebootStatus — schedule rematerialize", () => {
       error: "timeout",
     });
     expect(onScheduleJobTerminalMock).toHaveBeenCalledWith(JID);
+    expect(updateAuditMock).toHaveBeenCalledWith({
+      sourceTable: "reboot_jobs",
+      sourceId: JID,
+      status: "failed",
+    });
   });
 
   it("does not rematerialize when sourceScheduleId is null", async () => {
@@ -315,6 +367,7 @@ describe("updateRebootStatus — schedule rematerialize", () => {
     H.state.updateReturns = [[{ ...row, sourceScheduleId: SCHED }]];
     await updateRebootStatus(JID, { ...FENCE, status: "running" });
     expect(onScheduleJobTerminalMock).not.toHaveBeenCalled();
+    expect(updateAuditMock).not.toHaveBeenCalled();
   });
 });
 
@@ -336,6 +389,11 @@ describe("cancelRebootJob", () => {
       expect.objectContaining({ jobId: JID, status: "canceled" }),
     );
     expect(onScheduleJobTerminalMock).not.toHaveBeenCalled();
+    expect(updateAuditMock).toHaveBeenCalledWith({
+      sourceTable: "reboot_jobs",
+      sourceId: JID,
+      status: "canceled",
+    });
   });
 
   it("calls onScheduleJobTerminal when canceled job has sourceScheduleId", async () => {
@@ -442,10 +500,16 @@ describe("syncLinkedRebootsForInstall", () => {
         requestedBy: "me@x.com",
       }),
     );
+    expect(updateAuditMock).toHaveBeenCalledWith({
+      sourceTable: "reboot_jobs",
+      sourceId: JID,
+      status: "canceled",
+    });
   });
 
   it("no-ops on succeeded", async () => {
     await syncLinkedRebootsForInstall("install-1", "succeeded");
     expect(H.updateMock).not.toHaveBeenCalled();
+    expect(updateAuditMock).not.toHaveBeenCalled();
   });
 });

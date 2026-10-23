@@ -80,10 +80,17 @@ const H = vi.hoisted(() => {
 });
 
 const notifyMock = vi.hoisted(() => vi.fn(async () => undefined));
+const upsertAuditMock = vi.hoisted(() =>
+  vi.fn(async () => ({ ok: true as const, id: "audit-1" })),
+);
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/db/scan", () => ({ isWorkerLive: vi.fn().mockResolvedValue(true) }));
 vi.mock("./notifications", () => ({ notifyRebootResult: notifyMock }));
+vi.mock("@/db/computer-audit", () => ({
+  upsertAuditEvent: (...args: unknown[]) => upsertAuditMock(...args),
+  updateAuditEventStatus: vi.fn(async () => true),
+}));
 vi.mock("@/db/index", () => ({
   db: {
     select: H.selectMock,
@@ -198,6 +205,23 @@ describe("upsertRebootSchedule", () => {
       sourceScheduleId: SCHED,
     });
     expect(H.state.updateSets.at(-1)).toMatchObject({ nextJobId: JOB });
+    expect(upsertAuditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceTable: "reboot_schedules",
+        sourceId: SCHED,
+        assetId: ASSET,
+        action: "reboot_schedule",
+        operator: "ada",
+        source: "admin_console",
+        summary: "Saved daily reboot at 15:30 America/New_York",
+        status: "succeeded",
+        details: expect.objectContaining({
+          cadence: "daily",
+          localTime: "15:30",
+          enabled: true,
+        }),
+      }),
+    );
   });
 
   it("cancels the previous schedule child before booking the next", async () => {
@@ -266,6 +290,7 @@ describe("upsertRebootSchedule", () => {
       await upsertRebootSchedule({ ...dailyInput, localTime: "25:99" }),
     ).toEqual({ ok: false, reason: "bad-input" });
     expect(H.insertMock).not.toHaveBeenCalled();
+    expect(upsertAuditMock).not.toHaveBeenCalled();
   });
 
   it("rejects an invalid timezone", async () => {
@@ -333,7 +358,10 @@ describe("materializeRebootSchedule", () => {
 
 describe("setRebootScheduleEnabled", () => {
   it("disable cancels the in-flight child and clears nextJobId", async () => {
-    H.state.updateReturns = [[{ id: SCHED, nextJobId: JOB }], [canceledRow(JOB)]];
+    H.state.updateReturns = [
+      [{ id: SCHED, nextJobId: JOB, requestedBy: "ada" }],
+      [canceledRow(JOB)],
+    ];
     H.state.selects = [[{ id: JOB }]];
 
     expect(await setRebootScheduleEnabled(ASSET, false)).toBe(true);
@@ -342,6 +370,17 @@ describe("setRebootScheduleEnabled", () => {
     expect(H.state.updateSets[2]).toMatchObject({ nextJobId: null });
     expect(notifyMock).toHaveBeenCalledWith(
       expect.objectContaining({ jobId: JOB, status: "canceled" }),
+    );
+    expect(upsertAuditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceTable: "reboot_schedules",
+        sourceId: SCHED,
+        action: "reboot_schedule",
+        operator: "ada",
+        summary: "Disabled recurring reboot",
+        status: "succeeded",
+        details: { enabled: false },
+      }),
     );
   });
 
@@ -365,24 +404,40 @@ describe("setRebootScheduleEnabled", () => {
     H.state.updateReturns = [[]];
     expect(await setRebootScheduleEnabled(ASSET, true)).toBe(false);
     expect(H.insertMock).not.toHaveBeenCalled();
+    expect(upsertAuditMock).not.toHaveBeenCalled();
   });
 });
 
 describe("deleteRebootSchedule", () => {
   it("cancels the child and removes the schedule", async () => {
-    H.state.selects = [[{ id: SCHED, nextJobId: JOB }], [{ id: JOB }]];
+    H.state.selects = [
+      [{ id: SCHED, nextJobId: JOB, requestedBy: "ada" }],
+      [{ id: JOB }],
+    ];
     H.state.updateReturns = [[canceledRow(JOB)]];
     H.state.deleteReturns = [[{ id: SCHED }]];
 
     expect(await deleteRebootSchedule(ASSET)).toBe(true);
     expect(H.state.updateSets[0]).toMatchObject({ status: "canceled" });
     expect(H.deleteMock).toHaveBeenCalled();
+    expect(upsertAuditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceTable: "reboot_schedules",
+        sourceId: SCHED,
+        assetId: ASSET,
+        action: "reboot_schedule",
+        operator: "ada",
+        summary: "Deleted recurring reboot schedule",
+        status: "canceled",
+      }),
+    );
   });
 
   it("returns false when no schedule exists", async () => {
     H.state.selects = [[]];
     expect(await deleteRebootSchedule(ASSET)).toBe(false);
     expect(H.deleteMock).not.toHaveBeenCalled();
+    expect(upsertAuditMock).not.toHaveBeenCalled();
   });
 });
 

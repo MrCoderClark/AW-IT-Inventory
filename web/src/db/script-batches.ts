@@ -60,6 +60,7 @@ export async function enqueueScriptBatch(
       scriptSnapshot: input.scriptSnapshot,
       requestedBy: input.requestedBy,
       batchId: batch.id,
+      scheduled: input.source === "schedule",
     });
     if (res.ok) enqueued += 1;
     else skippedInflight += 1;

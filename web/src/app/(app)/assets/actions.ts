@@ -1,8 +1,11 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
+
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
+import { upsertAuditEvent } from "@/db/computer-audit";
 import { db } from "@/db/index";
 import {
   assets,
@@ -292,6 +295,7 @@ export async function updateAsset(
 
   const now = new Date();
   let existed = false;
+  let updatedId: string | null = null;
   try {
     // Update the asset and upsert its detail row together; type is locked on
     // edit, so an existing asset with no detail row yet gains one here.
@@ -316,6 +320,7 @@ export async function updateAsset(
         .where(eq(assets.tag, tag))
         .returning({ id: assets.id, assigneeId: assets.assigneeId });
       if (!updated.length) return false;
+      updatedId = updated[0].id;
       await upsertDetails(tx, input.type, updated[0].id, details.data);
 
       // Reconcile the assignee change (the returned assigneeId is the pre-update
@@ -341,6 +346,32 @@ export async function updateAsset(
   }
 
   if (!existed) return { ok: false, error: "That asset no longer exists." };
+
+  if (input.type === "Computer" && updatedId) {
+    await upsertAuditEvent({
+      sourceTable: "asset_updates",
+      sourceId: randomUUID(),
+      assetId: updatedId,
+      action: "asset_update",
+      operator: user.email,
+      source: "admin_console",
+      summary: `Updated ${input.name}`,
+      details: {
+        name: input.name,
+        status: input.status,
+        serial: input.serial,
+        model: input.model,
+        locationId: input.locationId,
+        vendor: input.vendor,
+        spec: input.spec,
+        costCenter: input.costCenter,
+        purchaseDate: input.purchaseDate,
+        warrantyUntil: input.warrantyUntil,
+        details: details.data,
+      },
+      status: "succeeded",
+    });
+  }
 
   revalidateFor(input.type);
   revalidatePath(`/assets/${tag}`);

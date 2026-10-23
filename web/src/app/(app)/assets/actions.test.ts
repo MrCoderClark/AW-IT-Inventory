@@ -33,13 +33,17 @@ const h = vi.hoisted(() => {
   // (spec 16, AC-11); spy on its transaction-aware cores.
   const assignAssetTx = vi.fn();
   const returnAssetTx = vi.fn();
+  const upsertAudit = vi.fn(async () => ({ ok: true as const, id: "audit-1" }));
   return {
     returning, chain, db, getCurrentUser, hasPermission, revalidatePath,
-    assignAssetTx, returnAssetTx,
+    assignAssetTx, returnAssetTx, upsertAudit,
   };
 });
 
 vi.mock("@/db/index", () => ({ db: h.db }));
+vi.mock("@/db/computer-audit", () => ({
+  upsertAuditEvent: (...args: unknown[]) => h.upsertAudit(...args),
+}));
 vi.mock("@/lib/auth/session", () => ({
   getCurrentUser: h.getCurrentUser,
   hasPermission: h.hasPermission,
@@ -241,6 +245,50 @@ describe("updateAsset (AC-3, AC-6, AC-7)", () => {
 
     expect(res.ok).toBe(false);
     expect(h.db.update).not.toHaveBeenCalled();
+  });
+
+  it("writes one audit row per successful Computer save", async () => {
+    const assetId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    h.returning.mockResolvedValue([{ id: assetId, assigneeId: null }]);
+    const computer = { ...validInput, name: "Front Desk", type: "Computer" as const };
+
+    const res = await updateAsset("H2TECS-PC-ABC12", computer);
+    expect(res).toEqual({ ok: true, message: "Asset updated." });
+    expect(h.upsertAudit).toHaveBeenCalledTimes(1);
+    const first = h.upsertAudit.mock.calls[0][0] as {
+      sourceTable: string;
+      sourceId: string;
+      assetId: string;
+      action: string;
+      operator: string;
+      source: string;
+      summary: string;
+      status: string;
+    };
+    expect(first).toMatchObject({
+      sourceTable: "asset_updates",
+      assetId,
+      action: "asset_update",
+      operator: "admin@x",
+      source: "admin_console",
+      summary: "Updated Front Desk",
+      status: "succeeded",
+    });
+    expect(first.sourceId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    );
+
+    h.upsertAudit.mockClear();
+    const again = await updateAsset("H2TECS-PC-ABC12", computer);
+    expect(again.ok).toBe(true);
+    const second = h.upsertAudit.mock.calls[0][0] as { sourceId: string };
+    expect(second.sourceId).not.toBe(first.sourceId);
+  });
+
+  it("does not audit a Monitor save", async () => {
+    h.returning.mockResolvedValue([{ id: "asset-id", assigneeId: null }]);
+    await updateAsset("OPUS-MON-ABC12", validInput);
+    expect(h.upsertAudit).not.toHaveBeenCalled();
   });
 });
 

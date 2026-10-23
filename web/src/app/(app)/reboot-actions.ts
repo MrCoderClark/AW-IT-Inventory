@@ -189,6 +189,7 @@ export async function setRebootScheduleEnabledAction(input: {
   const updated = await setRebootScheduleEnabled(
     resolved.assetId,
     input.enabled,
+    user.email,
   );
   if (!updated) {
     return {
@@ -211,7 +212,7 @@ export async function deleteRebootScheduleAction(input: {
   const resolved = await resolveScheduleAsset(input.assetTag);
   if (!resolved.ok) return resolved.error;
 
-  const deleted = await deleteRebootSchedule(resolved.assetId);
+  const deleted = await deleteRebootSchedule(resolved.assetId, user.email);
   if (!deleted) {
     return {
       ok: false,

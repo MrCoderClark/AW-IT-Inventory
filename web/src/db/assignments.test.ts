@@ -27,7 +27,14 @@ const H = vi.hoisted(() => {
   return { state, select: vi.fn(() => makeSelect()), transaction: vi.fn() };
 });
 
+const upsertAuditMock = vi.hoisted(() =>
+  vi.fn(async () => ({ ok: true as const, id: "audit-1" })),
+);
+
 vi.mock("server-only", () => ({}));
+vi.mock("@/db/computer-audit", () => ({
+  upsertAuditEvent: (...args: unknown[]) => upsertAuditMock(...args),
+}));
 vi.mock("@/db/index", () => ({
   db: { select: H.select, transaction: H.transaction },
 }));
@@ -44,6 +51,7 @@ import {
 const ASSET = "11111111-1111-4111-8111-111111111111";
 const PERSON = "22222222-2222-4222-8222-222222222222";
 const OTHER = "33333333-3333-4333-8333-333333333333";
+const ASG = "44444444-4444-4444-8444-444444444444";
 
 /**
  * A fake transaction with the same query surface the engine uses. `selects` is a
@@ -81,7 +89,12 @@ function makeTx() {
     insert: () => ({
       values: (rows: unknown) => {
         captured.inserts.push(rows);
-        return Promise.resolve();
+        const created = [{ id: ASG }];
+        const pending = Promise.resolve(created) as Promise<unknown> & {
+          returning?: () => Promise<unknown>;
+        };
+        pending.returning = () => Promise.resolve(created);
+        return pending;
       },
     }),
   };
@@ -172,6 +185,61 @@ describe("assignAssetTx (AC-5, AC-11)", () => {
     });
     expect(captured.inserts).toHaveLength(0);
   });
+
+  it("audits a Computer assign with the new assignment id", async () => {
+    const { tx, selects } = makeTx();
+    selects.push([{ id: ASSET, type: "Computer" }]);
+    selects.push([{ id: PERSON, status: "active", name: "Ada Lovelace" }]);
+    selects.push([]);
+
+    const res = await assignAssetTx(tx as never, ASSET, PERSON, "admin@x");
+    expect(res).toEqual({ ok: true });
+    expect(upsertAuditMock).toHaveBeenCalledWith({
+      sourceTable: "asset_assignments",
+      sourceId: ASG,
+      assetId: ASSET,
+      action: "assignment_change",
+      operator: "admin@x",
+      source: "admin_console",
+      summary: "Assigned to Ada Lovelace",
+      details: {
+        fromPersonId: null,
+        fromName: null,
+        toPersonId: PERSON,
+        toName: "Ada Lovelace",
+      },
+      status: "succeeded",
+    });
+  });
+
+  it("audits a Computer reassign from the previous holder", async () => {
+    const { tx, selects } = makeTx();
+    selects.push([{ id: ASSET, type: "Computer" }]);
+    selects.push([{ id: PERSON, status: "active", name: "Ada Lovelace" }]);
+    selects.push([{ id: "open-1", personId: OTHER, personName: "Grace Hopper" }]);
+
+    await assignAssetTx(tx as never, ASSET, PERSON, "admin@x");
+    expect(upsertAuditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceId: ASG,
+        summary: "Reassigned from Grace Hopper to Ada Lovelace",
+        details: expect.objectContaining({
+          fromPersonId: OTHER,
+          toPersonId: PERSON,
+        }),
+      }),
+    );
+  });
+
+  it("does not audit a non-Computer assign", async () => {
+    const { tx, selects } = makeTx();
+    selects.push([{ id: ASSET, type: "Monitor" }]);
+    selects.push([{ id: PERSON, status: "active", name: "Ada" }]);
+    selects.push([]);
+
+    await assignAssetTx(tx as never, ASSET, PERSON, "admin@x");
+    expect(upsertAuditMock).not.toHaveBeenCalled();
+  });
 });
 
 describe("assignAsset — the lost double-assign race (AC-5, AC-11)", () => {
@@ -231,6 +299,38 @@ describe("returnAssetTx (AC-6, AC-11)", () => {
     const res = await returnAssetTx(tx as never, "bad", "admin@x");
     expect(res).toEqual({ ok: true, changed: false });
     expect(captured.sets).toHaveLength(0);
+    expect(upsertAuditMock).not.toHaveBeenCalled();
+  });
+
+  it("audits a Computer return against the closed assignment id", async () => {
+    const { tx, selects, updateReturnings } = makeTx();
+    selects.push([{ type: "Computer" }]);
+    updateReturnings.push([{ id: ASG, personId: PERSON }]);
+    selects.push([{ name: "Ada Lovelace" }]);
+
+    const res = await returnAssetTx(tx as never, ASSET, "admin@x");
+    expect(res).toEqual({ ok: true, changed: true });
+    expect(upsertAuditMock).toHaveBeenCalledWith({
+      sourceTable: "asset_assignments",
+      sourceId: ASG,
+      assetId: ASSET,
+      action: "assignment_change",
+      operator: "admin@x",
+      source: "admin_console",
+      summary: "Returned from Ada Lovelace",
+      details: { personId: PERSON, fromName: "Ada Lovelace" },
+      status: "succeeded",
+    });
+  });
+
+  it("does not audit a return that closed nothing", async () => {
+    const { tx, selects, updateReturnings } = makeTx();
+    selects.push([{ type: "Computer" }]);
+    updateReturnings.push([]);
+
+    const res = await returnAssetTx(tx as never, ASSET, "admin@x");
+    expect(res).toEqual({ ok: true, changed: false });
+    expect(upsertAuditMock).not.toHaveBeenCalled();
   });
 });
 
