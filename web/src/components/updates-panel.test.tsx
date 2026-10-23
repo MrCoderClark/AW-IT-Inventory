@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 
 import { UpdatesPanel } from "./updates-panel";
@@ -9,7 +9,17 @@ vi.mock("@/app/(app)/patch-install-actions", () => ({
   requestPatchInstall: vi.fn(),
   requestCancelPatchInstall: vi.fn(),
   requestMissingUpdateCheck: vi.fn(),
-  pollUpdatesSnapshot: vi.fn(),
+  pollUpdatesSnapshot: vi.fn().mockResolvedValue({
+    ok: true,
+    patches: null,
+    patchJobs: [],
+    checkJobs: [],
+    rebootJobs: [],
+  }),
+}));
+vi.mock("@/app/(app)/reboot-actions", () => ({
+  requestRebootSchedule: vi.fn(),
+  requestCancelReboot: vi.fn(),
 }));
 
 const SAMPLE: ComputerPatches = {
@@ -49,6 +59,10 @@ const SAMPLE: ComputerPatches = {
 };
 
 describe("UpdatesPanel", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("prompts to scan when there is no patch row", () => {
     render(<UpdatesPanel patches={null} assetTag="PC1" />);
     expect(screen.getByText(/No patch inventory yet/i)).toBeTruthy();
@@ -98,5 +112,15 @@ describe("UpdatesPanel", () => {
     );
     expect(screen.getByText(/Winget not usable over WinRM/i)).toBeTruthy();
     expect(screen.getByText(/no InstallLocation winget.exe/i)).toBeTruthy();
+  });
+
+  it("shows Schedule reboot controls when canInstall", () => {
+    render(
+      <UpdatesPanel patches={SAMPLE} assetTag="PC1" canInstall patchJobs={[]} />,
+    );
+    expect(screen.getByRole("button", { name: /Schedule reboot/i })).toBeTruthy();
+    expect(screen.getByLabelText(/Reboot date and time/i)).toBeTruthy();
+    const btn = screen.getByRole("button", { name: /Schedule reboot/i });
+    expect((btn as HTMLButtonElement).disabled).toBe(true);
   });
 });

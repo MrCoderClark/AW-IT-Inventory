@@ -20,6 +20,11 @@ import {
   type PatchInstallListItem,
 } from "@/db/patch-install";
 import { getComputerPatches, type ComputerPatches } from "@/db/patches";
+import {
+  enqueueRebootJob,
+  listRebootJobsForAssetTag,
+  type RebootListItem,
+} from "@/db/reboot";
 import { getCurrentUser, hasPermission } from "@/lib/auth/session";
 
 /**
@@ -27,7 +32,7 @@ import { getCurrentUser, hasPermission } from "@/lib/auth/session";
  * `software:deploy` (AC-15 / AC-20).
  */
 
-type ActionOk = { ok: true; id?: string };
+type ActionOk = { ok: true; id?: string; rebootWarning?: string };
 type ActionErr = {
   ok: false;
   error: string;
@@ -40,10 +45,42 @@ const FORBIDDEN: ActionErr = {
   code: "forbidden",
 };
 
+function rebootSkipMessage(reason: "already-inflight" | "past-schedule"): string {
+  if (reason === "past-schedule") {
+    return "Reboot time was in the past — install queued without a linked reboot.";
+  }
+  return "A reboot is already scheduled or in progress — install queued without a linked reboot.";
+}
+
+async function enqueueLinkedRebootAfterInstall(input: {
+  installJobId: string;
+  assetId: string;
+  targetIp: string;
+  rebootAtIso: string;
+  requestedBy: string;
+}): Promise<string | undefined> {
+  const iso = input.rebootAtIso.trim();
+  if (!iso) return undefined;
+  const scheduledAt = new Date(iso);
+  if (Number.isNaN(scheduledAt.getTime())) {
+    return "Invalid reboot time — install queued without a linked reboot.";
+  }
+  const enq = await enqueueRebootJob({
+    assetId: input.assetId,
+    targetIp: input.targetIp,
+    scheduledAt,
+    requestedBy: input.requestedBy,
+    sourcePatchInstallJobId: input.installJobId,
+  });
+  if (!enq.ok) return rebootSkipMessage(enq.reason);
+  return undefined;
+}
+
 export async function requestPatchInstall(input: {
   assetTag: string;
   osKbIds: string[];
   packageIds: string[];
+  rebootAtIso?: string;
 }): Promise<ActionOk | ActionErr> {
   const user = await getCurrentUser();
   if (!user || !hasPermission(user, "software:deploy")) return FORBIDDEN;
@@ -90,14 +127,33 @@ export async function requestPatchInstall(input: {
     };
   }
 
+  const rebootWarning =
+    input.rebootAtIso?.trim()
+      ? await enqueueLinkedRebootAfterInstall({
+          installJobId: enq.id,
+          assetId: target.assetId,
+          targetIp: target.ip,
+          rebootAtIso: input.rebootAtIso,
+          requestedBy: user.email,
+        })
+      : undefined;
+
   revalidatePath(`/assets/${tag}`);
-  return { ok: true, id: enq.id };
+  return rebootWarning
+    ? { ok: true, id: enq.id, rebootWarning }
+    : { ok: true, id: enq.id };
 }
 
 export async function requestFleetOsPatchInstall(input: {
   assetTags: string[];
+  rebootAtIso?: string;
 }): Promise<
-  | { ok: true; enqueued: string[]; skipped: { tag: string; reason: string }[] }
+  | {
+      ok: true;
+      enqueued: string[];
+      skipped: { tag: string; reason: string }[];
+      rebootWarnings?: { installId: string; message: string }[];
+    }
   | ActionErr
 > {
   const user = await getCurrentUser();
@@ -123,8 +179,29 @@ export async function requestFleetOsPatchInstall(input: {
     tags,
     requestedBy: user.email,
   });
+
+  let rebootWarnings: { installId: string; message: string }[] | undefined;
+  if (input.rebootAtIso?.trim() && result.enqueued.length) {
+    rebootWarnings = [];
+    for (const installId of result.enqueued) {
+      const job = await getPatchInstallJob(installId);
+      if (!job) continue;
+      const message = await enqueueLinkedRebootAfterInstall({
+        installJobId: installId,
+        assetId: job.assetId,
+        targetIp: job.targetIp,
+        rebootAtIso: input.rebootAtIso,
+        requestedBy: user.email,
+      });
+      if (message) rebootWarnings.push({ installId, message });
+    }
+    if (rebootWarnings.length === 0) rebootWarnings = undefined;
+  }
+
   revalidatePath("/patches");
-  return { ok: true, ...result };
+  return rebootWarnings
+    ? { ok: true, ...result, rebootWarnings }
+    : { ok: true, ...result };
 }
 
 export async function requestCancelPatchInstall(input: {
@@ -193,6 +270,7 @@ export async function pollUpdatesSnapshot(assetTag: string): Promise<
       patches: ComputerPatches | null;
       patchJobs: PatchInstallListItem[];
       checkJobs: MissingCheckListItem[];
+      rebootJobs: RebootListItem[];
     }
   | ActionErr
 > {
@@ -203,10 +281,11 @@ export async function pollUpdatesSnapshot(assetTag: string): Promise<
   const tag = (assetTag ?? "").trim();
   if (!tag) return { ok: false, error: "Missing asset.", code: "badrequest" };
 
-  const [patches, patchJobs, checkJobs] = await Promise.all([
+  const [patches, patchJobs, checkJobs, rebootJobs] = await Promise.all([
     getComputerPatches(tag),
     listPatchInstallsForAssetTag(tag, 20),
     listMissingUpdateChecksForAssetTag(tag, 10),
+    listRebootJobsForAssetTag(tag, 20),
   ]);
-  return { ok: true, patches, patchJobs, checkJobs };
+  return { ok: true, patches, patchJobs, checkJobs, rebootJobs };
 }

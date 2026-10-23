@@ -59,6 +59,7 @@ const H = vi.hoisted(() => {
   const resolveDeployTargetMock = vi.fn();
   const enqueueScanMock = vi.fn().mockResolvedValue("scan-1");
   const enqueueMissingCheckMock = vi.fn().mockResolvedValue({ ok: true, id: "c1" });
+  const syncLinkedRebootsMock = vi.fn();
 
   return {
     state,
@@ -71,6 +72,7 @@ const H = vi.hoisted(() => {
     resolveDeployTargetMock,
     enqueueScanMock,
     enqueueMissingCheckMock,
+    syncLinkedRebootsMock,
   };
 });
 
@@ -98,6 +100,10 @@ vi.mock("@/db/index", () => ({
 vi.mock("@/db/software-deploy", () => ({
   resolveDeployTarget: (...args: unknown[]) =>
     H.resolveDeployTargetMock(...args),
+}));
+vi.mock("@/db/reboot", () => ({
+  syncLinkedRebootsForInstall: (...args: unknown[]) =>
+    H.syncLinkedRebootsMock(...args),
 }));
 
 import {
@@ -412,6 +418,45 @@ describe("updatePatchInstallStatus — fenced (AC-17)", () => {
     ).toBe("stale");
     expect(H.enqueueScanMock).not.toHaveBeenCalled();
     expect(H.enqueueMissingCheckMock).not.toHaveBeenCalled();
+    expect(H.syncLinkedRebootsMock).not.toHaveBeenCalled();
+  });
+
+  it("syncs linked reboots on failed terminal status", async () => {
+    H.state.updateReturns = [
+      [
+        {
+          id: JID,
+          assetId: "a1",
+          targetIp: "192.168.70.5",
+          selection: SEL,
+          requestedBy: "me@x.com",
+        },
+      ],
+    ];
+    expect(
+      await updatePatchInstallStatus(JID, {
+        ...FENCE,
+        status: "failed",
+        error: "timeout",
+      }),
+    ).toBe("ok");
+    expect(H.syncLinkedRebootsMock).toHaveBeenCalledWith(JID, "failed");
+  });
+
+  it("syncs linked reboots on succeeded", async () => {
+    H.state.updateReturns = [
+      [
+        {
+          id: JID,
+          assetId: "a1",
+          targetIp: "192.168.70.5",
+          selection: { os: [], apps: SEL.apps },
+          requestedBy: "me@x.com",
+        },
+      ],
+    ];
+    await updatePatchInstallStatus(JID, { ...FENCE, status: "succeeded" });
+    expect(H.syncLinkedRebootsMock).toHaveBeenCalledWith(JID, "succeeded");
   });
 });
 
@@ -419,6 +464,7 @@ describe("cancelPatchInstall", () => {
   it("cancels an in-flight job", async () => {
     H.state.updateReturns = [[{ id: JID }]];
     expect(await cancelPatchInstall(JID)).toBe(true);
+    expect(H.syncLinkedRebootsMock).toHaveBeenCalledWith(JID, "canceled");
   });
 });
 

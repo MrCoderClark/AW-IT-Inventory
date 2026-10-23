@@ -52,6 +52,7 @@ import type { DeviceMetrics } from "@/db/metrics";
 import type { ComputerPatches } from "@/db/patches";
 import type { MissingCheckListItem } from "@/db/missing-update-checks";
 import type { PatchInstallListItem } from "@/db/patch-install";
+import type { RebootListItem } from "@/db/reboot";
 import type { CompliancePosture } from "@/lib/compliance-score";
 import type {
   PackageOption,
@@ -329,6 +330,7 @@ export function ComputerDetail({
   patches = null,
   patchJobs = [],
   checkJobs = [],
+  rebootJobs = [],
   deployPackages = [],
   deployHistory = [],
   scriptOptions = [],
@@ -360,6 +362,7 @@ export function ComputerDetail({
   patches?: ComputerPatches | null;
   patchJobs?: PatchInstallListItem[];
   checkJobs?: MissingCheckListItem[];
+  rebootJobs?: RebootListItem[];
   deployPackages?: DeployPackageOption[];
   deployHistory?: DeployHistoryItem[];
   scriptOptions?: ScriptOption[];
@@ -918,6 +921,7 @@ export function ComputerDetail({
             canInstall={canDeploy}
             patchJobs={patchJobs}
             checkJobs={checkJobs}
+            rebootJobs={rebootJobs}
           />
         </TabsPanel>
 

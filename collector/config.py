@@ -220,6 +220,8 @@ class Config(BaseModel):
     # Optional per-package mirror URLs when winget cannot reach the vendor CDN
     # (spec 31). Keyed by winget package id. Empty = no fallbacks.
     app_upgrade_mirrors: dict[str, AppUpgradeMirror] = Field(default_factory=dict)
+    # Wall-clock cap (seconds) waiting on Restart-Computer -Force (spec 31 v2).
+    reboot_timeout: int = 60
 
     @property
     def profiles_by_id(self) -> dict[str, CredentialProfile]:

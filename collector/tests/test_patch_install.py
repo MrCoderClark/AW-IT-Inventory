@@ -230,6 +230,35 @@ def test_load_config_app_upgrade_mirrors(tmp_path: Path):
     assert m.type is None
 
 
+def test_parse_item_extracts_json_from_winget_chatter():
+    # Real WinRM stdout: winget text, then our JSON, then CLIXML progress.
+    raw = (
+        "No available upgrade found.\r\n"
+        "No newer package versions are available from the configured sources.\r\n"
+        '{"ok":false,"exitCode":-1978335189,"rebootRequired":false,"detail":"exit -1978335189"}\r\n'
+        "\n#< CLIXML\r\n<Objs Version=\"1.1.0.1\""
+    )
+    p = _parse_item(raw)
+    assert p["exitCode"] == -1978335189
+    assert p["ok"] is False  # raw script before treating no-upgrade as ok
+
+
+def test_parse_item_extracts_successful_install_json():
+    raw = (
+        "Successfully installed\r\n"
+        '{"ok":true,"exitCode":0,"rebootRequired":false,"detail":""}\r\n'
+        "\n#< CLIXML\r\n"
+    )
+    p = _parse_item(raw)
+    assert p["ok"] is True
+    assert p["exitCode"] == 0
+
+
+def test_ps_app_treats_no_upgrade_as_ok():
+    assert "-1978335189" in PS_INSTALL_APP
+    assert "RedirectStandardOutput" in PS_INSTALL_APP
+
+
 def test_run_patch_install_runs_os_then_apps(monkeypatch):
     cfg = Config()
     calls: list[str] = []

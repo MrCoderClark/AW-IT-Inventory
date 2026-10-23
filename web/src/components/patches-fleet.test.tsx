@@ -18,6 +18,7 @@ const ROWS: FleetPatchRow[] = [
   {
     tag: "A",
     name: "Clean PC",
+    assigneeName: "Ada Lovelace",
     pendingReboot: false,
     hotfixCount: 10,
     wingetAvailable: true,
@@ -29,6 +30,7 @@ const ROWS: FleetPatchRow[] = [
   {
     tag: "B",
     name: "Needs reboot",
+    assigneeName: null,
     pendingReboot: true,
     hotfixCount: 8,
     wingetAvailable: true,
@@ -40,6 +42,7 @@ const ROWS: FleetPatchRow[] = [
   {
     tag: "C",
     name: "Never scanned",
+    assigneeName: null,
     pendingReboot: null,
     hotfixCount: 0,
     wingetAvailable: null,
@@ -53,6 +56,12 @@ const ROWS: FleetPatchRow[] = [
 describe("PatchesFleet", () => {
   beforeEach(() => {
     vi.mocked(requestFleetOsPatchInstall).mockReset();
+  });
+
+  it("shows assignee next to the computer name", () => {
+    render(<PatchesFleet rows={ROWS} canDeploy={false} />);
+    expect(screen.getByText("Ada Lovelace")).toBeTruthy();
+    expect(screen.getAllByText("Pool").length).toBeGreaterThanOrEqual(1);
   });
 
   it("hides Install OS updates without canDeploy", () => {
@@ -124,6 +133,33 @@ describe("PatchesFleet", () => {
     expect(screen.getByText("Needs reboot")).toBeTruthy();
     expect(screen.getByText("Never scanned")).toBeTruthy();
     expect(screen.getByText("3 of 3 computers")).toBeTruthy();
+  });
+
+  it("fleet confirm passes rebootAtIso when checked", async () => {
+    vi.mocked(requestFleetOsPatchInstall).mockResolvedValue({
+      ok: true,
+      enqueued: ["jid"],
+      skipped: [],
+    });
+    const user = userEvent.setup();
+    render(<PatchesFleet rows={ROWS} canDeploy />);
+    await user.click(screen.getByLabelText(/Select Needs reboot/i));
+    await user.click(
+      screen.getByRole("button", { name: /Install OS updates/i }),
+    );
+    const dialog = screen.getByRole("dialog");
+    await user.click(within(dialog).getByLabelText(/Also reboot at/i));
+    await user.type(
+      within(dialog).getByLabelText(/Reboot after install/i),
+      "2026-12-01T14:30",
+    );
+    await user.click(within(dialog).getByRole("button", { name: /^Install$/i }));
+    await waitFor(() =>
+      expect(requestFleetOsPatchInstall).toHaveBeenCalledWith({
+        assetTags: ["B"],
+        rebootAtIso: new Date("2026-12-01T14:30").toISOString(),
+      }),
+    );
   });
 
   it("the needs-attention filter hides a clean computer", async () => {

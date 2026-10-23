@@ -410,9 +410,9 @@ fleet visibility gap called out in phase 1.
 
 **First v2 slice:** [Fleet OS multi-install from `/patches`](../../superpowers/specs/2026-10-22-spec-31-v2-fleet-os-install-design.md) — multi-select computers, enqueue all missing OS updates per host, global concurrency cap. Implemented on `feat/spec-31-v2-fleet-os-install` (🚧 until merge).
 
-Still deferred — do not block marking 31 complete:
+**Scheduled reboot v2 slice:** [Standalone + install-linked scheduled reboot](../../superpowers/specs/2026-10-22-spec-31-v2-scheduled-reboot-design.md) — exact date/time (`reboot_jobs` queue), Updates tab schedule/cancel, optional reboot on OS install (Updates + fleet). Implemented on `feat/spec-31-v2-scheduled-reboot` (🚧 until merge).
 
-- Optional "reboot when done" on install jobs
+Still deferred — do not block marking 31 complete:
 - WSUS / target-group scoping
 - `.msu` install via Software Library (use spec 23 for packaged push)
 - Spec 30 built-in rules for pending reboot / missing / app-upgrade counts

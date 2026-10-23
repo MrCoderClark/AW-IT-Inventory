@@ -473,6 +473,58 @@ export async function notifyPatchInstallResult(job: {
 }
 
 /**
+ * Raise an in-app notification when a scheduled reboot finishes (spec 31 v2).
+ * Best-effort + idempotent per job+status, like patch install.
+ */
+export async function notifyRebootResult(job: {
+  jobId: string;
+  assetId: string;
+  status: "succeeded" | "failed" | "canceled";
+  requestedBy: string;
+  scheduledAtIso: string;
+  error?: string | null;
+}): Promise<void> {
+  const { audience, recipientEmail } = resolveJobNotificationAudience(job.requestedBy);
+
+  const [asset] = await db
+    .select({ tag: assets.tag, name: assets.name })
+    .from(assets)
+    .where(eq(assets.id, job.assetId))
+    .limit(1);
+
+  const href = asset ? `/assets/${asset.tag}` : "/assets";
+  const on = asset?.name ?? "the computer";
+  const err = (job.error ?? "").trim().slice(0, 300);
+
+  const ok = job.status === "succeeded";
+  const canceled = job.status === "canceled";
+
+  await createNotification({
+    type: ok || canceled ? "reboot" : "reboot-failed",
+    severity: ok || canceled ? "info" : "warning",
+    title: ok
+      ? "Scheduled reboot completed"
+      : canceled
+        ? "Scheduled reboot canceled"
+        : "Scheduled reboot failed",
+    body: ok
+      ? `Forced reboot completed on ${on}.`
+      : canceled
+        ? `Scheduled reboot on ${on} was canceled.`
+        : `Scheduled reboot on ${on} failed${err ? `: ${err}` : "."}`,
+    href,
+    dedupeKey: `reboot:${job.jobId}:${job.status}`,
+    assetId: job.assetId,
+    meta: {
+      jobId: job.jobId,
+      scheduledAtIso: job.scheduledAtIso,
+    },
+    audience,
+    recipientEmail,
+  });
+}
+
+/**
  * Tell the requester that an AI Assist job finished (spec 34). User-targeted
  * only — ops broadcasts stay on the default audience. Idempotent per job and
  * outcome (`ai-assist:<jobId>:ok|fail`).

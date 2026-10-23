@@ -211,3 +211,5 @@ app_upgrade_mirrors:
   VideoLAN.VLC:
     url: "https://mirror.csclub.uwaterloo.ca/vlc/vlc/{version}/win64/vlc-{version}-win64.exe"
     silent_args: "/L=1033 /S"
+# Wall-clock cap (seconds) for a scheduled forced reboot (Restart-Computer -Force).
+reboot_timeout: 60

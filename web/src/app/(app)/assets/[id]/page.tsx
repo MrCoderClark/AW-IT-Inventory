@@ -14,6 +14,7 @@ import { getDeviceMetrics } from "@/db/metrics";
 import { getComputerPatches } from "@/db/patches";
 import { listMissingUpdateChecksForAssetTag } from "@/db/missing-update-checks";
 import { listPatchInstallsForAssetTag } from "@/db/patch-install";
+import { listRebootJobsForAssetTag } from "@/db/reboot";
 import { listScriptRunsForAssetTag } from "@/db/script-runs";
 import { listScripts } from "@/db/scripts";
 import { getPrinterCounters } from "@/db/counters";
@@ -109,6 +110,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
       compliancePosture,
       patches,
       patchJobs,
+      rebootJobs,
       checkJobs,
       deployPkgs,
       deployHistoryRows,
@@ -133,6 +135,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
       getComplianceStatus(id),
       getComputerPatches(id),
       canDeploy ? listPatchInstallsForAssetTag(id) : Promise.resolve([]),
+      canDeploy ? listRebootJobsForAssetTag(id) : Promise.resolve([]),
       canDeploy ? listMissingUpdateChecksForAssetTag(id) : Promise.resolve([]),
       canDeploy ? listSoftwarePackages() : Promise.resolve([]),
       canDeploy ? listDeploymentsForAssetTag(id) : Promise.resolve([]),
@@ -218,6 +221,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
         compliancePosture={compliancePosture}
         patches={patches}
         patchJobs={patchJobs}
+        rebootJobs={rebootJobs}
         checkJobs={checkJobs}
         deployPackages={deployPackages}
         deployHistory={deployHistory}

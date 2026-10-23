@@ -357,6 +357,7 @@ describe("getFleetPatches", () => {
         {
           tag: "A",
           name: "Alpha",
+          assigneeName: "Ada Lovelace",
           pendingReboot: true,
           hotfixCount: 3,
           wingetAvailable: false,
@@ -368,6 +369,7 @@ describe("getFleetPatches", () => {
         {
           tag: "B",
           name: "Beta",
+          assigneeName: null,
           pendingReboot: null,
           hotfixCount: null,
           wingetAvailable: null,
@@ -382,6 +384,7 @@ describe("getFleetPatches", () => {
     expect(rows).toHaveLength(2);
     expect(rows[0]).toMatchObject({
       tag: "A",
+      assigneeName: "Ada Lovelace",
       pendingReboot: true,
       updatesLastDays: 40,
       wingetAvailable: false,
@@ -389,6 +392,7 @@ describe("getFleetPatches", () => {
     });
     expect(rows[1]).toMatchObject({
       tag: "B",
+      assigneeName: null,
       collectedAt: null,
       hotfixCount: 0,
       missingCount: 0,

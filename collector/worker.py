@@ -591,6 +591,103 @@ def _drain_patch_install(config: Config, tokens: "TokenCache", worker_id: str) -
         _run_patch_install_job(config, tokens, worker_id, job)
 
 
+def _claim_reboot(config: Config, token: str, worker_id: str) -> dict | None:
+    """Claim one due scheduled reboot job (spec 31 v2), or None."""
+    resp = httpx.post(
+        f"{config.ingest_url}/api/reboot/claim",
+        json={"workerId": worker_id},
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=30,
+    )
+    if resp.status_code == 204:
+        return None
+    if resp.status_code != 200:
+        raise RuntimeError(
+            f"reboot claim failed ({resp.status_code}): {resp.text[:200]}"
+        )
+    return resp.json()
+
+
+def _post_reboot_status(
+    config: Config,
+    token: str,
+    job_id: str,
+    worker_id: str,
+    claimed_at: str,
+    status: str,
+    *,
+    result: dict | None = None,
+    error: str | None = None,
+) -> bool:
+    """Report reboot status, fenced by the claim (False on 409)."""
+    body: dict = {"workerId": worker_id, "claimedAt": claimed_at, "status": status}
+    if result is not None:
+        body["result"] = result
+    if error is not None:
+        body["error"] = error
+    resp = httpx.post(
+        f"{config.ingest_url}/api/reboot/{job_id}/status",
+        json=body,
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=60,
+    )
+    if resp.status_code == 409:
+        console.print(
+            f"  [yellow]claim lost[/yellow] on reboot {job_id}; dropping result."
+        )
+        return False
+    if resp.status_code != 200:
+        raise RuntimeError(
+            f"reboot status failed ({resp.status_code}): {resp.text[:200]}"
+        )
+    return True
+
+
+def _run_reboot_job(
+    config: Config, tokens: "TokenCache", worker_id: str, job: dict
+) -> None:
+    from reboot import run_reboot
+
+    job_id = job["id"]
+    claimed_at = job["claimedAt"]
+    target = job.get("assetTag") or job.get("targetIp")
+    console.print(f"[bold]Reboot[/bold] {job_id}: forced restart on {target} …")
+
+    if not _post_reboot_status(
+        config, tokens.get(), job_id, worker_id, claimed_at, "running"
+    ):
+        return
+
+    try:
+        status, result = run_reboot(config, job)
+    except Exception as e:  # noqa: BLE001 — worker-level error fails the job
+        console.print(f"  [red]reboot failed:[/red] {e}")
+        _post_reboot_status(
+            config,
+            tokens.get(),
+            job_id,
+            worker_id,
+            claimed_at,
+            "failed",
+            error=str(e)[:800],
+        )
+        return
+
+    if _post_reboot_status(
+        config, tokens.get(), job_id, worker_id, claimed_at, status, result=result
+    ):
+        console.print(f"  [green]done[/green] — {status}.")
+
+
+def _drain_reboot(config: Config, tokens: "TokenCache", worker_id: str) -> None:
+    """Process any due scheduled reboot jobs (spec 31 v2)."""
+    while True:
+        job = _claim_reboot(config, tokens.get(), worker_id)
+        if job is None:
+            return
+        _run_reboot_job(config, tokens, worker_id, job)
+
+
 def _claim_missing_check(config: Config, token: str, worker_id: str) -> dict | None:
     """Claim one pending one-host missing Search (spec 31 AC-21), or None."""
     resp = httpx.post(
@@ -1221,6 +1318,7 @@ def run_worker(args: argparse.Namespace) -> int:
                     _drain_deploy(config, tokens, worker_id)
                     # Spec 31/32: patch install, Check for updates, script runs.
                     _drain_patch_install(config, tokens, worker_id)
+                    _drain_reboot(config, tokens, worker_id)
                     _drain_missing_checks(config, tokens, worker_id)
                     _drain_script_runs(config, tokens, worker_id)
                 if cutout_enabled and now - last_cutout >= cutout_poll:
