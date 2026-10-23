@@ -164,14 +164,14 @@ async function page<T>(
 /**
  * Insert an audit row, or refresh the existing row for `(sourceTable, sourceId)`.
  * `occurredAt` is written only on insert; a conflict keeps the first timestamp.
- * `flagged` is left untouched. Errors return `{ ok: false }` and are logged.
+ * Omitted `status` / `details` default on insert (`pending`, `{}`) and are left
+ * as stored on conflict. `flagged` is left untouched. Errors return `{ ok: false }`
+ * and are logged.
  */
 export async function upsertAuditEvent(
   input: UpsertAuditEventInput,
 ): Promise<{ ok: true; id: string } | { ok: false }> {
   const now = new Date();
-  const details = input.details ?? {};
-  const status = input.status ?? "pending";
   try {
     const [row] = await db
       .insert(computerAuditEvents)
@@ -183,8 +183,8 @@ export async function upsertAuditEvent(
         operator: input.operator,
         source: input.source,
         summary: input.summary,
-        details,
-        status,
+        details: input.details ?? {},
+        status: input.status ?? "pending",
         updatedAt: now,
         ...(input.occurredAt ? { occurredAt: input.occurredAt } : {}),
       })
@@ -196,9 +196,9 @@ export async function upsertAuditEvent(
           operator: input.operator,
           source: input.source,
           summary: input.summary,
-          details,
-          status,
           updatedAt: now,
+          ...(input.status !== undefined ? { status: input.status } : {}),
+          ...(input.details !== undefined ? { details: input.details } : {}),
         },
       })
       .returning({ id: computerAuditEvents.id });

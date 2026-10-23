@@ -234,6 +234,38 @@ describe("upsertAuditEvent", () => {
     expect(set).not.toHaveProperty("flagged");
   });
 
+  it("omits status and details from the conflict set when they are not passed", async () => {
+    H.state.insertReturns = [[{ id: EVENT }]];
+
+    await upsertAuditEvent({
+      sourceTable: "reboot_jobs",
+      sourceId: SOURCE,
+      assetId: ASSET,
+      action: "reboot",
+      operator: "system",
+      source: "scheduled",
+      summary: "Forced reboot",
+    });
+
+    expect(H.state.inserts[0]).toMatchObject({
+      status: "pending",
+      details: {},
+    });
+    const set = H.state.conflictSets[0];
+    expect(set).toMatchObject({
+      assetId: ASSET,
+      action: "reboot",
+      operator: "system",
+      source: "scheduled",
+      summary: "Forced reboot",
+    });
+    expect(set.updatedAt).toBeInstanceOf(Date);
+    expect(set).not.toHaveProperty("status");
+    expect(set).not.toHaveProperty("details");
+    expect(set).not.toHaveProperty("occurredAt");
+    expect(set).not.toHaveProperty("flagged");
+  });
+
   it("returns ok false when the insert throws", async () => {
     H.state.insertError = new Error("db down");
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
