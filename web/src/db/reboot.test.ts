@@ -8,12 +8,14 @@ const H = vi.hoisted(() => {
   const state: {
     selects: unknown[][];
     insertReturns: unknown[][];
+    inserts: unknown[];
     updateReturns: unknown[][];
     updateSets: Record<string, unknown>[];
     execResult: unknown[];
   } = {
     selects: [],
     insertReturns: [],
+    inserts: [],
     updateReturns: [],
     updateSets: [],
     execResult: [],
@@ -31,9 +33,12 @@ const H = vi.hoisted(() => {
   const selectMock = vi.fn(() => makeSelect());
 
   const insertMock = vi.fn(() => ({
-    values: () => ({
-      returning: () => Promise.resolve(state.insertReturns.shift() ?? []),
-    }),
+    values: (vals: unknown) => {
+      state.inserts.push(vals);
+      return {
+        returning: () => Promise.resolve(state.insertReturns.shift() ?? []),
+      };
+    },
   }));
 
   const updateMock = vi.fn(() => ({
@@ -95,6 +100,7 @@ beforeEach(() => {
   delete process.env.REBOOT_STUCK_JOB_TIMEOUT_MS;
   H.state.selects = [];
   H.state.insertReturns = [];
+  H.state.inserts = [];
   H.state.updateReturns = [];
   H.state.updateSets = [];
   H.state.execResult = [];
@@ -140,6 +146,39 @@ describe("enqueueRebootJob", () => {
         sourcePatchInstallJobId: "install-1",
       }),
     ).toEqual({ ok: true, id: JID });
+  });
+
+  it("persists sourceScheduleId on the job", async () => {
+    H.state.selects = [[]];
+    H.state.insertReturns = [[{ id: JID }]];
+    const soon = new Date(Date.now() + 3600_000);
+    const sched = "33333333-3333-4333-8333-333333333333";
+    expect(
+      await enqueueRebootJob({
+        assetId: "a1",
+        targetIp: "1.2.3.4",
+        scheduledAt: soon,
+        requestedBy: "me",
+        sourceScheduleId: sched,
+      }),
+    ).toEqual({ ok: true, id: JID });
+    expect(H.state.inserts[0]).toMatchObject({
+      sourceScheduleId: sched,
+      sourcePatchInstallJobId: null,
+    });
+  });
+
+  it("stores null sourceScheduleId when omitted", async () => {
+    H.state.selects = [[]];
+    H.state.insertReturns = [[{ id: JID }]];
+    const soon = new Date(Date.now() + 3600_000);
+    await enqueueRebootJob({
+      assetId: "a1",
+      targetIp: "1.2.3.4",
+      scheduledAt: soon,
+      requestedBy: "me",
+    });
+    expect(H.state.inserts[0]).toMatchObject({ sourceScheduleId: null });
   });
 });
 

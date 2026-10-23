@@ -32,6 +32,7 @@ export async function enqueueRebootJob(input: {
   scheduledAt: Date;
   requestedBy: string;
   sourcePatchInstallJobId?: string | null;
+  sourceScheduleId?: string | null;
 }): Promise<EnqueueRebootResult> {
   const cutoff = Date.now() - PAST_SCHEDULE_TOLERANCE_MS;
   if (input.scheduledAt.getTime() < cutoff) {
@@ -58,6 +59,7 @@ export async function enqueueRebootJob(input: {
       scheduledAt: input.scheduledAt,
       requestedBy: input.requestedBy,
       sourcePatchInstallJobId: input.sourcePatchInstallJobId ?? null,
+      sourceScheduleId: input.sourceScheduleId ?? null,
     })
     .returning({ id: rebootJobs.id });
   return { ok: true, id: row.id };
