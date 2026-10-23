@@ -129,5 +129,5 @@ Phased so value ships early and risk is front-loaded onto the hard parts (auth, 
 - TLS everywhere; secrets in env/vault; no plaintext creds anywhere in the repo.
 - Automated backups of both Postgres DBs; documented restore.
 - Health checks + structured logging on every service; scan runs produce reports.
-- RBAC enforced server-side (not just hidden UI); audit log for every mutating action.
+- RBAC enforced server-side (not just hidden UI); audit log for every mutating action (computer-scoped `/audit` on `feat/computer-audit-log`; aw-auth mutations still TBD).
 - Documented runbook: deploy, upgrade, rotate keys, add a credential profile, restore.

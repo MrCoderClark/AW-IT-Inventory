@@ -7,11 +7,18 @@ via a feature branch + PR.
 
 ---
 
-## 🚧 Spec 31 v2: Recurring reboot (`feat/spec-31-v2-recurring-reboot`)
+## 🚧 Computer audit log (`feat/computer-audit-log`)
+
+Fleet **`/audit`** page: unified computer action history (dual-write
+`computer_audit_events`), Spec 26 **`computerAuditEvents`** report source, CSV export.
+Stays 🚧 until merge.
+Design: `docs/superpowers/specs/2026-10-23-computer-audit-log-design.md`.
+
+## Shipped ✅ — Spec 31 v2: Recurring reboot (merged #122)
 
 Per-computer **daily/weekly** forced reboot on the Updates tab. `reboot_schedules`
 materializes the next one-shot `reboot_jobs` child; collector due-tick + rematerialize
-on terminal. Stays 🚧 until merge.
+on terminal.
 Design: `docs/superpowers/specs/2026-10-23-spec-31-v2-recurring-reboot-design.md`.
 
 ## Shipped ✅ — Spec 31 v2: Scheduled reboot (merged #121)

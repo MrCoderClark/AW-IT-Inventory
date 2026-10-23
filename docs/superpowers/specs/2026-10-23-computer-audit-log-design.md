@@ -1,11 +1,11 @@
 # Computer audit log — unified action history + reporting
 
 **Date**: 2026-10-23  
-**Status**: Accepted (design)  
+**Status**: Implemented on `feat/computer-audit-log` (🚧 until merge)  
 **Parent**: [Overview](../../specs/00-overview-and-plan.md) (aspirational “audit log for every mutating action”); reporting via [Spec 26](../../specs/26-reporting-engine/index.md)  
 **Related**: Per-feature job tables (deploy, patch, reboot, scripts, remote, assignments); unused `audit:read` in aw-auth RBAC  
 **UI mock**: [`docs/Design/computer-audit-log-mock.png`](../../Design/computer-audit-log-mock.png)  
-**Branch**: `docs/spec-computer-audit-log` (spec); implementation on a later `feat/…` branch
+**Branch**: `feat/computer-audit-log`
 
 ## Goal
 
