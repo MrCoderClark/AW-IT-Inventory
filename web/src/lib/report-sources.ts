@@ -5,6 +5,7 @@
  * row keys MUST match the field ids here. No row here is a secret — these are the
  * same fields already shown around the app.
  */
+import { AUDIT_ACTIONS } from "./computer-audit-actions";
 import type { ReportField, ReportSource } from "./report-spec";
 
 const ASSET_TYPES = ["Computer", "Monitor", "Printer", "Phone", "Network"];
@@ -137,6 +138,34 @@ export const REPORT_SOURCES: Record<string, ReportSource> = {
       { id: "reachability", label: "Reachability", type: "enum", enumValues: ["up", "down", "unknown"] },
       { id: "consecutiveFailures", label: "Consecutive failures", type: "number" },
       { id: "lastCheckedAt", label: "Last checked", type: "date" },
+    ],
+  },
+  computerAuditEvents: {
+    id: "computerAuditEvents",
+    label: "Computer audit events",
+    description: "Computer actions: deploys, patches, reboots, scripts, sessions, and asset changes.",
+    fields: [
+      { id: "occurredAt", label: "Occurred at", type: "date" },
+      { id: "assetTag", label: "Asset tag", type: "text" },
+      { id: "assetName", label: "Asset", type: "text" },
+      { id: "serial", label: "Serial", type: "text" },
+      { id: "action", label: "Action", type: "enum", enumValues: [...AUDIT_ACTIONS] },
+      {
+        id: "status",
+        label: "Status",
+        type: "enum",
+        enumValues: ["pending", "succeeded", "failed", "canceled"],
+      },
+      { id: "operator", label: "Operator", type: "text" },
+      {
+        id: "source",
+        label: "Source",
+        type: "enum",
+        enumValues: ["admin_console", "scheduled", "collector"],
+      },
+      { id: "summary", label: "Summary", type: "text" },
+      { id: "flagged", label: "Flagged", type: "bool" },
+      { id: "location", label: "Location", type: "text" },
     ],
   },
 };
