@@ -18,8 +18,11 @@ import {
   requestPatchInstall,
 } from "@/app/(app)/patch-install-actions";
 import {
+  deleteRebootScheduleAction,
   requestCancelReboot,
   requestRebootSchedule,
+  setRebootScheduleEnabledAction,
+  upsertRebootScheduleAction,
 } from "@/app/(app)/reboot-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,6 +39,11 @@ import type { ComputerPatches } from "@/db/patches";
 import type { MissingCheckListItem } from "@/db/missing-update-checks";
 import type { PatchInstallListItem } from "@/db/patch-install";
 import type { RebootListItem } from "@/db/reboot";
+import type { ScheduleListItem } from "@/db/reboot-schedules";
+import {
+  nextRebootOccurrence,
+  type RebootCadence,
+} from "@/lib/reboot-occurrence";
 
 /**
  * Per-computer Updates tab (spec 31): inventory + Missing + optional Install
@@ -76,6 +84,61 @@ function isActive(status: string): boolean {
   return ACTIVE.has(status);
 }
 
+const WEEKDAYS: { iso: number; label: string }[] = [
+  { iso: 1, label: "Mon" },
+  { iso: 2, label: "Tue" },
+  { iso: 3, label: "Wed" },
+  { iso: 4, label: "Thu" },
+  { iso: 5, label: "Fri" },
+  { iso: 6, label: "Sat" },
+  { iso: 7, label: "Sun" },
+];
+
+type RebootHistoryItem = RebootListItem & { sourceScheduleId?: string | null };
+
+function isRecurringJob(job: RebootHistoryItem): boolean {
+  return job.fromSchedule === true || Boolean(job.sourceScheduleId);
+}
+
+function browserTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
+function normalizeLocalTime(value: string): string | null {
+  const match = /^([01]\d|2[0-3]):([0-5]\d)/.exec(value.trim());
+  if (!match) return null;
+  return `${match[1]}:${match[2]}`;
+}
+
+function sameWeekdays(a: number[] | null, b: number[] | null): boolean {
+  const left = [...(a ?? [])].sort((x, y) => x - y);
+  const right = [...(b ?? [])].sort((x, y) => x - y);
+  if (left.length !== right.length) return false;
+  return left.every((day, index) => day === right[index]);
+}
+
+function previewNextIso(input: {
+  cadence: RebootCadence;
+  weekdays: number[] | null;
+  localTime: string;
+  timezone: string;
+}): string | null {
+  try {
+    return nextRebootOccurrence({
+      cadence: input.cadence,
+      weekdays: input.cadence === "weekly" ? input.weekdays : null,
+      localTime: input.localTime,
+      timezone: input.timezone,
+    }).toISOString();
+  } catch {
+    return null;
+  }
+}
+
 export function UpdatesPanel({
   patches: patchesProp,
   assetTag,
@@ -83,18 +146,30 @@ export function UpdatesPanel({
   patchJobs: patchJobsProp = [],
   checkJobs: checkJobsProp = [],
   rebootJobs: rebootJobsProp = [],
+  schedule: scheduleProp = null,
 }: {
   patches: ComputerPatches | null;
   assetTag: string;
   canInstall?: boolean;
   patchJobs?: PatchInstallListItem[];
   checkJobs?: MissingCheckListItem[];
-  rebootJobs?: RebootListItem[];
+  rebootJobs?: RebootHistoryItem[];
+  schedule?: ScheduleListItem | null;
 }) {
   const [patches, setPatches] = React.useState(patchesProp);
   const [patchJobs, setPatchJobs] = React.useState(patchJobsProp);
   const [checkJobs, setCheckJobs] = React.useState(checkJobsProp);
   const [rebootJobs, setRebootJobs] = React.useState(rebootJobsProp);
+  const [schedule, setSchedule] = React.useState<ScheduleListItem | null>(
+    scheduleProp ?? null,
+  );
+  const [cadence, setCadence] = React.useState<RebootCadence>(
+    scheduleProp?.cadence ?? "daily",
+  );
+  const [weekdays, setWeekdays] = React.useState<number[]>(
+    scheduleProp?.weekdays ?? [],
+  );
+  const [localTime, setLocalTime] = React.useState(scheduleProp?.localTime ?? "");
   const [osSel, setOsSel] = React.useState<Set<string>>(new Set());
   const [appSel, setAppSel] = React.useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = React.useState(false);
@@ -117,6 +192,14 @@ export function UpdatesPanel({
     setCheckJobs(checkJobsProp);
     setRebootJobs(rebootJobsProp);
   }, [patchesProp, patchJobsProp, checkJobsProp, rebootJobsProp]);
+
+  React.useEffect(() => {
+    setSchedule(scheduleProp ?? null);
+    if (!scheduleProp) return;
+    setCadence(scheduleProp.cadence);
+    setWeekdays(scheduleProp.weekdays ?? []);
+    setLocalTime(scheduleProp.localTime);
+  }, [scheduleProp]);
 
   const inflight = patchJobs.some((j) => isActive(j.status));
   const checkInflight = checkJobs.some((j) => isActive(j.status));
@@ -376,6 +459,132 @@ export function UpdatesPanel({
         return;
       }
       toast.success("Check for updates queued");
+      await refreshSnapshot();
+    });
+  }
+
+  const normalizedTime = normalizeLocalTime(localTime);
+  const formWeekdays = cadence === "weekly" ? weekdays : null;
+  const browserTz = browserTimeZone();
+  const formMatchesSchedule =
+    !!schedule &&
+    schedule.cadence === cadence &&
+    normalizeLocalTime(schedule.localTime) === normalizedTime &&
+    sameWeekdays(schedule.weekdays, formWeekdays);
+  const liveNextIso =
+    normalizedTime && (cadence === "daily" || weekdays.length > 0)
+      ? previewNextIso({
+          cadence,
+          weekdays: formWeekdays,
+          localTime: normalizedTime,
+          timezone: browserTz,
+        })
+      : null;
+  const nextIso =
+    formMatchesSchedule && schedule && !schedule.enabled
+      ? null
+      : formMatchesSchedule && schedule?.nextRunAtIso
+        ? schedule.nextRunAtIso
+        : liveNextIso;
+  const canSaveSchedule =
+    !!normalizedTime && (cadence === "daily" || weekdays.length > 0) && !busy;
+
+  function toggleWeekday(iso: number) {
+    setWeekdays((prev) => {
+      const next = prev.includes(iso)
+        ? prev.filter((day) => day !== iso)
+        : [...prev, iso];
+      return next.sort((a, b) => a - b);
+    });
+  }
+
+  function applySavedSchedule(next: ScheduleListItem) {
+    setSchedule(next);
+    setCadence(next.cadence);
+    setWeekdays(next.weekdays ?? []);
+    setLocalTime(next.localTime);
+  }
+
+  function doSaveSchedule() {
+    if (!normalizedTime) return;
+    if (cadence === "weekly" && weekdays.length === 0) return;
+    const timezone = browserTz;
+    startBusy(async () => {
+      const res = await upsertRebootScheduleAction({
+        assetTag,
+        cadence,
+        weekdays: cadence === "weekly" ? weekdays : undefined,
+        localTime: normalizedTime,
+        timezone,
+      });
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      if (res.schedule) {
+        applySavedSchedule(res.schedule);
+      } else {
+        setSchedule({
+          id: res.id,
+          assetId: schedule?.assetId ?? "",
+          cadence,
+          weekdays: cadence === "weekly" ? weekdays : null,
+          localTime: normalizedTime,
+          timezone,
+          enabled: true,
+          requestedBy: schedule?.requestedBy ?? "",
+          nextJobId: null,
+          nextRunAtIso: previewNextIso({
+            cadence,
+            weekdays: cadence === "weekly" ? weekdays : null,
+            localTime: normalizedTime,
+            timezone,
+          }),
+        });
+      }
+      toast.success("Recurring reboot saved");
+      await refreshSnapshot();
+    });
+  }
+
+  function doToggleSchedule() {
+    if (!schedule) return;
+    const enabled = !schedule.enabled;
+    startBusy(async () => {
+      const res = await setRebootScheduleEnabledAction({ assetTag, enabled });
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      let nextRunAtIso: string | null = null;
+      if (enabled) {
+        nextRunAtIso = previewNextIso({
+          cadence: schedule.cadence,
+          weekdays: schedule.weekdays,
+          localTime: schedule.localTime,
+          timezone: schedule.timezone,
+        });
+      }
+      setSchedule({
+        ...schedule,
+        enabled,
+        nextRunAtIso,
+        nextJobId: enabled ? schedule.nextJobId : null,
+      });
+      toast.success(enabled ? "Recurring reboot enabled" : "Recurring reboot disabled");
+      await refreshSnapshot();
+    });
+  }
+
+  function doDeleteSchedule() {
+    startBusy(async () => {
+      const res = await deleteRebootScheduleAction({ assetTag });
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      setSchedule(null);
+      toast.success("Recurring reboot deleted");
       await refreshSnapshot();
     });
   }
@@ -646,6 +855,111 @@ export function UpdatesPanel({
         </Panel>
       )}
 
+      {canInstall && (
+        <Panel icon={<Power />} title="Recurring reboot">
+          <p className="mb-3 text-sm text-muted-foreground">
+            Repeat a forced reboot daily or on selected weekdays. The collector
+            restarts the computer over WinRM and skips any window it misses.
+          </p>
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-xs font-medium text-muted-foreground">
+                Cadence
+              </span>
+              <select
+                aria-label="Cadence"
+                className="rounded-md border bg-background px-2 py-1.5 text-sm"
+                value={cadence}
+                disabled={busy}
+                onChange={(e) =>
+                  setCadence(e.target.value === "weekly" ? "weekly" : "daily")
+                }
+              >
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-xs font-medium text-muted-foreground">
+                Local time
+              </span>
+              <input
+                type="time"
+                aria-label="Reboot time"
+                className="rounded-md border bg-background px-2 py-1.5 text-sm"
+                value={localTime}
+                disabled={busy}
+                onChange={(e) => setLocalTime(e.target.value)}
+              />
+            </label>
+          </div>
+          {cadence === "weekly" && (
+            <div className="mt-3 flex flex-wrap gap-3">
+              {WEEKDAYS.map((day) => (
+                <label
+                  key={day.iso}
+                  className="flex items-center gap-1.5 text-sm"
+                >
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-primary"
+                    checked={weekdays.includes(day.iso)}
+                    disabled={busy}
+                    onChange={() => toggleWeekday(day.iso)}
+                  />
+                  {day.label}
+                </label>
+              ))}
+            </div>
+          )}
+          {schedule ? (
+            <p className="mt-3 text-xs text-muted-foreground">
+              {schedule.enabled ? "Enabled" : "Disabled"} · {schedule.timezone}
+            </p>
+          ) : null}
+          {nextIso ? (
+            <p className="mt-2 text-sm text-muted-foreground">
+              Next:{" "}
+              <span className="font-medium text-foreground">
+                {fmtDateTime(nextIso)}
+              </span>
+            </p>
+          ) : cadence === "weekly" && weekdays.length === 0 ? (
+            <p className="mt-2 text-sm text-muted-foreground">
+              Select at least one weekday.
+            </p>
+          ) : null}
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Button disabled={!canSaveSchedule} onClick={doSaveSchedule}>
+              {busy ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Power className="size-4" />
+              )}
+              Save schedule
+            </Button>
+            {schedule ? (
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={doToggleSchedule}
+              >
+                {schedule.enabled ? "Disable" : "Enable"}
+              </Button>
+            ) : null}
+            {schedule ? (
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={doDeleteSchedule}
+              >
+                Delete
+              </Button>
+            ) : null}
+          </div>
+        </Panel>
+      )}
+
       {canInstall && rebootJobs.length > 0 && (
         <Panel icon={<Power />} title="Reboot history">
           <ul className="divide-y rounded-lg border">
@@ -660,6 +974,9 @@ export function UpdatesPanel({
                   </span>
                   {j.sourcePatchInstallJobId ? (
                     <span className="text-muted-foreground"> · after install</span>
+                  ) : null}
+                  {isRecurringJob(j) ? (
+                    <span className="text-muted-foreground"> · recurring</span>
                   ) : null}
                   <span className="text-muted-foreground"> · {j.requestedBy}</span>
                   <span className="mt-0.5 block text-xs text-muted-foreground">

@@ -32,6 +32,7 @@ export async function enqueueRebootJob(input: {
   scheduledAt: Date;
   requestedBy: string;
   sourcePatchInstallJobId?: string | null;
+  sourceScheduleId?: string | null;
 }): Promise<EnqueueRebootResult> {
   const cutoff = Date.now() - PAST_SCHEDULE_TOLERANCE_MS;
   if (input.scheduledAt.getTime() < cutoff) {
@@ -58,6 +59,7 @@ export async function enqueueRebootJob(input: {
       scheduledAt: input.scheduledAt,
       requestedBy: input.requestedBy,
       sourcePatchInstallJobId: input.sourcePatchInstallJobId ?? null,
+      sourceScheduleId: input.sourceScheduleId ?? null,
     })
     .returning({ id: rebootJobs.id });
   return { ok: true, id: row.id };
@@ -186,11 +188,12 @@ export async function updateRebootStatus(
       assetId: rebootJobs.assetId,
       requestedBy: rebootJobs.requestedBy,
       scheduledAt: rebootJobs.scheduledAt,
+      sourceScheduleId: rebootJobs.sourceScheduleId,
     });
 
   if (updated.length) {
+    const row = updated[0];
     if (u.status === "succeeded" || u.status === "failed") {
-      const row = updated[0];
       await notifyRebootResult({
         jobId: row.id,
         assetId: row.assetId,
@@ -199,6 +202,10 @@ export async function updateRebootStatus(
         scheduledAtIso: row.scheduledAt.toISOString(),
         error: u.error ?? null,
       });
+      if (row.sourceScheduleId) {
+        const { onScheduleJobTerminal } = await import("./reboot-schedules");
+        await onScheduleJobTerminal(jobId);
+      }
     }
     return "ok";
   }
@@ -228,6 +235,7 @@ export async function cancelRebootJob(jobId: string): Promise<boolean> {
       assetId: rebootJobs.assetId,
       requestedBy: rebootJobs.requestedBy,
       scheduledAt: rebootJobs.scheduledAt,
+      sourceScheduleId: rebootJobs.sourceScheduleId,
     });
   if (updated.length) {
     const row = updated[0];
@@ -238,6 +246,10 @@ export async function cancelRebootJob(jobId: string): Promise<boolean> {
       requestedBy: row.requestedBy,
       scheduledAtIso: row.scheduledAt.toISOString(),
     });
+    if (row.sourceScheduleId) {
+      const { onScheduleJobTerminal } = await import("./reboot-schedules");
+      await onScheduleJobTerminal(jobId);
+    }
     return true;
   }
   return false;
@@ -280,6 +292,8 @@ export type RebootListItem = {
   status: RebootJobRow["status"];
   scheduledAt: string;
   sourcePatchInstallJobId: string | null;
+  /** True when this job was materialized from a recurring schedule. */
+  fromSchedule: boolean;
   requestedBy: string;
   error: string | null;
   finishedAt: string | null;
@@ -296,6 +310,7 @@ export async function listRebootJobsForAssetTag(
       status: rebootJobs.status,
       scheduledAt: rebootJobs.scheduledAt,
       sourcePatchInstallJobId: rebootJobs.sourcePatchInstallJobId,
+      sourceScheduleId: rebootJobs.sourceScheduleId,
       requestedBy: rebootJobs.requestedBy,
       error: rebootJobs.error,
       finishedAt: rebootJobs.finishedAt,
@@ -313,6 +328,7 @@ export async function listRebootJobsForAssetTag(
     status: r.status,
     scheduledAt: r.scheduledAt.toISOString(),
     sourcePatchInstallJobId: r.sourcePatchInstallJobId,
+    fromSchedule: Boolean(r.sourceScheduleId),
     requestedBy: r.requestedBy,
     error: r.error,
     finishedAt: r.finishedAt ? r.finishedAt.toISOString() : null,

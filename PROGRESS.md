@@ -7,11 +7,18 @@ via a feature branch + PR.
 
 ---
 
-## 🚧 Spec 31 v2: Scheduled reboot (`feat/spec-31-v2-scheduled-reboot`)
+## 🚧 Spec 31 v2: Recurring reboot (`feat/spec-31-v2-recurring-reboot`)
+
+Per-computer **daily/weekly** forced reboot on the Updates tab. `reboot_schedules`
+materializes the next one-shot `reboot_jobs` child; collector due-tick + rematerialize
+on terminal. Stays 🚧 until merge.
+Design: `docs/superpowers/specs/2026-10-23-spec-31-v2-recurring-reboot-design.md`.
+
+## Shipped ✅ — Spec 31 v2: Scheduled reboot (merged #121)
 
 Standalone **Schedule reboot** on the Updates tab plus optional **Also reboot at…** when
 enqueueing OS install (Updates or fleet `/patches`). `reboot_jobs` queue; collector reboots
-at `scheduledAt` over WinRM. Stays 🚧 until merge.
+at `scheduledAt` over WinRM.
 Design: `docs/superpowers/specs/2026-10-22-spec-31-v2-scheduled-reboot-design.md`.
 
 ## 🚧 Spec 31 v2: Fleet OS multi-install (`feat/spec-31-v2-fleet-os-install`)

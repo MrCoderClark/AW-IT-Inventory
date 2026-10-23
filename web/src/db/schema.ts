@@ -1403,6 +1403,35 @@ export const patchInstallJobs = pgTable(
 
 export type PatchInstallJobRow = typeof patchInstallJobs.$inferSelect;
 
+/** Recurring reboot cadence per asset (spec 31 v2). One schedule per machine. */
+export const rebootSchedules = pgTable(
+  "reboot_schedules",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    cadence: text("cadence").$type<"daily" | "weekly">().notNull(),
+    weekdays: integer("weekdays").array(), // null for daily
+    localTime: text("local_time").notNull(),
+    timezone: text("timezone").notNull(),
+    enabled: boolean("enabled").notNull().default(true),
+    requestedBy: text("requested_by").notNull(),
+    nextJobId: uuid("next_job_id").references((): AnyPgColumn => rebootJobs.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [uniqueIndex("reboot_schedules_asset_uidx").on(t.assetId)],
+);
+
+export type RebootScheduleRow = typeof rebootSchedules.$inferSelect;
+
 /** Scheduled forced reboot queue (spec 31 v2). Standalone or linked to patch install. */
 export const rebootJobs = pgTable(
   "reboot_jobs",
@@ -1415,6 +1444,10 @@ export const rebootJobs = pgTable(
     scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull(),
     sourcePatchInstallJobId: uuid("source_patch_install_job_id").references(
       () => patchInstallJobs.id,
+      { onDelete: "set null" },
+    ),
+    sourceScheduleId: uuid("source_schedule_id").references(
+      () => rebootSchedules.id,
       { onDelete: "set null" },
     ),
     status: text("status")
@@ -1445,6 +1478,7 @@ export const rebootJobs = pgTable(
       .on(t.assetId)
       .where(sql`${t.status} in ('pending','claimed','running')`),
     index("reboot_jobs_source_install_idx").on(t.sourcePatchInstallJobId),
+    index("reboot_jobs_source_schedule_idx").on(t.sourceScheduleId),
   ],
 );
 

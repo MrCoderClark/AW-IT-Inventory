@@ -8,12 +8,14 @@ const H = vi.hoisted(() => {
   const state: {
     selects: unknown[][];
     insertReturns: unknown[][];
+    inserts: unknown[];
     updateReturns: unknown[][];
     updateSets: Record<string, unknown>[];
     execResult: unknown[];
   } = {
     selects: [],
     insertReturns: [],
+    inserts: [],
     updateReturns: [],
     updateSets: [],
     execResult: [],
@@ -31,9 +33,12 @@ const H = vi.hoisted(() => {
   const selectMock = vi.fn(() => makeSelect());
 
   const insertMock = vi.fn(() => ({
-    values: () => ({
-      returning: () => Promise.resolve(state.insertReturns.shift() ?? []),
-    }),
+    values: (vals: unknown) => {
+      state.inserts.push(vals);
+      return {
+        returning: () => Promise.resolve(state.insertReturns.shift() ?? []),
+      };
+    },
   }));
 
   const updateMock = vi.fn(() => ({
@@ -63,10 +68,16 @@ const H = vi.hoisted(() => {
 });
 
 const notifyMock = vi.hoisted(() => vi.fn(async () => undefined));
+const onScheduleJobTerminalMock = vi.hoisted(() =>
+  vi.fn(async () => undefined),
+);
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/db/scan", () => ({ isWorkerLive: vi.fn().mockResolvedValue(true) }));
 vi.mock("./notifications", () => ({ notifyRebootResult: notifyMock }));
+vi.mock("./reboot-schedules", () => ({
+  onScheduleJobTerminal: onScheduleJobTerminalMock,
+}));
 vi.mock("@/db/index", () => ({
   db: {
     select: H.selectMock,
@@ -95,6 +106,7 @@ beforeEach(() => {
   delete process.env.REBOOT_STUCK_JOB_TIMEOUT_MS;
   H.state.selects = [];
   H.state.insertReturns = [];
+  H.state.inserts = [];
   H.state.updateReturns = [];
   H.state.updateSets = [];
   H.state.execResult = [];
@@ -140,6 +152,39 @@ describe("enqueueRebootJob", () => {
         sourcePatchInstallJobId: "install-1",
       }),
     ).toEqual({ ok: true, id: JID });
+  });
+
+  it("persists sourceScheduleId on the job", async () => {
+    H.state.selects = [[]];
+    H.state.insertReturns = [[{ id: JID }]];
+    const soon = new Date(Date.now() + 3600_000);
+    const sched = "33333333-3333-4333-8333-333333333333";
+    expect(
+      await enqueueRebootJob({
+        assetId: "a1",
+        targetIp: "1.2.3.4",
+        scheduledAt: soon,
+        requestedBy: "me",
+        sourceScheduleId: sched,
+      }),
+    ).toEqual({ ok: true, id: JID });
+    expect(H.state.inserts[0]).toMatchObject({
+      sourceScheduleId: sched,
+      sourcePatchInstallJobId: null,
+    });
+  });
+
+  it("stores null sourceScheduleId when omitted", async () => {
+    H.state.selects = [[]];
+    H.state.insertReturns = [[{ id: JID }]];
+    const soon = new Date(Date.now() + 3600_000);
+    await enqueueRebootJob({
+      assetId: "a1",
+      targetIp: "1.2.3.4",
+      scheduledAt: soon,
+      requestedBy: "me",
+    });
+    expect(H.state.inserts[0]).toMatchObject({ sourceScheduleId: null });
   });
 });
 
@@ -211,6 +256,7 @@ describe("updateRebootStatus — fenced", () => {
           assetId: "a1",
           requestedBy: "me@x.com",
           scheduledAt: new Date("2026-10-22T18:00:00.000Z"),
+          sourceScheduleId: null,
         },
       ],
     ];
@@ -229,6 +275,46 @@ describe("updateRebootStatus — fenced", () => {
       await updateRebootStatus(JID, { ...FENCE, status: "succeeded" }),
     ).toBe("stale");
     expect(notifyMock).not.toHaveBeenCalled();
+    expect(onScheduleJobTerminalMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("updateRebootStatus — schedule rematerialize", () => {
+  const SCHED = "33333333-3333-4333-8333-333333333333";
+  const row = {
+    id: JID,
+    assetId: "a1",
+    requestedBy: "me@x.com",
+    scheduledAt: new Date("2026-10-22T18:00:00.000Z"),
+  };
+
+  it("calls onScheduleJobTerminal once when succeeded with sourceScheduleId", async () => {
+    H.state.updateReturns = [[{ ...row, sourceScheduleId: SCHED }]];
+    await updateRebootStatus(JID, { ...FENCE, status: "succeeded" });
+    expect(onScheduleJobTerminalMock).toHaveBeenCalledTimes(1);
+    expect(onScheduleJobTerminalMock).toHaveBeenCalledWith(JID);
+  });
+
+  it("calls onScheduleJobTerminal when failed with sourceScheduleId", async () => {
+    H.state.updateReturns = [[{ ...row, sourceScheduleId: SCHED }]];
+    await updateRebootStatus(JID, {
+      ...FENCE,
+      status: "failed",
+      error: "timeout",
+    });
+    expect(onScheduleJobTerminalMock).toHaveBeenCalledWith(JID);
+  });
+
+  it("does not rematerialize when sourceScheduleId is null", async () => {
+    H.state.updateReturns = [[{ ...row, sourceScheduleId: null }]];
+    await updateRebootStatus(JID, { ...FENCE, status: "succeeded" });
+    expect(onScheduleJobTerminalMock).not.toHaveBeenCalled();
+  });
+
+  it("does not rematerialize on running", async () => {
+    H.state.updateReturns = [[{ ...row, sourceScheduleId: SCHED }]];
+    await updateRebootStatus(JID, { ...FENCE, status: "running" });
+    expect(onScheduleJobTerminalMock).not.toHaveBeenCalled();
   });
 });
 
@@ -241,6 +327,7 @@ describe("cancelRebootJob", () => {
           assetId: "a1",
           requestedBy: "me@x.com",
           scheduledAt: new Date("2026-10-22T18:00:00.000Z"),
+          sourceScheduleId: null,
         },
       ],
     ];
@@ -248,6 +335,24 @@ describe("cancelRebootJob", () => {
     expect(notifyMock).toHaveBeenCalledWith(
       expect.objectContaining({ jobId: JID, status: "canceled" }),
     );
+    expect(onScheduleJobTerminalMock).not.toHaveBeenCalled();
+  });
+
+  it("calls onScheduleJobTerminal when canceled job has sourceScheduleId", async () => {
+    const SCHED = "33333333-3333-4333-8333-333333333333";
+    H.state.updateReturns = [
+      [
+        {
+          id: JID,
+          assetId: "a1",
+          requestedBy: "me@x.com",
+          scheduledAt: new Date("2026-10-22T18:00:00.000Z"),
+          sourceScheduleId: SCHED,
+        },
+      ],
+    ];
+    expect(await cancelRebootJob(JID)).toBe(true);
+    expect(onScheduleJobTerminalMock).toHaveBeenCalledWith(JID);
   });
 });
 
@@ -264,6 +369,7 @@ describe("listRebootJobsForAssetTag", () => {
           requestedBy: "alice",
           error: null,
           finishedAt: null,
+          sourceScheduleId: "sched-1",
         },
         {
           id: "22222222-2222-4222-8222-222222222222",
@@ -286,6 +392,7 @@ describe("listRebootJobsForAssetTag", () => {
         error: null,
         finishedAt: null,
         waitingForCollector: true,
+        fromSchedule: true,
       },
       {
         id: "22222222-2222-4222-8222-222222222222",
@@ -296,6 +403,7 @@ describe("listRebootJobsForAssetTag", () => {
         error: null,
         finishedAt: "2026-10-18T13:00:00.000Z",
         waitingForCollector: false,
+        fromSchedule: false,
       },
     ]);
     expect(H.selectMock).toHaveBeenCalled();

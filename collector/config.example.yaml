@@ -180,6 +180,11 @@ report_delivery_interval_minutes: 15
 # script_schedules. Web materializes each into a fan-out batch. 0 turns it off.
 script_schedule_interval_minutes: 15
 
+# Recurring reboot schedules (spec 31 v2): how often (minutes) to poll web for
+# enabled schedules missing an in-flight child. Web materializes each into a
+# reboot_jobs row. 0 turns it off.
+reboot_schedule_interval_minutes: 1
+
 # Device metric sampling (spec 29): how often (minutes) to read CPU/RAM/disk/uptime
 # from every manually-entered computer over WinRM — a light loop separate from the
 # full scan, feeding the device Monitoring sparklines. 0 turns it off.

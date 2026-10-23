@@ -53,6 +53,7 @@ import type { ComputerPatches } from "@/db/patches";
 import type { MissingCheckListItem } from "@/db/missing-update-checks";
 import type { PatchInstallListItem } from "@/db/patch-install";
 import type { RebootListItem } from "@/db/reboot";
+import type { ScheduleListItem } from "@/db/reboot-schedules";
 import type { CompliancePosture } from "@/lib/compliance-score";
 import type {
   PackageOption,
@@ -331,6 +332,7 @@ export function ComputerDetail({
   patchJobs = [],
   checkJobs = [],
   rebootJobs = [],
+  rebootSchedule = null,
   deployPackages = [],
   deployHistory = [],
   scriptOptions = [],
@@ -363,6 +365,7 @@ export function ComputerDetail({
   patchJobs?: PatchInstallListItem[];
   checkJobs?: MissingCheckListItem[];
   rebootJobs?: RebootListItem[];
+  rebootSchedule?: ScheduleListItem | null;
   deployPackages?: DeployPackageOption[];
   deployHistory?: DeployHistoryItem[];
   scriptOptions?: ScriptOption[];
@@ -922,6 +925,7 @@ export function ComputerDetail({
             patchJobs={patchJobs}
             checkJobs={checkJobs}
             rebootJobs={rebootJobs}
+            schedule={rebootSchedule}
           />
         </TabsPanel>
 
