@@ -1,7 +1,7 @@
 # Spec 32 — Script on alert (remediation)
 
 **Date**: 2026-10-26  
-**Status**: Accepted (implementing on `feat/script-on-alert`)  
+**Status**: Shipped (merged #125)  
 **Parent**: [Spec 32 script library](../../specs/32-script-library/index.md) · [Spec 30 alert rules](../../specs/30-alert-rules/index.md)  
 **Branch**: `feat/script-on-alert`
 

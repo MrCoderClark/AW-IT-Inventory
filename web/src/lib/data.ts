@@ -24,6 +24,7 @@ import {
   RefreshCw,
   TerminalSquare,
   Ticket,
+  Layers,
 } from "lucide-react";
 
 /* ---------------- Types ---------------- */
@@ -512,6 +513,7 @@ export const NAV_MANAGE: NavItem[] = [
   { label: "People", href: "/people", icon: Users, perm: "asset:write" },
   { label: "Software Library", href: "/software/library", icon: Boxes, perm: "software:deploy" },
   { label: "Scripts", href: "/scripts", icon: TerminalSquare, perm: "software:deploy" },
+  { label: "Device groups", href: "/device-groups", icon: Layers, perm: "software:deploy" },
   { label: "Media", href: "/media", icon: Images, perm: "asset:write" },
   { label: "Compliance", href: "/compliance", icon: ShieldCheck },
   { label: "Patches", href: "/patches", icon: RefreshCw },

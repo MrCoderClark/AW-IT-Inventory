@@ -29,26 +29,31 @@ import {
 } from "@/lib/script-schedule";
 
 type ComputerOpt = { tag: string; name: string };
+type GroupOpt = { id: string; name: string };
+type TargetMode = "tags" | "location" | "group";
 
 export function ScriptSchedulesPanel({
   schedules,
   scripts,
   computers,
   locations,
+  groups,
 }: {
   schedules: SavedScriptSchedule[];
   scripts: ScriptListItem[];
   computers: ComputerOpt[];
   locations: LocationOption[];
+  groups: GroupOpt[];
 }) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [busy, startBusy] = React.useTransition();
 
   const [scriptId, setScriptId] = React.useState(scripts[0]?.id ?? "");
-  const [mode, setMode] = React.useState<"tags" | "location">("tags");
+  const [mode, setMode] = React.useState<TargetMode>("tags");
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [locationId, setLocationId] = React.useState("");
+  const [groupId, setGroupId] = React.useState("");
   const [cadence, setCadence] = React.useState<ScriptCadence>("daily");
   const [hour, setHour] = React.useState(9);
   const [minute, setMinute] = React.useState(0);
@@ -59,6 +64,7 @@ export function ScriptSchedulesPanel({
     setMode("tags");
     setSelected(new Set());
     setLocationId("");
+    setGroupId("");
     setCadence("daily");
     setHour(9);
     setMinute(0);
@@ -80,7 +86,9 @@ export function ScriptSchedulesPanel({
       const targetSpec =
         mode === "tags"
           ? { mode: "tags" as const, tags: Array.from(selected) }
-          : { mode: "location" as const, locationId };
+          : mode === "location"
+            ? { mode: "location" as const, locationId }
+            : { mode: "group" as const, groupId };
 
       const res = await saveScriptScheduleAction({
         scriptId,
@@ -130,13 +138,21 @@ export function ScriptSchedulesPanel({
       const n = s.targetSpec.tags.length;
       return n === 1 ? s.targetSpec.tags[0] : `${n} computers`;
     }
+    if (s.targetSpec.mode === "group") {
+      const g = groups.find((x) => x.id === s.targetSpec.groupId);
+      return g?.name ?? "Device group";
+    }
     const loc = locations.find((l) => l.id === s.targetSpec.locationId);
     return loc?.path ?? "Location";
   }
 
   const canSave =
     Boolean(scriptId) &&
-    (mode === "tags" ? selected.size > 0 : Boolean(locationId.trim()));
+    (mode === "tags"
+      ? selected.size > 0
+      : mode === "location"
+        ? Boolean(locationId.trim())
+        : Boolean(groupId.trim()));
 
   return (
     <div className="flex flex-col gap-3">
@@ -235,7 +251,7 @@ export function ScriptSchedulesPanel({
               </select>
             </label>
 
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <label className="flex items-center gap-1.5">
                 <input
                   type="radio"
@@ -251,6 +267,14 @@ export function ScriptSchedulesPanel({
                   onChange={() => setMode("location")}
                 />
                 Location
+              </label>
+              <label className="flex items-center gap-1.5">
+                <input
+                  type="radio"
+                  checked={mode === "group"}
+                  onChange={() => setMode("group")}
+                />
+                Device group
               </label>
             </div>
 
@@ -274,7 +298,7 @@ export function ScriptSchedulesPanel({
                   ))}
                 </ul>
               </div>
-            ) : (
+            ) : mode === "location" ? (
               <select
                 className="rounded-md border bg-background px-2 py-1.5"
                 value={locationId}
@@ -285,6 +309,23 @@ export function ScriptSchedulesPanel({
                   <option key={l.id} value={l.id}>
                     {"\u00A0".repeat(l.depth * 2)}
                     {l.path}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <select
+                className="rounded-md border bg-background px-2 py-1.5"
+                value={groupId}
+                onChange={(e) => setGroupId(e.target.value)}
+              >
+                <option value="">
+                  {groups.length === 0
+                    ? "No groups yet — create one under Device groups"
+                    : "Pick a group…"}
+                </option>
+                {groups.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name}
                   </option>
                 ))}
               </select>
