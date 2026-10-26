@@ -96,7 +96,7 @@ always clean temp; never reboot.
    (shipped #125).
 4. **v4 — device-group targets** — [design](../../superpowers/specs/2026-10-26-device-groups-design.md):
    dynamic groups (location / OS / compliance) as `ScriptTargetSpec` mode
-   `group` for Run on… and schedules (implementing on `feat/device-groups`).
+   `group` for Run on… and schedules (shipped #126).
 5. **Later** — script parameters; non-PowerShell; patch/alert group consumers.
 
 ### Phase 2 — Fan-out + schedules

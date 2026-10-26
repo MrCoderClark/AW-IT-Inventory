@@ -1,7 +1,7 @@
 # Device groups v1 — dynamic groups → scripts
 
 **Date**: 2026-10-26  
-**Status**: Accepted (implementing on `feat/device-groups`)  
+**Status**: Shipped (merged #126)  
 **Parent**: [Spec 32 script library](../../specs/32-script-library/index.md) · [Spec 28 RMM roadmap](../../specs/28-rmm-roadmap/index.md)  
 **Branch**: `feat/device-groups`
 
