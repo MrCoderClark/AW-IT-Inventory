@@ -711,6 +711,12 @@ export const alertRules = pgTable("alert_rules", {
     .$type<"inherit" | "on" | "off">()
     .notNull()
     .default("inherit"),
+  // Spec 32 on-alert: optional library script to enqueue on fire (null = off).
+  // FK targets `scripts` (defined later); set-null if the script row is deleted.
+  remediationScriptId: uuid("remediation_script_id").references(
+    (): AnyPgColumn => scripts.id,
+    { onDelete: "set null" },
+  ),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

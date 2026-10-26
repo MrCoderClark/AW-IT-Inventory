@@ -81,6 +81,7 @@ const H = vi.hoisted(() => {
   );
 
   const emailMock = vi.fn(async (_p: Record<string, unknown>) => true);
+  const remediationMock = vi.fn(async (_p: Record<string, unknown>) => undefined);
 
   return {
     state,
@@ -90,6 +91,7 @@ const H = vi.hoisted(() => {
     deleteMock,
     notifyMock,
     emailMock,
+    remediationMock,
   };
 });
 
@@ -104,6 +106,11 @@ vi.mock("@/db/index", () => ({
 }));
 vi.mock("./notifications", () => ({ createNotification: H.notifyMock }));
 vi.mock("@/lib/notify", () => ({ sendAlertRuleEmail: H.emailMock }));
+vi.mock("./alert-rule-remediation", () => ({
+  maybeEnqueueAlertRemediation: (...args: unknown[]) =>
+    H.remediationMock(...(args as [Record<string, unknown>])),
+  getActiveRemediationScript: vi.fn(),
+}));
 
 import {
   createAlertRule,
@@ -124,6 +131,7 @@ const DISK = {
   severity: "critical",
   enabled: true,
   ticketAutoCreate: "inherit" as const,
+  remediationScriptId: null as string | null,
 };
 const CPU = {
   id: "rule-cpu",
@@ -135,6 +143,7 @@ const CPU = {
   severity: "warning",
   enabled: true,
   ticketAutoCreate: "inherit" as const,
+  remediationScriptId: null as string | null,
 };
 const ASSET = { id: "a1", tag: "H2TECS-COMP-1", name: "Reception PC" };
 
@@ -168,6 +177,7 @@ beforeEach(() => {
   H.state.inserts = [];
   H.notifyMock.mockResolvedValue("notif-id");
   H.emailMock.mockResolvedValue(true);
+  H.remediationMock.mockResolvedValue(undefined);
 });
 
 describe("evaluateMetricAlerts", () => {
@@ -193,6 +203,51 @@ describe("evaluateMetricAlerts", () => {
       rule: { name: "Disk almost full", severity: "critical" },
       value: "97%",
     });
+    expect(H.remediationMock).toHaveBeenCalledWith({
+      ruleId: "rule-disk",
+      remediationScriptId: null,
+      assetTag: "H2TECS-COMP-1",
+    });
+  });
+
+  it("passes remediationScriptId on fire when the rule has one", async () => {
+    H.state.rules = [
+      { ...DISK, remediationScriptId: "s3000000-0000-4000-8000-000000000099" },
+    ];
+    await evaluateMetricAlerts([sample({ diskPct: 97 })]);
+    expect(H.remediationMock).toHaveBeenCalledWith({
+      ruleId: "rule-disk",
+      remediationScriptId: "s3000000-0000-4000-8000-000000000099",
+      assetTag: "H2TECS-COMP-1",
+    });
+  });
+
+  it("does not enqueue remediation on recover", async () => {
+    H.state.rules = [
+      { ...DISK, remediationScriptId: "s3000000-0000-4000-8000-000000000099" },
+    ];
+    H.state.states = [
+      {
+        ruleId: "rule-disk",
+        assetId: "a1",
+        consecutive: 1,
+        alertedState: "firing",
+      },
+    ];
+    await evaluateMetricAlerts([sample({ diskPct: 40 })]);
+    expect(H.notifyMock.mock.calls[0][0]).toMatchObject({
+      type: "metric-recovered",
+    });
+    expect(H.remediationMock).not.toHaveBeenCalled();
+  });
+
+  it("does not enqueue remediation when the notification write fails", async () => {
+    H.state.rules = [
+      { ...DISK, remediationScriptId: "s3000000-0000-4000-8000-000000000099" },
+    ];
+    H.notifyMock.mockResolvedValue(null);
+    await evaluateMetricAlerts([sample({ diskPct: 97 })]);
+    expect(H.remediationMock).not.toHaveBeenCalled();
   });
 
   it("does not fire CPU ≥ 90 until the second consecutive sample", async () => {
@@ -287,6 +342,7 @@ const RULE_INPUT = {
   consecutive: 2,
   severity: "warning" as const,
   ticketAutoCreate: "inherit" as const,
+  remediationScriptId: null as string | null,
 };
 
 const RULE_ID = "a3000000-0000-4000-8000-000000000001";

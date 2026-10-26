@@ -3,6 +3,7 @@ import { Lock } from "lucide-react";
 import { AlertRulesTable } from "@/components/alert-rules-table";
 import { PagePlaceholder } from "@/components/page-placeholder";
 import { listAlertRules } from "@/db/alert-rules";
+import { listScripts } from "@/db/scripts";
 import { hasPermission, requireUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
@@ -20,11 +21,15 @@ export default async function Page() {
     );
   }
 
-  const rules = await listAlertRules();
+  const [rules, scriptRows] = await Promise.all([
+    listAlertRules(),
+    listScripts(),
+  ]);
+  const scripts = scriptRows.map((s) => ({ id: s.id, name: s.name }));
 
   return (
     <div className="mx-auto flex max-w-[1100px] flex-col gap-6">
-      <AlertRulesTable rules={rules} />
+      <AlertRulesTable rules={rules} scripts={scripts} />
     </div>
   );
 }

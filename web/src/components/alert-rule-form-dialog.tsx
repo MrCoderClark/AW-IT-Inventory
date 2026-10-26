@@ -56,18 +56,24 @@ function valuesFrom(rule: AlertRuleRecord | null): AlertRuleFormValues {
     consecutive: String(rule.consecutive),
     severity: rule.severity,
     ticketAutoCreate: rule.ticketAutoCreate,
+    remediationScriptId: rule.remediationScriptId ?? "",
   };
 }
+
+export type AlertRuleScriptOption = { id: string; name: string };
 
 export function AlertRuleFormDialog({
   open,
   onOpenChange,
   rule,
+  scripts,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** When set, the dialog edits this row; otherwise it creates. */
   rule: AlertRuleRecord | null;
+  /** Active library scripts for the remediation picker. */
+  scripts: AlertRuleScriptOption[];
 }) {
   const [values, setValues] = React.useState<AlertRuleFormValues>(
     EMPTY_ALERT_RULE_FORM,
@@ -275,6 +281,46 @@ export function AlertRuleFormDialog({
               <p className="text-muted-foreground text-xs">
                 Inherit follows Admin → Ticket auto-create for metric notification
                 types.
+              </p>
+            </Field>
+
+            <Field
+              label="Run script on fire"
+              error={errors.remediationScriptId}
+            >
+              <Select
+                value={values.remediationScriptId || "__none__"}
+                onValueChange={(v) =>
+                  set("remediationScriptId", v === "__none__" ? "" : v)
+                }
+              >
+                <SelectTrigger
+                  className="w-full"
+                  aria-invalid={!!errors.remediationScriptId}
+                >
+                  <SelectValue>
+                    {(value) => {
+                      if (!value || value === "__none__") return "None";
+                      return (
+                        scripts.find((s) => s.id === value)?.name ??
+                        rule?.remediationScriptName ??
+                        "Choose a script"
+                      );
+                    }}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">None</SelectItem>
+                  {scripts.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-muted-foreground text-xs">
+                When this rule starts firing, enqueue the script on that computer
+                once per episode (soft one-in-flight).
               </p>
             </Field>
           </div>

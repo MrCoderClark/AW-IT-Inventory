@@ -89,9 +89,12 @@ always clean temp; never reboot.
 ## Phases
 
 1. **v1** — AC-1–8. ✅ shipped (library + run-now on one Computer).
-2. **v2 (this branch)** — multi-computer / location fan-out + daily/weekly
-   schedules. **AC-9–12.**
-3. **Later** — on-alert from spec 30; script parameters; non-PowerShell.
+2. **v2** — multi-computer / location fan-out + daily/weekly schedules.
+   **AC-9–12.** ✅ shipped.
+3. **v3 — on-alert remediation** — [design](../../superpowers/specs/2026-10-26-script-on-alert-design.md):
+   optional `alert_rules.remediation_script_id`; enqueue on Spec 30 fire only
+   (implementing on `feat/script-on-alert`).
+4. **Later** — script parameters; non-PowerShell; device-group targets.
 
 ### Phase 2 — Fan-out + schedules
 

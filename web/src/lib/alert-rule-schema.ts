@@ -66,6 +66,11 @@ export const alertRuleInputSchema = z.object({
   ticketAutoCreate: z.enum(TICKET_AUTO_CREATE_MODES, {
     error: "Choose ticket auto-create",
   }),
+  /** Empty string or null clears remediation; otherwise an active script UUID. */
+  remediationScriptId: z
+    .union([z.literal(""), z.null(), z.string().uuid("Choose a valid script")])
+    .optional()
+    .transform((v) => (!v ? null : v)),
 });
 
 export type AlertRuleInput = z.output<typeof alertRuleInputSchema>;
@@ -78,6 +83,8 @@ export interface AlertRuleFormValues {
   consecutive: string;
   severity: AlertSeverity;
   ticketAutoCreate: TicketAutoCreateMode;
+  /** Form value: "" means none. */
+  remediationScriptId: string;
 }
 
 export const EMPTY_ALERT_RULE_FORM: AlertRuleFormValues = {
@@ -88,6 +95,7 @@ export const EMPTY_ALERT_RULE_FORM: AlertRuleFormValues = {
   consecutive: "1",
   severity: "warning",
   ticketAutoCreate: "inherit",
+  remediationScriptId: "",
 };
 
 export function fieldErrors<T extends string>(

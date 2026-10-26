@@ -33,6 +33,10 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: refreshMock }),
 }));
 
+const SCRIPTS = [
+  { id: "s3000000-0000-4000-8000-000000000001", name: "Clear temp" },
+];
+
 const RULES: AlertRuleRecord[] = [
   {
     id: "a3000000-0000-4000-8000-000000000001",
@@ -44,6 +48,8 @@ const RULES: AlertRuleRecord[] = [
     severity: "warning",
     enabled: true,
     ticketAutoCreate: "inherit",
+    remediationScriptId: null,
+    remediationScriptName: null,
   },
   {
     id: "a3000000-0000-4000-8000-000000000003",
@@ -55,6 +61,8 @@ const RULES: AlertRuleRecord[] = [
     severity: "critical",
     enabled: true,
     ticketAutoCreate: "inherit",
+    remediationScriptId: SCRIPTS[0].id,
+    remediationScriptName: "Clear temp",
   },
 ];
 
@@ -62,7 +70,7 @@ beforeEach(() => vi.clearAllMocks());
 
 describe("AlertRulesTable — render (AC-1, AC-8)", () => {
   it("lists each rule with a readable condition and labelled controls", () => {
-    render(<AlertRulesTable rules={RULES} />);
+    render(<AlertRulesTable rules={RULES} scripts={SCRIPTS} />);
     expect(screen.getByText("CPU high")).toBeInTheDocument();
     expect(
       screen.getByText("CPU ≥ 90% for 2 samples (~30 min)"),
@@ -80,10 +88,12 @@ describe("AlertRulesTable — render (AC-1, AC-8)", () => {
       screen.getByRole("switch", { name: /Disable CPU high/i }),
     ).toBeChecked();
     expect(screen.getAllByText("Inherit")).toHaveLength(2);
+    expect(screen.getByText("Clear temp")).toBeInTheDocument();
+    expect(screen.getByText("On fire")).toBeInTheDocument();
   });
 
   it("shows empty copy when there are no rules", () => {
-    render(<AlertRulesTable rules={[]} />);
+    render(<AlertRulesTable rules={[]} scripts={[]} />);
     expect(screen.getByText(/No alert rules yet/i)).toBeInTheDocument();
   });
 });
@@ -95,7 +105,7 @@ describe("AlertRulesTable — enable / delete (AC-1)", () => {
       message: 'Disabled "CPU high".',
     });
     const user = userEvent.setup();
-    render(<AlertRulesTable rules={RULES} />);
+    render(<AlertRulesTable rules={RULES} scripts={SCRIPTS} />);
 
     await user.click(screen.getByRole("switch", { name: /Disable CPU high/i }));
 
@@ -106,7 +116,7 @@ describe("AlertRulesTable — enable / delete (AC-1)", () => {
   it("deletes a rule", async () => {
     deleteMock.mockResolvedValue({ ok: true, message: "Deleted that rule." });
     const user = userEvent.setup();
-    render(<AlertRulesTable rules={RULES} />);
+    render(<AlertRulesTable rules={RULES} scripts={SCRIPTS} />);
 
     await user.click(
       screen.getByRole("button", { name: /Delete CPU high/i }),
@@ -121,17 +131,18 @@ describe("AlertRulesTable — enable / delete (AC-1)", () => {
 describe("AlertRulesTable — dialog (AC-1)", () => {
   it("opens the create dialog from New rule", async () => {
     const user = userEvent.setup();
-    render(<AlertRulesTable rules={RULES} />);
+    render(<AlertRulesTable rules={RULES} scripts={SCRIPTS} />);
     await user.click(screen.getByRole("button", { name: /New rule/i }));
     expect(screen.getByText("New alert rule")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Create rule/i }),
     ).toBeInTheDocument();
+    expect(screen.getByText(/Run script on fire/i)).toBeInTheDocument();
   });
 
   it("opens the edit dialog for a row", async () => {
     const user = userEvent.setup();
-    render(<AlertRulesTable rules={RULES} />);
+    render(<AlertRulesTable rules={RULES} scripts={SCRIPTS} />);
     await user.click(screen.getByRole("button", { name: /Edit CPU high/i }));
     expect(screen.getByText("Edit alert rule")).toBeInTheDocument();
     expect(screen.getByDisplayValue("CPU high")).toBeInTheDocument();

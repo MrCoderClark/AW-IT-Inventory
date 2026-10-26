@@ -11,6 +11,7 @@ const {
   updateMock,
   deleteMock,
   setEnabledMock,
+  getActiveScriptMock,
   getCurrentUserMock,
   hasPermissionMock,
   revalidateMock,
@@ -19,6 +20,7 @@ const {
   updateMock: vi.fn(),
   deleteMock: vi.fn(),
   setEnabledMock: vi.fn(),
+  getActiveScriptMock: vi.fn(),
   getCurrentUserMock: vi.fn(),
   hasPermissionMock: vi.fn(),
   revalidateMock: vi.fn(),
@@ -29,6 +31,10 @@ vi.mock("@/db/alert-rules", () => ({
   updateAlertRule: updateMock,
   deleteAlertRule: deleteMock,
   setAlertRuleEnabled: setEnabledMock,
+}));
+vi.mock("@/db/alert-rule-remediation", () => ({
+  getActiveRemediationScript: (...args: unknown[]) =>
+    getActiveScriptMock(...args),
 }));
 vi.mock("@/lib/auth/session", () => ({
   getCurrentUser: getCurrentUserMock,
@@ -51,8 +57,10 @@ const VALID = {
   consecutive: 2,
   severity: "warning",
   ticketAutoCreate: "inherit" as const,
+  remediationScriptId: null as string | null,
 };
 
+const SCRIPT_ID = "s3000000-0000-4000-8000-000000000001";
 const RULE_ID = "a3000000-0000-4000-8000-000000000001";
 
 function grant(allowed: boolean) {
@@ -60,7 +68,10 @@ function grant(allowed: boolean) {
   hasPermissionMock.mockReturnValue(allowed);
 }
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  getActiveScriptMock.mockResolvedValue(null);
+});
 
 describe("alert-rule actions — permission gate (AC-1)", () => {
   it("refuses a caller without user:admin and writes nothing", async () => {
@@ -86,6 +97,42 @@ describe("createAlertRuleAction", () => {
     const res = await createAlertRuleAction(VALID);
     expect(createMock).toHaveBeenCalledWith(VALID);
     expect(revalidateMock).toHaveBeenCalledWith("/admin/alert-rules");
+    expect(res.ok).toBe(true);
+  });
+
+  it("rejects an inactive remediation script without writing", async () => {
+    getActiveScriptMock.mockResolvedValue(null);
+    const res = await createAlertRuleAction({
+      ...VALID,
+      remediationScriptId: SCRIPT_ID,
+    });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/active script/i);
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it("accepts an active remediation script", async () => {
+    getActiveScriptMock.mockResolvedValue({
+      id: SCRIPT_ID,
+      name: "Clear temp",
+      body: "#",
+      timeoutSeconds: 120,
+    });
+    createMock.mockResolvedValue({
+      id: "new-id",
+      ...VALID,
+      remediationScriptId: SCRIPT_ID,
+      enabled: true,
+    });
+    const res = await createAlertRuleAction({
+      ...VALID,
+      remediationScriptId: SCRIPT_ID,
+    });
+    expect(getActiveScriptMock).toHaveBeenCalledWith(SCRIPT_ID);
+    expect(createMock).toHaveBeenCalledWith({
+      ...VALID,
+      remediationScriptId: SCRIPT_ID,
+    });
     expect(res.ok).toBe(true);
   });
 });

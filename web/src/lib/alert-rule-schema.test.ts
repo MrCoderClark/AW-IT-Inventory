@@ -21,7 +21,36 @@ describe("alertRuleInputSchema (AC-1)", () => {
       consecutive: 2,
       severity: "warning",
       ticketAutoCreate: "inherit",
+      remediationScriptId: null,
     });
+  });
+
+  it("accepts a remediation script UUID or clears with empty string", () => {
+    const id = "s3000000-0000-4000-8000-000000000001";
+    expect(
+      alertRuleInputSchema.parse({
+        name: "CPU",
+        signal: "cpu_pct",
+        op: "gte",
+        threshold: 90,
+        consecutive: 1,
+        severity: "warning",
+        ticketAutoCreate: "inherit",
+        remediationScriptId: id,
+      }).remediationScriptId,
+    ).toBe(id);
+    expect(
+      alertRuleInputSchema.parse({
+        name: "CPU",
+        signal: "cpu_pct",
+        op: "gte",
+        threshold: 90,
+        consecutive: 1,
+        severity: "warning",
+        ticketAutoCreate: "inherit",
+        remediationScriptId: "",
+      }).remediationScriptId,
+    ).toBeNull();
   });
 
   it("rejects a blank name and a consecutive window under 1", () => {
