@@ -67,7 +67,10 @@ function makeTx() {
   const makeSelect = () => {
     const b: Record<string, unknown> = {};
     const self = () => b;
-    for (const m of ["from", "where", "limit"]) b[m] = self;
+    // Match the engine's chain, including the open-assignment people join.
+    for (const m of ["from", "leftJoin", "innerJoin", "where", "limit"]) {
+      b[m] = self;
+    }
     b.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
       Promise.resolve(selects.shift() ?? []).then(res, rej);
     return b;
