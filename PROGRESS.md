@@ -7,6 +7,13 @@ via a feature branch + PR.
 
 ---
 
+## 🚧 Spec 32: Script on alert (`feat/script-on-alert`)
+
+Optional remediation script on Spec 30 metric alert rules: on episode **fire**,
+enqueue a normal `script_run_jobs` row for the alerting computer
+(`alert_rules.remediation_script_id`). Stays 🚧 until merge.
+Design: `docs/superpowers/specs/2026-10-26-script-on-alert-design.md`.
+
 ## Shipped ✅ — Computer audit log (merged #123)
 
 Fleet **`/audit`** page: unified computer action history (dual-write

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { getActiveRemediationScript } from "@/db/alert-rule-remediation";
 import {
   createAlertRule,
   deleteAlertRule,
@@ -25,6 +26,20 @@ function revalidate() {
   revalidatePath("/admin/alert-rules");
 }
 
+async function rejectInactiveScript(
+  scriptId: string | null | undefined,
+): Promise<ActionResult | null> {
+  if (!scriptId) return null;
+  const active = await getActiveRemediationScript(scriptId);
+  if (!active) {
+    return {
+      ok: false,
+      error: "Choose an active script from the library (archived scripts aren't allowed).",
+    };
+  }
+  return null;
+}
+
 /**
  * Create / edit / enable / delete metric-threshold rules (spec 30, AC-1).
  * Gated on `user:admin` and rechecked here so a viewer can't call the actions
@@ -40,6 +55,9 @@ export async function createAlertRuleAction(
   if (!parsed.success) {
     return { ok: false, error: firstAlertRuleError(parsed.error) };
   }
+
+  const badScript = await rejectInactiveScript(parsed.data.remediationScriptId);
+  if (badScript) return badScript;
 
   const row = await createAlertRule(parsed.data);
   revalidate();
@@ -61,6 +79,9 @@ export async function updateAlertRuleAction(
   if (!parsed.success) {
     return { ok: false, error: firstAlertRuleError(parsed.error) };
   }
+
+  const badScript = await rejectInactiveScript(parsed.data.remediationScriptId);
+  if (badScript) return badScript;
 
   const row = await updateAlertRule(id, parsed.data);
   if (!row) return { ok: false, error: "That rule is no longer there." };

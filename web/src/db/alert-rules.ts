@@ -2,8 +2,9 @@ import "server-only";
 
 import { and, asc, eq, inArray } from "drizzle-orm";
 
+import { maybeEnqueueAlertRemediation } from "./alert-rule-remediation";
 import { db } from "./index";
-import { alertRules, alertRuleStates, assets } from "./schema";
+import { alertRules, alertRuleStates, assets, scripts } from "./schema";
 import { createNotification } from "./notifications";
 import type { MetricSample } from "./metrics";
 import type { AlertRuleInput } from "@/lib/alert-rule-schema";
@@ -20,11 +21,17 @@ import {
   type MetricSignal,
 } from "@/lib/alert-rules";
 
+export {
+  getActiveRemediationScript,
+  maybeEnqueueAlertRemediation,
+} from "./alert-rule-remediation";
+
 /**
  * Metric-threshold alerts (spec 30). Evaluated as a best-effort side effect of
  * metric ingest. Default rules are inserted once (stable ids, on-conflict
  * do-nothing) so an admin disable survives deploys. Episode state advances only
- * after a successful in-app notification write.
+ * after a successful in-app notification write. Spec 32 on-alert may enqueue a
+ * remediation script after a successful fire notify (never gates the episode).
  */
 
 /** Stable ids so re-seed never duplicates or re-enables a disabled default. */
@@ -64,17 +71,21 @@ export const DEFAULT_ALERT_RULES = [
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function toRecord(row: {
-  id: string;
-  name: string;
-  signal: MetricSignal;
-  op: MetricOp;
-  threshold: number;
-  consecutive: number;
-  severity: AlertRuleRecord["severity"];
-  enabled: boolean;
-  ticketAutoCreate: AlertRuleRecord["ticketAutoCreate"];
-}): AlertRuleRecord {
+function toRecord(
+  row: {
+    id: string;
+    name: string;
+    signal: MetricSignal;
+    op: MetricOp;
+    threshold: number;
+    consecutive: number;
+    severity: AlertRuleRecord["severity"];
+    enabled: boolean;
+    ticketAutoCreate: AlertRuleRecord["ticketAutoCreate"];
+    remediationScriptId?: string | null;
+  },
+  scriptName: string | null = null,
+): AlertRuleRecord {
   return {
     id: row.id,
     name: row.name,
@@ -85,7 +96,21 @@ function toRecord(row: {
     severity: row.severity,
     enabled: row.enabled,
     ticketAutoCreate: row.ticketAutoCreate,
+    remediationScriptId: row.remediationScriptId ?? null,
+    remediationScriptName: scriptName,
   };
+}
+
+async function scriptNamesById(
+  ids: string[],
+): Promise<Map<string, string>> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (unique.length === 0) return new Map();
+  const rows = await db
+    .select({ id: scripts.id, name: scripts.name })
+    .from(scripts)
+    .where(inArray(scripts.id, unique));
+  return new Map(rows.map((r) => [r.id, r.name]));
 }
 
 /** Insert the three defaults only when the table is empty, so an admin delete
@@ -107,7 +132,14 @@ export async function listAlertRules(): Promise<AlertRuleRecord[]> {
     .select()
     .from(alertRules)
     .orderBy(asc(alertRules.name));
-  return rows.map(toRecord);
+  const names = await scriptNamesById(
+    rows
+      .map((r) => r.remediationScriptId)
+      .filter((id): id is string => !!id),
+  );
+  return rows.map((r) =>
+    toRecord(r, r.remediationScriptId ? (names.get(r.remediationScriptId) ?? null) : null),
+  );
 }
 
 export async function createAlertRule(
@@ -123,11 +155,15 @@ export async function createAlertRule(
       consecutive: input.consecutive,
       severity: input.severity,
       ticketAutoCreate: input.ticketAutoCreate,
+      remediationScriptId: input.remediationScriptId ?? null,
       enabled: true,
     })
     .returning();
   if (!row) throw new Error("Failed to create alert rule");
-  return toRecord(row);
+  const name = row.remediationScriptId
+    ? (await scriptNamesById([row.remediationScriptId])).get(row.remediationScriptId) ?? null
+    : null;
+  return toRecord(row, name);
 }
 
 export async function updateAlertRule(
@@ -145,11 +181,16 @@ export async function updateAlertRule(
       consecutive: input.consecutive,
       severity: input.severity,
       ticketAutoCreate: input.ticketAutoCreate,
+      remediationScriptId: input.remediationScriptId ?? null,
       updatedAt: new Date(),
     })
     .where(eq(alertRules.id, id))
     .returning();
-  return row ? toRecord(row) : null;
+  if (!row) return null;
+  const name = row.remediationScriptId
+    ? (await scriptNamesById([row.remediationScriptId])).get(row.remediationScriptId) ?? null
+    : null;
+  return toRecord(row, name);
 }
 
 export async function deleteAlertRule(id: string): Promise<boolean> {
@@ -171,7 +212,13 @@ export async function setAlertRuleEnabled(
     .set({ enabled, updatedAt: new Date() })
     .where(eq(alertRules.id, id))
     .returning();
-  return row ? toRecord(row) : null;
+  if (!row) return null;
+  const name = row.remediationScriptId
+    ? (await scriptNamesById([row.remediationScriptId])).get(
+        row.remediationScriptId,
+      ) ?? null
+    : null;
+  return toRecord(row, name);
 }
 
 function latestByAsset(samples: MetricSample[]): Map<string, MetricSample> {
@@ -286,6 +333,15 @@ export async function evaluateMetricAlerts(
               },
               value: valueText,
             });
+            // Spec 32 on-alert: enqueue remediation only on fire, after notify
+            // succeeded. Failures never roll back alertedState.
+            if (fired) {
+              await maybeEnqueueAlertRemediation({
+                ruleId: rule.id,
+                remediationScriptId: rule.remediationScriptId,
+                assetTag: asset.tag,
+              });
+            }
           }
         } else if (tick.verdict === "ok" && nextAlerted === null) {
           nextAlerted = "ok";

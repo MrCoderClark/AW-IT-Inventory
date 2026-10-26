@@ -62,6 +62,10 @@ export interface AlertRuleRecord {
   severity: AlertSeverity;
   enabled: boolean;
   ticketAutoCreate: TicketAutoCreateMode;
+  /** Null = no remediation script on fire (spec 32 on-alert). */
+  remediationScriptId: string | null;
+  /** Display name when the FK resolves; null if unset or script missing. */
+  remediationScriptName: string | null;
 }
 
 export function matchesThreshold(

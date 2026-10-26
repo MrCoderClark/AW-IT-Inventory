@@ -9,7 +9,10 @@ import {
   deleteAlertRuleAction,
   setAlertRuleEnabledAction,
 } from "@/app/(app)/alert-rule-actions";
-import { AlertRuleFormDialog } from "@/components/alert-rule-form-dialog";
+import {
+  AlertRuleFormDialog,
+  type AlertRuleScriptOption,
+} from "@/components/alert-rule-form-dialog";
 import { HeroHeader } from "@/components/hero-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -38,7 +41,13 @@ function severityVariant(
   return "outline";
 }
 
-export function AlertRulesTable({ rules }: { rules: AlertRuleRecord[] }) {
+export function AlertRulesTable({
+  rules,
+  scripts,
+}: {
+  rules: AlertRuleRecord[];
+  scripts: AlertRuleScriptOption[];
+}) {
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<AlertRuleRecord | null>(null);
@@ -104,7 +113,7 @@ export function AlertRulesTable({ rules }: { rules: AlertRuleRecord[] }) {
     <>
       <HeroHeader
         title="Alert rules"
-        subtitle="Thresholds on CPU, memory, disk and uptime. When a condition holds for enough samples, admins get a notification."
+        subtitle="Thresholds on CPU, memory, disk and uptime. When a condition holds for enough samples, admins get a notification — and may run a library script on the host."
         icon={<TriangleAlert className="size-6" />}
         actions={
           <Button onClick={openCreate}>
@@ -133,6 +142,7 @@ export function AlertRulesTable({ rules }: { rules: AlertRuleRecord[] }) {
                 <TableHead>Condition</TableHead>
                 <TableHead>Severity</TableHead>
                 <TableHead>Auto-create</TableHead>
+                <TableHead>On fire</TableHead>
                 <TableHead>Enabled</TableHead>
                 <TableHead className="w-[1%] text-right"> </TableHead>
               </TableRow>
@@ -152,6 +162,9 @@ export function AlertRulesTable({ rules }: { rules: AlertRuleRecord[] }) {
                   </TableCell>
                   <TableCell>
                     {TICKET_AUTO_CREATE_LABEL[rule.ticketAutoCreate]}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {rule.remediationScriptName ?? "—"}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
@@ -199,6 +212,7 @@ export function AlertRulesTable({ rules }: { rules: AlertRuleRecord[] }) {
         open={dialogOpen}
         onOpenChange={onDialogOpenChange}
         rule={editing}
+        scripts={scripts}
       />
     </>
   );
