@@ -9,6 +9,7 @@ import {
   assets,
   assetAssignments,
   complianceStatus,
+  computerAuditEvents,
   computerDetails,
   installedSoftware,
   people,
@@ -436,6 +437,59 @@ async function printersSource(spec: ReportSpec): Promise<ReportRow[]> {
   }));
 }
 
+const COMPUTER_AUDIT_COLUMNS: Record<string, PgColumn> = {
+  occurredAt: computerAuditEvents.occurredAt,
+  assetTag: assets.tag,
+  assetName: assets.name,
+  serial: assets.serial,
+  action: computerAuditEvents.action,
+  status: computerAuditEvents.status,
+  operator: computerAuditEvents.operator,
+  source: computerAuditEvents.source,
+  summary: computerAuditEvents.summary,
+  flagged: computerAuditEvents.flagged,
+  // location is a path lookup — skipped.
+};
+
+async function computerAuditEventsSource(spec: ReportSpec): Promise<ReportRow[]> {
+  const paths = await getLocationPathMap();
+  const where = buildPushdownWhere(
+    spec.filters,
+    typesFor("computerAuditEvents"),
+    COMPUTER_AUDIT_COLUMNS,
+  );
+  const rows = await db
+    .select({
+      occurredAt: computerAuditEvents.occurredAt,
+      assetTag: assets.tag,
+      assetName: assets.name,
+      serial: assets.serial,
+      action: computerAuditEvents.action,
+      status: computerAuditEvents.status,
+      operator: computerAuditEvents.operator,
+      source: computerAuditEvents.source,
+      summary: computerAuditEvents.summary,
+      flagged: computerAuditEvents.flagged,
+      locationId: assets.locationId,
+    })
+    .from(computerAuditEvents)
+    .innerJoin(assets, eq(computerAuditEvents.assetId, assets.id))
+    .where(where);
+  return rows.map((r) => ({
+    occurredAt: toIso(r.occurredAt),
+    assetTag: r.assetTag,
+    assetName: r.assetName,
+    serial: r.serial,
+    action: r.action,
+    status: r.status,
+    operator: r.operator,
+    source: r.source,
+    summary: r.summary,
+    flagged: r.flagged,
+    location: r.locationId ? paths.get(r.locationId) ?? null : null,
+  }));
+}
+
 const SOURCE_FETCHERS: Record<string, (spec: ReportSpec) => Promise<ReportRow[]>> = {
   assets: assetsSource,
   computers: computersSource,
@@ -443,6 +497,7 @@ const SOURCE_FETCHERS: Record<string, (spec: ReportSpec) => Promise<ReportRow[]>
   people: peopleSource,
   software: softwareSource,
   printers: printersSource,
+  computerAuditEvents: computerAuditEventsSource,
 };
 
 /** Fetch a source's rows (with the spec's filters pushed down where safe) and run

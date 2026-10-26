@@ -1484,6 +1484,37 @@ export const rebootJobs = pgTable(
 
 export type RebootJobRow = typeof rebootJobs.$inferSelect;
 
+/** Unified computer audit log (dual-write from job tables; spec 26). */
+export const computerAuditEvents = pgTable(
+  "computer_audit_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    action: text("action").notNull(),
+    status: text("status").notNull().default("pending"),
+    operator: text("operator").notNull(),
+    source: text("source").notNull(),
+    summary: text("summary").notNull().default(""),
+    details: jsonb("details").$type<Record<string, unknown>>().notNull().default({}),
+    sourceTable: text("source_table").notNull(),
+    sourceId: uuid("source_id").notNull(),
+    flagged: boolean("flagged").notNull().default(false),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("computer_audit_events_source_uidx").on(t.sourceTable, t.sourceId),
+    index("computer_audit_events_occurred_idx").on(t.occurredAt),
+    index("computer_audit_events_asset_occurred_idx").on(t.assetId, t.occurredAt),
+    index("computer_audit_events_action_idx").on(t.action),
+    index("computer_audit_events_operator_idx").on(t.operator),
+    index("computer_audit_events_flagged_idx").on(t.flagged),
+  ],
+);
+export type ComputerAuditEventRow = typeof computerAuditEvents.$inferSelect;
+
 // One-host missing-update Search (spec 31 phase 4 closeout). Same claim shape as
 // patch install; runs PS_MISSING_UPDATES then posts /api/ingest/missing-updates.
 export const missingUpdateChecks = pgTable(

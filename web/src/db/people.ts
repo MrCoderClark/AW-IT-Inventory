@@ -2,6 +2,7 @@ import "server-only";
 
 import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 
+import { recordComputerReturnAudits } from "./assignments";
 import { db } from "./index";
 import { assetAssignments, assets, people } from "./schema";
 import { getLocationPathMap } from "./queries";
@@ -395,9 +396,10 @@ export async function updatePerson(
 /**
  * Archive a person (AC-8): set status to archived, close every open assignment
  * (recording who/when), and clear each returned device's `assigneeId` — all in
- * one transaction so the pool and the log never drift. An archived person drops
- * from the assignee picker (which lists active people only). Returns false when
- * the person doesn't exist.
+ * one transaction so the pool and the log never drift. Computer returns are
+ * audited after that transaction commits. An archived person drops from the
+ * assignee picker (which lists active people only). Returns false when the
+ * person doesn't exist.
  */
 export async function archivePerson(
   id: string,
@@ -405,16 +407,16 @@ export async function archivePerson(
   when: Date = new Date(),
 ): Promise<boolean> {
   if (!UUID_RE.test(id)) return false;
-  return db.transaction(async (tx) => {
+  const closed = await db.transaction(async (tx) => {
     const [row] = await tx
       .update(people)
       .set({ status: "archived", updatedAt: when })
       .where(eq(people.id, id))
       .returning({ id: people.id });
-    if (!row) return false;
+    if (!row) return null;
 
     // Close the person's open assignments and return those devices to the pool.
-    const closed = await tx
+    const closedRows = await tx
       .update(assetAssignments)
       .set({ unassignedAt: when, unassignedBy: actorEmail, updatedAt: when })
       .where(
@@ -423,17 +425,36 @@ export async function archivePerson(
           isNull(assetAssignments.unassignedAt),
         ),
       )
-      .returning({ assetId: assetAssignments.assetId });
+      .returning({
+        id: assetAssignments.id,
+        assetId: assetAssignments.assetId,
+        personId: assetAssignments.personId,
+      });
 
     // Clear every returned device's assigneeId in one statement (not per row).
-    if (closed.length) {
+    if (closedRows.length) {
       await tx
         .update(assets)
         .set({ assigneeId: null, updatedAt: when })
-        .where(inArray(assets.id, closed.map((c) => c.assetId)));
+        .where(
+          inArray(
+            assets.id,
+            closedRows.map((c) => c.assetId),
+          ),
+        );
     }
-    return true;
+    return closedRows;
   });
+  if (!closed) return false;
+  await recordComputerReturnAudits(
+    closed.map((row) => ({
+      assignmentId: row.id,
+      assetId: row.assetId,
+      personId: row.personId,
+    })),
+    actorEmail,
+  );
+  return true;
 }
 
 /** Restore an archived person to active (AC-8). Their devices are NOT

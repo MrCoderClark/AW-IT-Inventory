@@ -2,6 +2,7 @@ import "server-only";
 
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
+import { updateAuditEventStatus, upsertAuditEvent } from "./computer-audit";
 import { db } from "./index";
 import { notifyRebootResult } from "./notifications";
 import { isWorkerLive } from "./scan";
@@ -21,6 +22,38 @@ const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const IN_FLIGHT = ["pending", "claimed", "running"] as const;
+
+const REBOOT_AUDIT_TABLE = "reboot_jobs";
+
+function rebootAuditSummary(input: {
+  sourceScheduleId?: string | null;
+  sourcePatchInstallJobId?: string | null;
+}): string {
+  if (input.sourceScheduleId) return "Scheduled reboot";
+  if (input.sourcePatchInstallJobId) return "Reboot after install";
+  return "Forced reboot";
+}
+
+/** Scheduled occurrences keep the schedule owner when one was stored. */
+function rebootAuditOperator(input: {
+  sourceScheduleId?: string | null;
+  requestedBy: string;
+}): string {
+  if (!input.sourceScheduleId) return input.requestedBy;
+  const owner = input.requestedBy.trim();
+  return owner || "system";
+}
+
+async function auditRebootTerminal(
+  jobId: string,
+  status: "succeeded" | "failed" | "canceled",
+): Promise<void> {
+  await updateAuditEventStatus({
+    sourceTable: REBOOT_AUDIT_TABLE,
+    sourceId: jobId,
+    status,
+  });
+}
 
 export type EnqueueRebootResult =
   | { ok: true; id: string }
@@ -62,6 +95,22 @@ export async function enqueueRebootJob(input: {
       sourceScheduleId: input.sourceScheduleId ?? null,
     })
     .returning({ id: rebootJobs.id });
+  const scheduled = Boolean(input.sourceScheduleId);
+  await upsertAuditEvent({
+    sourceTable: REBOOT_AUDIT_TABLE,
+    sourceId: row.id,
+    assetId: input.assetId,
+    action: "reboot",
+    operator: rebootAuditOperator(input),
+    source: scheduled ? "scheduled" : "admin_console",
+    summary: rebootAuditSummary(input),
+    details: {
+      scheduledAt: input.scheduledAt.toISOString(),
+      sourceScheduleId: input.sourceScheduleId ?? null,
+      sourcePatchInstallJobId: input.sourcePatchInstallJobId ?? null,
+    },
+    status: "pending",
+  });
   return { ok: true, id: row.id };
 }
 
@@ -194,6 +243,7 @@ export async function updateRebootStatus(
   if (updated.length) {
     const row = updated[0];
     if (u.status === "succeeded" || u.status === "failed") {
+      await auditRebootTerminal(row.id, u.status);
       await notifyRebootResult({
         jobId: row.id,
         assetId: row.assetId,
@@ -239,6 +289,7 @@ export async function cancelRebootJob(jobId: string): Promise<boolean> {
     });
   if (updated.length) {
     const row = updated[0];
+    await auditRebootTerminal(row.id, "canceled");
     await notifyRebootResult({
       jobId: row.id,
       assetId: row.assetId,
@@ -277,6 +328,7 @@ export async function syncLinkedRebootsForInstall(
       scheduledAt: rebootJobs.scheduledAt,
     });
   for (const row of canceled) {
+    await auditRebootTerminal(row.id, "canceled");
     await notifyRebootResult({
       jobId: row.id,
       assetId: row.assetId,

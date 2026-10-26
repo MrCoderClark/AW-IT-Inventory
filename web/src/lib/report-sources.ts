@@ -5,6 +5,7 @@
  * row keys MUST match the field ids here. No row here is a secret — these are the
  * same fields already shown around the app.
  */
+import { AUDIT_ACTIONS } from "./computer-audit-actions";
 import type { ReportField, ReportSource } from "./report-spec";
 
 const ASSET_TYPES = ["Computer", "Monitor", "Printer", "Phone", "Network"];
@@ -139,9 +140,50 @@ export const REPORT_SOURCES: Record<string, ReportSource> = {
       { id: "lastCheckedAt", label: "Last checked", type: "date" },
     ],
   },
+  computerAuditEvents: {
+    id: "computerAuditEvents",
+    label: "Computer audit events",
+    description: "Computer actions: deploys, patches, reboots, scripts, sessions, and asset changes.",
+    fields: [
+      { id: "occurredAt", label: "Occurred at", type: "date" },
+      { id: "assetTag", label: "Asset tag", type: "text" },
+      { id: "assetName", label: "Asset", type: "text" },
+      { id: "serial", label: "Serial", type: "text" },
+      { id: "action", label: "Action", type: "enum", enumValues: [...AUDIT_ACTIONS] },
+      {
+        id: "status",
+        label: "Status",
+        type: "enum",
+        enumValues: ["pending", "succeeded", "failed", "canceled"],
+      },
+      { id: "operator", label: "Operator", type: "text" },
+      {
+        id: "source",
+        label: "Source",
+        type: "enum",
+        enumValues: ["admin_console", "scheduled", "collector"],
+      },
+      { id: "summary", label: "Summary", type: "text" },
+      { id: "flagged", label: "Flagged", type: "bool" },
+      { id: "location", label: "Location", type: "text" },
+    ],
+  },
 };
 
 export const REPORT_SOURCE_LIST: ReportSource[] = Object.values(REPORT_SOURCES);
+
+/** Spec 26 source that exposes the computer audit log. Needs `audit:read`. */
+export const AUDIT_REPORT_SOURCE_ID = "computerAuditEvents";
+
+export function reportSourceNeedsAuditRead(source: string): boolean {
+  return source === AUDIT_REPORT_SOURCE_ID;
+}
+
+/** Builder catalog. Hides the audit source unless the viewer has `audit:read`. */
+export function visibleReportSources(canReadAudit: boolean): ReportSource[] {
+  if (canReadAudit) return REPORT_SOURCE_LIST;
+  return REPORT_SOURCE_LIST.filter((source) => !reportSourceNeedsAuditRead(source.id));
+}
 
 /** The field catalog (id → ReportField) for a source, for `runReport`/validation. */
 export function fieldMap(sourceId: string): Record<string, ReportField> {

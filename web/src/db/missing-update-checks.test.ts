@@ -46,7 +46,16 @@ const H = vi.hoisted(() => {
   };
 });
 
+const upsertAuditMock = vi.hoisted(() =>
+  vi.fn(async () => ({ ok: true as const, id: "audit-1" })),
+);
+const updateAuditMock = vi.hoisted(() => vi.fn(async () => true));
+
 vi.mock("server-only", () => ({}));
+vi.mock("@/db/computer-audit", () => ({
+  upsertAuditEvent: (...args: unknown[]) => upsertAuditMock(...args),
+  updateAuditEventStatus: (...args: unknown[]) => updateAuditMock(...args),
+}));
 vi.mock("@/db/scan", () => ({ isWorkerLive: vi.fn().mockResolvedValue(true) }));
 vi.mock("@/db/index", () => ({
   db: {
@@ -60,6 +69,8 @@ vi.mock("@/db/index", () => ({
 import {
   enqueueMissingUpdateCheck,
   claimNextMissingUpdateCheck,
+  updateMissingUpdateCheckStatus,
+  cancelMissingUpdateCheck,
 } from "./missing-update-checks";
 
 const JID = "0959927f-1046-4582-9a70-60a4175f206b";
@@ -82,6 +93,7 @@ describe("enqueueMissingUpdateCheck (AC-21)", () => {
         requestedBy: "me",
       }),
     ).toEqual({ ok: false, reason: "already-inflight" });
+    expect(upsertAuditMock).not.toHaveBeenCalled();
   });
 
   it("enqueues when free", async () => {
@@ -94,6 +106,35 @@ describe("enqueueMissingUpdateCheck (AC-21)", () => {
         requestedBy: "me",
       }),
     ).toEqual({ ok: true, id: JID });
+    expect(upsertAuditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceTable: "missing_update_checks",
+        sourceId: JID,
+        assetId: "a1",
+        action: "missing_update_check",
+        operator: "me",
+        source: "admin_console",
+        summary: "Checked for updates",
+        status: "pending",
+      }),
+    );
+  });
+
+  it("records a post-install follow-up as collector", async () => {
+    H.state.selects = [[]];
+    H.state.insertReturns = [[{ id: JID }]];
+    await enqueueMissingUpdateCheck({
+      assetId: "a1",
+      targetIp: "1.2.3.4",
+      requestedBy: "patch-install:ada@x",
+    });
+    expect(upsertAuditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operator: "ada@x",
+        source: "collector",
+        action: "missing_update_check",
+      }),
+    );
   });
 });
 
@@ -119,5 +160,47 @@ describe("claimNextMissingUpdateCheck", () => {
       workerId: "w1",
       claimedAt: "2026-10-19T12:00:00.000Z",
     });
+  });
+});
+
+describe("missing-update check terminal audit", () => {
+  const fence = { workerId: "w1", claimedAt: "2026-10-19T12:00:00.000Z" };
+
+  it("updates status on success and skips running", async () => {
+    H.state.updateReturns = [[{ id: JID }]];
+    expect(
+      await updateMissingUpdateCheckStatus(JID, { ...fence, status: "succeeded" }),
+    ).toBe("ok");
+    expect(updateAuditMock).toHaveBeenCalledWith({
+      sourceTable: "missing_update_checks",
+      sourceId: JID,
+      status: "succeeded",
+    });
+
+    updateAuditMock.mockClear();
+    H.state.updateReturns = [[{ id: JID }]];
+    expect(
+      await updateMissingUpdateCheckStatus(JID, { ...fence, status: "running" }),
+    ).toBe("ok");
+    expect(updateAuditMock).not.toHaveBeenCalled();
+  });
+
+  it("cancels the audit row when the job is canceled", async () => {
+    H.state.updateReturns = [[{ id: JID }]];
+    expect(await cancelMissingUpdateCheck(JID)).toBe(true);
+    expect(updateAuditMock).toHaveBeenCalledWith({
+      sourceTable: "missing_update_checks",
+      sourceId: JID,
+      status: "canceled",
+    });
+  });
+
+  it("does not write audit for a stale status update", async () => {
+    H.state.updateReturns = [[]];
+    H.state.selects = [[{ id: JID }]];
+    expect(
+      await updateMissingUpdateCheckStatus(JID, { ...fence, status: "failed" }),
+    ).toBe("stale");
+    expect(updateAuditMock).not.toHaveBeenCalled();
   });
 });

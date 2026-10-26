@@ -2,6 +2,7 @@ import "server-only";
 
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
+import { updateAuditEventStatus, upsertAuditEvent } from "./computer-audit";
 import { db } from "./index";
 import { notifyScriptRunResult } from "./notifications";
 import { isWorkerLive } from "./scan";
@@ -25,6 +26,13 @@ const UUID_RE =
 
 const IN_FLIGHT = ["pending", "claimed", "running"] as const;
 
+const SCRIPT_AUDIT_TABLE = "script_run_jobs";
+
+function scriptRunSummary(name: string, exitCode?: number | null): string {
+  if (exitCode == null) return `Run ${name}`;
+  return `Ran ${name} (exit ${exitCode})`;
+}
+
 export { resolveDeployTarget };
 
 export type EnqueueRunResult =
@@ -38,6 +46,8 @@ export async function enqueueScriptRun(input: {
   scriptSnapshot: ScriptSnapshot;
   requestedBy: string;
   batchId?: string | null;
+  /** True when the parent batch was fired by a script schedule. */
+  scheduled?: boolean;
 }): Promise<EnqueueRunResult> {
   const [inflight] = await db
     .select({ id: scriptRunJobs.id })
@@ -62,6 +72,21 @@ export async function enqueueScriptRun(input: {
       requestedBy: input.requestedBy,
     })
     .returning({ id: scriptRunJobs.id });
+  await upsertAuditEvent({
+    sourceTable: SCRIPT_AUDIT_TABLE,
+    sourceId: row.id,
+    assetId: input.assetId,
+    action: "script_run",
+    operator: input.requestedBy.trim() || "system",
+    source: input.scheduled ? "scheduled" : "admin_console",
+    summary: scriptRunSummary(input.scriptSnapshot.name),
+    details: {
+      scriptId: input.scriptId,
+      scriptName: input.scriptSnapshot.name,
+      batchId: input.batchId ?? null,
+    },
+    status: "pending",
+  });
   return { ok: true, id: row.id };
 }
 
@@ -184,6 +209,14 @@ export async function updateScriptRunStatus(
   if (updated.length) {
     if (u.status === "succeeded" || u.status === "failed") {
       const row = updated[0];
+      await updateAuditEventStatus({
+        sourceTable: SCRIPT_AUDIT_TABLE,
+        sourceId: row.id,
+        status: u.status,
+        ...(u.status === "succeeded" && u.result
+          ? { summary: scriptRunSummary(row.snapshot.name, u.result.exitCode) }
+          : {}),
+      });
       await notifyScriptRunResult({
         jobId: row.id,
         status: u.status,
@@ -217,7 +250,15 @@ export async function cancelScriptRun(jobId: string): Promise<boolean> {
       ),
     )
     .returning({ id: scriptRunJobs.id });
-  return updated.length > 0;
+  if (updated.length) {
+    await updateAuditEventStatus({
+      sourceTable: SCRIPT_AUDIT_TABLE,
+      sourceId: updated[0].id,
+      status: "canceled",
+    });
+    return true;
+  }
+  return false;
 }
 
 export async function getScriptRun(

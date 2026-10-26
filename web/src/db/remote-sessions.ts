@@ -2,6 +2,9 @@ import "server-only";
 
 import { and, asc, desc, eq, gt, inArray, sql } from "drizzle-orm";
 
+import type { AuditStatus } from "@/lib/computer-audit-actions";
+
+import { updateAuditEventStatus, upsertAuditEvent } from "./computer-audit";
 import { db } from "./index";
 import {
   assets,
@@ -31,6 +34,33 @@ export const REMOTE_SESSION_STUCK_TIMEOUT_MS = Number(
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const REMOTE_AUDIT_TABLE = "remote_sessions";
+
+function remoteTerminal(
+  status: "closed" | "failed" | "canceled",
+): { status: AuditStatus; summary: string } {
+  if (status === "closed") {
+    return { status: "succeeded", summary: "Remote session ended" };
+  }
+  if (status === "failed") {
+    return { status: "failed", summary: "Remote session failed" };
+  }
+  return { status: "canceled", summary: "Remote session canceled" };
+}
+
+async function auditRemoteTerminal(
+  sessionId: string,
+  status: "closed" | "failed" | "canceled",
+): Promise<void> {
+  const terminal = remoteTerminal(status);
+  await updateAuditEventStatus({
+    sourceTable: REMOTE_AUDIT_TABLE,
+    sourceId: sessionId,
+    status: terminal.status,
+    summary: terminal.summary,
+  });
+}
 
 /** postgres.js surfaces a unique-constraint violation as SQLSTATE 23505. */
 function isUniqueViolation(err: unknown): boolean {
@@ -110,6 +140,17 @@ export async function createRemoteSession(opts: {
         requestedBy: opts.requestedBy,
       })
       .returning({ id: remoteSessions.id });
+    await upsertAuditEvent({
+      sourceTable: REMOTE_AUDIT_TABLE,
+      sourceId: created.id,
+      assetId: row.assetId,
+      action: "remote_session",
+      operator: opts.requestedBy,
+      source: "admin_console",
+      summary: "Opened remote session",
+      details: { targetIp: row.ip, shell: "powershell" },
+      status: "pending",
+    });
     return { ok: true, sessionId: created.id };
   } catch (err) {
     if (isUniqueViolation(err)) return { ok: false, reason: "already-open" };
@@ -182,10 +223,12 @@ export async function requestEndSession(
 
   const now = new Date();
   if (s.status === "pending") {
-    await db
+    const updated = await db
       .update(remoteSessions)
       .set({ status: "canceled", endedAt: now, updatedAt: now })
-      .where(eq(remoteSessions.id, sessionId));
+      .where(eq(remoteSessions.id, sessionId))
+      .returning({ id: remoteSessions.id });
+    if (updated.length) await auditRemoteTerminal(sessionId, "canceled");
   } else if (s.status === "claimed" || s.status === "active") {
     await db
       .update(remoteSessions)
@@ -212,7 +255,7 @@ export async function claimNextRemoteSession(
 
   // Reaper: a claim that never connected → failed; a live session gone quiet →
   // closed (AC-3). Keyed on the freshest activity timestamp available.
-  await db
+  const timedOut = await db
     .update(remoteSessions)
     .set({
       status: "failed",
@@ -225,8 +268,12 @@ export async function claimNextRemoteSession(
         eq(remoteSessions.status, "claimed"),
         sql`coalesce(${remoteSessions.startedAt}, ${remoteSessions.claimedAt}) < ${cutoffIso}`,
       ),
-    );
-  await db
+    )
+    .returning({ id: remoteSessions.id });
+  for (const row of timedOut) {
+    await auditRemoteTerminal(row.id, "failed");
+  }
+  const goneQuiet = await db
     .update(remoteSessions)
     .set({ status: "closed", endedAt: now, updatedAt: now })
     .where(
@@ -234,7 +281,11 @@ export async function claimNextRemoteSession(
         inArray(remoteSessions.status, ["active", "closing"]),
         sql`coalesce(${remoteSessions.lastActivityAt}, ${remoteSessions.startedAt}, ${remoteSessions.claimedAt}) < ${cutoffIso}`,
       ),
-    );
+    )
+    .returning({ id: remoteSessions.id });
+  for (const row of goneQuiet) {
+    await auditRemoteTerminal(row.id, "closed");
+  }
 
   const claimedAtIso = new Date().toISOString();
   const rows = (await db.execute(sql`
@@ -355,7 +406,10 @@ export async function finishSession(
       ),
     )
     .returning({ id: remoteSessions.id });
-  if (updated.length) return "ok";
+  if (updated.length) {
+    await auditRemoteTerminal(sessionId, status);
+    return "ok";
+  }
   return (await getRemoteSession(sessionId)) ? "stale" : "notfound";
 }
 

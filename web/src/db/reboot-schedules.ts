@@ -1,5 +1,7 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
+
 import { and, eq, inArray, or, sql } from "drizzle-orm";
 
 import {
@@ -7,6 +9,7 @@ import {
   type RebootCadence,
 } from "@/lib/reboot-occurrence";
 
+import { upsertAuditEvent } from "./computer-audit";
 import { db } from "./index";
 import { cancelRebootJob, enqueueRebootJob } from "./reboot";
 import {
@@ -23,6 +26,40 @@ import {
  */
 
 const IN_FLIGHT = ["pending", "claimed", "running"] as const;
+
+const SCHEDULE_AUDIT_TABLE = "reboot_schedules";
+
+function scheduleOperator(
+  actorEmail: string | undefined,
+  requestedBy: string | undefined,
+): string {
+  const actor = actorEmail?.trim();
+  if (actor) return actor;
+  const owner = requestedBy?.trim();
+  if (owner) return owner;
+  return "system";
+}
+
+async function auditScheduleChange(input: {
+  scheduleId: string;
+  assetId: string;
+  operator: string;
+  summary: string;
+  status: "succeeded" | "canceled";
+  details?: Record<string, unknown>;
+}): Promise<void> {
+  await upsertAuditEvent({
+    sourceTable: SCHEDULE_AUDIT_TABLE,
+    sourceId: randomUUID(),
+    assetId: input.assetId,
+    action: "reboot_schedule",
+    operator: input.operator,
+    source: "admin_console",
+    summary: input.summary,
+    details: { ...input.details, scheduleId: input.scheduleId },
+    status: input.status,
+  });
+}
 
 export type ScheduleListItem = {
   id: string;
@@ -195,6 +232,21 @@ export async function upsertRebootSchedule(
     });
   if (!saved) return { ok: false, reason: "bad-input" };
 
+  await auditScheduleChange({
+    scheduleId: saved.id,
+    assetId: input.assetId,
+    operator: scheduleOperator(input.requestedBy, undefined),
+    summary: `Saved ${input.cadence} reboot at ${input.localTime} ${input.timezone}`,
+    status: "succeeded",
+    details: {
+      cadence: input.cadence,
+      weekdays,
+      localTime: input.localTime,
+      timezone: input.timezone,
+      enabled: true,
+    },
+  });
+
   await cancelInFlightForSchedule(saved.id, saved.nextJobId);
   await materializeRebootScheduleWithIp(saved.id, targetIp);
   return { ok: true, id: saved.id };
@@ -203,6 +255,7 @@ export async function upsertRebootSchedule(
 export async function setRebootScheduleEnabled(
   assetId: string,
   enabled: boolean,
+  actorEmail?: string,
 ): Promise<boolean> {
   const [row] = await db
     .update(rebootSchedules)
@@ -211,8 +264,18 @@ export async function setRebootScheduleEnabled(
     .returning({
       id: rebootSchedules.id,
       nextJobId: rebootSchedules.nextJobId,
+      requestedBy: rebootSchedules.requestedBy,
     });
   if (!row) return false;
+
+  await auditScheduleChange({
+    scheduleId: row.id,
+    assetId,
+    operator: scheduleOperator(actorEmail, row.requestedBy),
+    summary: enabled ? "Enabled recurring reboot" : "Disabled recurring reboot",
+    status: "succeeded",
+    details: { enabled },
+  });
 
   if (!enabled) {
     await cancelInFlightForSchedule(row.id, row.nextJobId);
@@ -227,11 +290,15 @@ export async function setRebootScheduleEnabled(
   return true;
 }
 
-export async function deleteRebootSchedule(assetId: string): Promise<boolean> {
+export async function deleteRebootSchedule(
+  assetId: string,
+  actorEmail?: string,
+): Promise<boolean> {
   const [row] = await db
     .select({
       id: rebootSchedules.id,
       nextJobId: rebootSchedules.nextJobId,
+      requestedBy: rebootSchedules.requestedBy,
     })
     .from(rebootSchedules)
     .where(eq(rebootSchedules.assetId, assetId))
@@ -243,7 +310,17 @@ export async function deleteRebootSchedule(assetId: string): Promise<boolean> {
     .delete(rebootSchedules)
     .where(eq(rebootSchedules.assetId, assetId))
     .returning({ id: rebootSchedules.id });
-  return deleted.length > 0;
+  if (!deleted.length) return false;
+
+  await auditScheduleChange({
+    scheduleId: row.id,
+    assetId,
+    operator: scheduleOperator(actorEmail, row.requestedBy),
+    summary: "Deleted recurring reboot schedule",
+    status: "canceled",
+    details: { deleted: true },
+  });
+  return true;
 }
 
 export async function getRebootScheduleForAssetTag(

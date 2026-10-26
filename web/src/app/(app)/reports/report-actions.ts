@@ -17,6 +17,7 @@ import {
 } from "@/db/report-schedules";
 import { getCurrentUser, hasPermission } from "@/lib/auth/session";
 import { validateScheduleInput } from "@/lib/report-schedule";
+import { reportSourceNeedsAuditRead } from "@/lib/report-sources";
 import type { ReportResult, ReportSpec } from "@/lib/report-spec";
 
 /* Server actions behind the custom report builder (spec 26, slice 1b). Running +
@@ -33,6 +34,9 @@ export type SaveReportResult =
   | { ok: true; id: string; message: string }
   | { ok: false; error: string };
 
+const AUDIT_REPORT_FORBIDDEN =
+  "You don't have permission to view computer audit events.";
+
 /** Run a spec and return its result for the live preview. `report:read`. */
 export async function runReportAction(
   source: unknown,
@@ -44,6 +48,9 @@ export async function runReportAction(
   }
   if (typeof source !== "string") {
     return { ok: false, error: "Pick a data source." };
+  }
+  if (reportSourceNeedsAuditRead(source) && !hasPermission(user, "audit:read")) {
+    return { ok: false, error: AUDIT_REPORT_FORBIDDEN };
   }
 
   const check = validateSpec(source, spec as ReportSpec);
@@ -80,6 +87,12 @@ export async function saveReportAction(input: {
 
   if (typeof input.source !== "string") {
     return { ok: false, error: "Pick a data source." };
+  }
+  if (
+    reportSourceNeedsAuditRead(input.source) &&
+    !hasPermission(user, "audit:read")
+  ) {
+    return { ok: false, error: AUDIT_REPORT_FORBIDDEN };
   }
   const description =
     typeof input.description === "string" && input.description.trim()
@@ -142,6 +155,12 @@ export async function saveScheduleAction(input: {
   }
   const report = await getReport(input.reportId);
   if (!report) return { ok: false, error: "That report no longer exists." };
+  if (
+    reportSourceNeedsAuditRead(report.source) &&
+    !hasPermission(user, "audit:read")
+  ) {
+    return { ok: false, error: AUDIT_REPORT_FORBIDDEN };
+  }
 
   const check = validateScheduleInput(input.schedule);
   if (!check.ok) return { ok: false, error: check.error };

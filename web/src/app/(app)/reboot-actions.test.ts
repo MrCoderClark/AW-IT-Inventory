@@ -236,7 +236,7 @@ describe("setRebootScheduleEnabledAction", () => {
     expect(
       await setRebootScheduleEnabledAction({ assetTag: "PC1", enabled: true }),
     ).toEqual({ ok: true });
-    expect(setEnabledMock).toHaveBeenCalledWith("a1", true);
+    expect(setEnabledMock).toHaveBeenCalledWith("a1", true, "me@opus.local");
     expect(revalidatePathMock).toHaveBeenCalledWith("/assets/PC1");
   });
 
@@ -263,7 +263,7 @@ describe("deleteRebootScheduleAction", () => {
     expect(await deleteRebootScheduleAction({ assetTag: "PC1" })).toEqual({
       ok: true,
     });
-    expect(deleteScheduleMock).toHaveBeenCalledWith("a1");
+    expect(deleteScheduleMock).toHaveBeenCalledWith("a1", "me@opus.local");
     expect(revalidatePathMock).toHaveBeenCalledWith("/assets/PC1");
   });
 

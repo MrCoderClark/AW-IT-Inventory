@@ -75,6 +75,27 @@ describe("enqueueScriptBatch", () => {
     });
     expect(H.enqueueMock).toHaveBeenCalledTimes(2);
     expect(H.enqueueMock.mock.calls[0][0].batchId).toBe(BID);
+    expect(H.enqueueMock.mock.calls[0][0].scheduled).toBe(false);
     expect(H.updateMock).toHaveBeenCalled();
+  });
+
+  it("flags jobs from a schedule", async () => {
+    H.resolveMock.mockResolvedValue({
+      resolved: [{ assetId: "a1", tag: "T1", ip: "1.1.1.1" }],
+      skippedNoIp: 0,
+    });
+    H.state.insertReturns = [[{ id: BID }]];
+    H.enqueueMock.mockResolvedValue({ ok: true, id: "j1" });
+
+    await enqueueScriptBatch({
+      scriptId: "s1",
+      scriptSnapshot: SNAP,
+      targetSpec: { mode: "tags", tags: ["T1"] },
+      source: "schedule",
+      scheduleId: "sched-1",
+      requestedBy: "schedule:sched-1",
+    });
+
+    expect(H.enqueueMock.mock.calls[0][0].scheduled).toBe(true);
   });
 });

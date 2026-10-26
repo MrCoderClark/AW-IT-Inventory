@@ -39,7 +39,7 @@ import { canRenderChart, chartableColumns } from "@/lib/report-chart";
 import {
   fieldMap,
   REPORT_SOURCES,
-  REPORT_SOURCE_LIST,
+  visibleReportSources,
 } from "@/lib/report-sources";
 import {
   OPERATOR_LABELS,
@@ -95,14 +95,18 @@ export interface ReportBuilderInitial {
 export function ReportBuilder({
   initial,
   canWrite,
+  canReadAudit,
   categories = [],
 }: {
   initial?: ReportBuilderInitial;
   canWrite: boolean;
+  /** `audit:read`. Hides the computer audit source when false. */
+  canReadAudit: boolean;
   /** Existing folder names, for the folder field's suggestions. */
   categories?: string[];
 }) {
   const router = useRouter();
+  const sources = visibleReportSources(canReadAudit);
 
   const [source, setSource] = React.useState(initial?.source ?? "assets");
   const [columns, setColumns] = React.useState<string[]>(
@@ -326,7 +330,7 @@ export function ReportBuilder({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {REPORT_SOURCE_LIST.map((s) => (
+              {sources.map((s) => (
                 <SelectItem key={s.id} value={s.id}>
                   {s.label}
                 </SelectItem>
