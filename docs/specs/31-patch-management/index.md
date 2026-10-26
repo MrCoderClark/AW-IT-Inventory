@@ -408,11 +408,11 @@ fleet visibility gap called out in phase 1.
 
 ### Out of scope / v2 (not this spec)
 
-**First v2 slice:** [Fleet OS multi-install from `/patches`](../../superpowers/specs/2026-10-22-spec-31-v2-fleet-os-install-design.md) — multi-select computers, enqueue all missing OS updates per host, global concurrency cap. Implemented on `feat/spec-31-v2-fleet-os-install` (🚧 until merge).
+**First v2 slice:** [Fleet OS multi-install from `/patches`](../../superpowers/specs/2026-10-22-spec-31-v2-fleet-os-install-design.md) — multi-select computers, enqueue all missing OS updates per host, global concurrency cap. Merged #119.
 
 **Scheduled reboot v2 slice:** [Standalone + install-linked scheduled reboot](../../superpowers/specs/2026-10-22-spec-31-v2-scheduled-reboot-design.md) — exact date/time (`reboot_jobs` queue), Updates tab schedule/cancel, optional reboot on OS install (Updates + fleet). Merged #121.
 
-**Recurring reboot v2 slice:** [Per-computer daily/weekly](../../superpowers/specs/2026-10-23-spec-31-v2-recurring-reboot-design.md) — `reboot_schedules` materializes next `reboot_jobs` child; Updates tab cadence/time; skip missed windows. On `feat/spec-31-v2-recurring-reboot` (🚧 until merge).
+**Recurring reboot v2 slice:** [Per-computer daily/weekly](../../superpowers/specs/2026-10-23-spec-31-v2-recurring-reboot-design.md) — `reboot_schedules` materializes next `reboot_jobs` child; Updates tab cadence/time; skip missed windows. Merged #122.
 
 Still deferred — do not block marking 31 complete:
 - WSUS / target-group scoping

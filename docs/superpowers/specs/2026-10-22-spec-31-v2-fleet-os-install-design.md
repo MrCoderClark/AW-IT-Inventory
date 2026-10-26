@@ -1,7 +1,7 @@
 # Spec 31 v2 — Fleet OS multi-install from `/patches`
 
 **Date**: 2026-10-22  
-**Status**: Accepted (implemented on `feat/spec-31-v2-fleet-os-install`)  
+**Status**: Shipped (merged #119)  
 **Parent**: [Spec 31 patch management](../../specs/31-patch-management/index.md)  
 **Branch**: `feat/spec-31-v2-fleet-os-install` (implementation; this doc on `docs/spec-31-v2-fleet-os-install`)
 
@@ -116,12 +116,12 @@ unchanged. Cap is enforced by web claim returning empty when saturated.
 
 ## Acceptance
 
-- [ ] Multi-select on `/patches` enqueues OS-missing installs for selected hosts.
-- [ ] Each job is a normal `patch_install_jobs` row; worker uses existing OS install.
-- [ ] At most `PATCH_INSTALL_MAX_CONCURRENT` jobs are `claimed|running` at once.
-- [ ] Per-computer one-in-flight still applies.
-- [ ] Skips are reported; request is not all-or-nothing.
-- [ ] No reboot, no winget in the fleet action, no WSUS, no batch parent table.
+- [x] Multi-select on `/patches` enqueues OS-missing installs for selected hosts.
+- [x] Each job is a normal `patch_install_jobs` row; worker uses existing OS install.
+- [x] At most `PATCH_INSTALL_MAX_CONCURRENT` jobs are `claimed|running` at once.
+- [x] Per-computer one-in-flight still applies.
+- [x] Skips are reported; request is not all-or-nothing.
+- [x] No reboot, no winget in the fleet action, no WSUS, no batch parent table.
 
 ## Consequences
 

@@ -7,11 +7,10 @@ via a feature branch + PR.
 
 ---
 
-## 🚧 Computer audit log (`feat/computer-audit-log`)
+## Shipped ✅ — Computer audit log (merged #123)
 
 Fleet **`/audit`** page: unified computer action history (dual-write
 `computer_audit_events`), Spec 26 **`computerAuditEvents`** report source, CSV export.
-Stays 🚧 until merge.
 Design: `docs/superpowers/specs/2026-10-23-computer-audit-log-design.md`.
 
 ## Shipped ✅ — Spec 31 v2: Recurring reboot (merged #122)
@@ -28,17 +27,16 @@ enqueueing OS install (Updates or fleet `/patches`). `reboot_jobs` queue; collec
 at `scheduledAt` over WinRM.
 Design: `docs/superpowers/specs/2026-10-22-spec-31-v2-scheduled-reboot-design.md`.
 
-## 🚧 Spec 31 v2: Fleet OS multi-install (`feat/spec-31-v2-fleet-os-install`)
+## Shipped ✅ — Spec 31 v2: Fleet OS multi-install (merged #119)
 
 Multi-select on `/patches`, **Install OS updates** for all missing OS per host, global
-concurrency cap (`PATCH_INSTALL_MAX_CONCURRENT`). Stays 🚧 until merge.
+concurrency cap (`PATCH_INSTALL_MAX_CONCURRENT`).
 Design: `docs/superpowers/specs/2026-10-22-spec-31-v2-fleet-os-install-design.md`.
 
-## 🚧 Spec 33: Ticket email-in (`feat/spec-33-ticket-email-in`)
+## Shipped ✅ — Spec 33: Ticket email-in (merged #117)
 
-Reply-only inbound is implemented on this branch and stays 🚧 until merge.
-`POST /api/ingest/email` appends a user comment when From is the assignee or
-requester. No create-from-mail.
+Reply-only inbound: `POST /api/ingest/email` appends a user comment when From is
+the assignee or requester. No create-from-mail.
 Design: `docs/superpowers/specs/2026-10-21-ticket-email-in-design.md`.
 
 **Ops (before it works):** point the mailbox MX at Resend Receiving, set the
