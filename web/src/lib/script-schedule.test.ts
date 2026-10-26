@@ -30,6 +30,28 @@ describe("validateTargetSpec", () => {
       spec: { mode: "location", locationId: "loc-1" },
     });
   });
+
+  it("accepts a device group id", () => {
+    expect(
+      validateTargetSpec({
+        mode: "group",
+        groupId: "a3000000-0000-4000-8000-000000000001",
+      }),
+    ).toEqual({
+      ok: true,
+      spec: {
+        mode: "group",
+        groupId: "a3000000-0000-4000-8000-000000000001",
+      },
+    });
+  });
+
+  it("rejects an empty group id", () => {
+    expect(validateTargetSpec({ mode: "group", groupId: "  " })).toEqual({
+      ok: false,
+      error: "Pick a device group.",
+    });
+  });
 });
 
 describe("validateScriptScheduleInput", () => {

@@ -33,10 +33,12 @@ export function ScriptLibrary({
   initial,
   computers,
   locations,
+  groups,
 }: {
   initial: ScriptListItem[];
   computers: Array<{ tag: string; name: string }>;
   locations: LocationOption[];
+  groups: Array<{ id: string; name: string }>;
 }) {
   const router = useRouter();
   const [rows, setRows] = React.useState(initial);
@@ -352,6 +354,7 @@ export function ScriptLibrary({
         script={runOn}
         computers={computers}
         locations={locations}
+        groups={groups}
         open={runOn !== null}
         onOpenChange={(o) => {
           if (!o) setRunOn(null);

@@ -93,8 +93,11 @@ always clean temp; never reboot.
    **AC-9–12.** ✅ shipped.
 3. **v3 — on-alert remediation** — [design](../../superpowers/specs/2026-10-26-script-on-alert-design.md):
    optional `alert_rules.remediation_script_id`; enqueue on Spec 30 fire only
-   (implementing on `feat/script-on-alert`).
-4. **Later** — script parameters; non-PowerShell; device-group targets.
+   (shipped #125).
+4. **v4 — device-group targets** — [design](../../superpowers/specs/2026-10-26-device-groups-design.md):
+   dynamic groups (location / OS / compliance) as `ScriptTargetSpec` mode
+   `group` for Run on… and schedules (implementing on `feat/device-groups`).
+5. **Later** — script parameters; non-PowerShell; patch/alert group consumers.
 
 ### Phase 2 — Fan-out + schedules
 

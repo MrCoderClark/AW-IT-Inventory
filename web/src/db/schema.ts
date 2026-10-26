@@ -1565,6 +1565,39 @@ export const missingUpdateChecks = pgTable(
 
 export type MissingUpdateCheckRow = typeof missingUpdateChecks.$inferSelect;
 
+/** Dynamic device-group filter rules (v1). All set fields AND together. */
+export type DeviceGroupRules = {
+  locationId?: string | null;
+  osContains?: string | null;
+  compliance?: "any" | "at-risk" | "ok";
+};
+
+// Dynamic device groups (scripts target mode `group`). Membership is recomputed
+// on resolve — no static member table.
+export const deviceGroups = pgTable(
+  "device_groups",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    description: text("description"),
+    rules: jsonb("rules").$type<DeviceGroupRules>().notNull(),
+    createdBy: text("created_by").notNull(),
+    updatedBy: text("updated_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    uniqueIndex("device_groups_name_lower_uq").on(sql`lower(${t.name})`),
+    index("device_groups_name_idx").on(t.name),
+  ],
+);
+
+export type DeviceGroupRow = typeof deviceGroups.$inferSelect;
+
 // Script library + run queue (spec 32). Saved PowerShell; run-now on one Computer.
 export const scripts = pgTable(
   "scripts",
@@ -1598,10 +1631,11 @@ export type ScriptRunResult = {
   exitCode: number | null;
   outputTail: string | null;
 };
-/** Frozen target set for a batch or schedule (spec 32 v2). */
+/** Frozen target set for a batch or schedule (spec 32 v2 / device groups). */
 export type ScriptTargetSpec =
   | { mode: "tags"; tags: string[] }
-  | { mode: "location"; locationId: string };
+  | { mode: "location"; locationId: string }
+  | { mode: "group"; groupId: string };
 
 // Fan-out batch (spec 32 v2): one row per Run-on… / schedule fire.
 export const scriptRunBatches = pgTable(

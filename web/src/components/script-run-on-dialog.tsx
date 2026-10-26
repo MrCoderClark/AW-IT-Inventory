@@ -18,24 +18,29 @@ import type { LocationOption } from "@/lib/data";
 import type { ScriptListItem } from "@/db/scripts";
 
 type ComputerOpt = { tag: string; name: string };
+type GroupOpt = { id: string; name: string };
+type TargetMode = "tags" | "location" | "group";
 
 export function ScriptRunOnDialog({
   script,
   computers,
   locations,
+  groups,
   open,
   onOpenChange,
 }: {
   script: ScriptListItem | null;
   computers: ComputerOpt[];
   locations: LocationOption[];
+  groups: GroupOpt[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   const router = useRouter();
-  const [mode, setMode] = React.useState<"tags" | "location">("tags");
+  const [mode, setMode] = React.useState<TargetMode>("tags");
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [locationId, setLocationId] = React.useState("");
+  const [groupId, setGroupId] = React.useState("");
   const [filter, setFilter] = React.useState("");
   const [busy, startBusy] = React.useTransition();
 
@@ -44,6 +49,7 @@ export function ScriptRunOnDialog({
       setMode("tags");
       setSelected(new Set());
       setLocationId("");
+      setGroupId("");
       setFilter("");
     }
   }, [open, script?.id]);
@@ -72,7 +78,9 @@ export function ScriptRunOnDialog({
       const targetSpec =
         mode === "tags"
           ? { mode: "tags" as const, tags: Array.from(selected) }
-          : { mode: "location" as const, locationId };
+          : mode === "location"
+            ? { mode: "location" as const, locationId }
+            : { mode: "group" as const, groupId };
 
       const res = await runScriptBatchAction({
         scriptId: script.id,
@@ -92,7 +100,11 @@ export function ScriptRunOnDialog({
   }
 
   const canRun =
-    mode === "tags" ? selected.size > 0 : Boolean(locationId.trim());
+    mode === "tags"
+      ? selected.size > 0
+      : mode === "location"
+        ? Boolean(locationId.trim())
+        : Boolean(groupId.trim());
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -103,7 +115,7 @@ export function ScriptRunOnDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex gap-2 text-sm">
+        <div className="flex flex-wrap gap-2 text-sm">
           <label className="flex items-center gap-1.5">
             <input
               type="radio"
@@ -121,6 +133,15 @@ export function ScriptRunOnDialog({
               onChange={() => setMode("location")}
             />
             Location
+          </label>
+          <label className="flex items-center gap-1.5">
+            <input
+              type="radio"
+              name="target-mode"
+              checked={mode === "group"}
+              onChange={() => setMode("group")}
+            />
+            Device group
           </label>
         </div>
 
@@ -161,7 +182,7 @@ export function ScriptRunOnDialog({
               {selected.size} selected
             </p>
           </div>
-        ) : (
+        ) : mode === "location" ? (
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-xs text-muted-foreground">
               Location subtree (includes children)
@@ -176,6 +197,26 @@ export function ScriptRunOnDialog({
                 <option key={l.id} value={l.id}>
                   {"\u00A0".repeat(l.depth * 2)}
                   {l.path}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-xs text-muted-foreground">Device group</span>
+            <select
+              className="rounded-md border bg-background px-2 py-1.5"
+              value={groupId}
+              onChange={(e) => setGroupId(e.target.value)}
+            >
+              <option value="">
+                {groups.length === 0
+                  ? "No groups yet — create one under Device groups"
+                  : "Pick a group…"}
+              </option>
+              {groups.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name}
                 </option>
               ))}
             </select>

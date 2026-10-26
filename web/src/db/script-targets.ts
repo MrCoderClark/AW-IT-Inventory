@@ -1,12 +1,22 @@
 import "server-only";
 
-import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, asc, eq, ilike, inArray, isNotNull } from "drizzle-orm";
 
+import {
+  isAtRisk,
+  scoreCompliance,
+  type CompliancePosture,
+} from "@/lib/compliance-score";
+import { normalizeDeviceGroupRules } from "@/lib/device-group-rules";
+import { getDeviceGroup } from "./device-groups";
 import { getSubtreeIds } from "./queries";
 import { db } from "./index";
 import {
   assets,
+  complianceStatus,
   computerDetails,
+  machines,
+  type DeviceGroupRules,
   type ScriptTargetSpec,
 } from "./schema";
 
@@ -30,9 +40,9 @@ function uniqTags(tags: string[]): string[] {
 }
 
 /**
- * Resolve a frozen targetSpec to Computers with IPs (spec 32 v2).
- * Tags mode = multi-select asset tags. Location mode = location subtree.
- * Hosts without an IP are counted in skippedNoIp and omitted from resolved.
+ * Resolve a frozen targetSpec to Computers with IPs (spec 32 v2 / device groups).
+ * Tags = multi-select asset tags. Location = location subtree. Group = dynamic
+ * device_groups rules. Hosts without an IP are counted in skippedNoIp.
  */
 export async function resolveScriptTargets(
   spec: ScriptTargetSpec,
@@ -54,6 +64,10 @@ export async function resolveScriptTargets(
     return splitByIp(rows);
   }
 
+  if (spec.mode === "group") {
+    return resolveDeviceGroup(spec.groupId);
+  }
+
   const subtree = await getSubtreeIds(spec.locationId);
   if (subtree.length === 0) return { resolved: [], skippedNoIp: 0 };
 
@@ -70,6 +84,100 @@ export async function resolveScriptTargets(
     );
 
   return splitByIp(rows);
+}
+
+/**
+ * Match Computers against a saved device group's rules, then gate on IP.
+ * Missing / empty group → empty. Compliance uses scoreCompliance + isAtRisk.
+ */
+export async function resolveDeviceGroup(
+  groupId: string,
+): Promise<ResolveTargetsResult> {
+  const group = await getDeviceGroup(groupId);
+  if (!group) {
+    console.warn(`[device-groups] missing group ${groupId}`);
+    return { resolved: [], skippedNoIp: 0 };
+  }
+  return resolveDeviceGroupRules(group.rules);
+}
+
+/** Preview / resolve without a saved row (also used by create form preview). */
+export async function resolveDeviceGroupRules(
+  rawRules: DeviceGroupRules,
+): Promise<ResolveTargetsResult> {
+  const rules = normalizeDeviceGroupRules(rawRules);
+  const conditions = [eq(assets.type, "Computer")];
+
+  if (rules.locationId) {
+    const subtree = await getSubtreeIds(rules.locationId);
+    if (subtree.length === 0) return { resolved: [], skippedNoIp: 0 };
+    conditions.push(inArray(assets.locationId, subtree));
+  }
+
+  if (rules.osContains) {
+    conditions.push(
+      ilike(machines.osName, `%${escapeLike(rules.osContains)}%`),
+    );
+  }
+
+  const rows = await db
+    .select({
+      assetId: assets.id,
+      tag: assets.tag,
+      ip: computerDetails.ipAddress,
+      bitlocker: complianceStatus.bitlocker,
+      defenderRealtime: complianceStatus.defenderRealtime,
+      defenderSigAgeDays: complianceStatus.defenderSigAgeDays,
+      avProduct: complianceStatus.avProduct,
+      tpmReady: complianceStatus.tpmReady,
+      secureBoot: complianceStatus.secureBoot,
+      updatesLastDays: complianceStatus.updatesLastDays,
+      updatesPending: complianceStatus.updatesPending,
+      systemDrivePctUsed: complianceStatus.systemDrivePctUsed,
+      hasCompliance: complianceStatus.assetId,
+    })
+    .from(assets)
+    .leftJoin(computerDetails, eq(computerDetails.assetId, assets.id))
+    .leftJoin(complianceStatus, eq(complianceStatus.assetId, assets.id))
+    .leftJoin(machines, eq(machines.assetId, assets.id))
+    .where(and(...conditions));
+
+  const byAsset = new Map<string, (typeof rows)[number]>();
+  for (const r of rows) {
+    if (!byAsset.has(r.assetId)) byAsset.set(r.assetId, r);
+  }
+  const unique = [...byAsset.values()];
+
+  const filtered =
+    rules.compliance === "any"
+      ? unique
+      : unique.filter((r) => {
+          if (!r.hasCompliance) return false;
+          const posture: CompliancePosture = {
+            bitlocker: r.bitlocker,
+            defenderRealtime: r.defenderRealtime,
+            defenderSigAgeDays: r.defenderSigAgeDays,
+            avProduct: r.avProduct,
+            tpmReady: r.tpmReady,
+            secureBoot: r.secureBoot,
+            updatesLastDays: r.updatesLastDays,
+            updatesPending: r.updatesPending,
+            systemDrivePctUsed: r.systemDrivePctUsed,
+          };
+          const score = scoreCompliance(posture);
+          const atRisk = isAtRisk(score);
+          return rules.compliance === "at-risk"
+            ? atRisk
+            : !atRisk && score.assessed;
+        });
+
+  return splitByIp(
+    filtered.map((r) => ({ assetId: r.assetId, tag: r.tag, ip: r.ip })),
+  );
+}
+
+function escapeLike(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
 }
 
 function splitByIp(

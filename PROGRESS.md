@@ -7,11 +7,17 @@ via a feature branch + PR.
 
 ---
 
-## 🚧 Spec 32: Script on alert (`feat/script-on-alert`)
+## 🚧 Device groups v1 (`feat/device-groups`)
+
+Dynamic device groups (location + OS + compliance filters) as script Run on… /
+schedule targets (`ScriptTargetSpec` mode `group`). Stays 🚧 until merge.
+Design: `docs/superpowers/specs/2026-10-26-device-groups-design.md`.
+
+## Shipped ✅ — Spec 32: Script on alert (merged #125)
 
 Optional remediation script on Spec 30 metric alert rules: on episode **fire**,
 enqueue a normal `script_run_jobs` row for the alerting computer
-(`alert_rules.remediation_script_id`). Stays 🚧 until merge.
+(`alert_rules.remediation_script_id`).
 Design: `docs/superpowers/specs/2026-10-26-script-on-alert-design.md`.
 
 ## Shipped ✅ — Computer audit log (merged #123)

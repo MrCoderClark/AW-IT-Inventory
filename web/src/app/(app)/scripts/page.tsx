@@ -5,6 +5,7 @@ import { PagePlaceholder } from "@/components/page-placeholder";
 import { ScriptLibrary } from "@/components/script-library";
 import { ScriptRecentRuns } from "@/components/script-recent-runs";
 import { ScriptSchedulesPanel } from "@/components/script-schedules-panel";
+import { listDeviceGroupOptions } from "@/db/device-groups";
 import { getLocationOptions } from "@/db/queries";
 import { listRecentScriptRuns } from "@/db/script-runs";
 import { listScriptSchedules } from "@/db/script-schedules";
@@ -27,12 +28,13 @@ export default async function Page() {
     );
   }
 
-  const [scripts, schedules, computers, locations, recentRuns] =
+  const [scripts, schedules, computers, locations, groups, recentRuns] =
     await Promise.all([
       listScripts(),
       listScriptSchedules(),
       listComputerPickerOptions(),
       getLocationOptions(),
+      listDeviceGroupOptions(),
       listRecentScriptRuns(30),
     ]);
 
@@ -47,6 +49,7 @@ export default async function Page() {
         initial={scripts}
         computers={computers}
         locations={locations}
+        groups={groups}
       />
       <ScriptRecentRuns initial={recentRuns} />
       <ScriptSchedulesPanel
@@ -54,6 +57,7 @@ export default async function Page() {
         scripts={scripts}
         computers={computers}
         locations={locations}
+        groups={groups}
       />
     </div>
   );

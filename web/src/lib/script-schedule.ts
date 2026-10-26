@@ -59,6 +59,7 @@ export function validateTargetSpec(
 ):
   | { ok: true; spec: { mode: "tags"; tags: string[] } }
   | { ok: true; spec: { mode: "location"; locationId: string } }
+  | { ok: true; spec: { mode: "group"; groupId: string } }
   | { ok: false; error: string } {
   if (!raw || typeof raw !== "object") {
     return { ok: false, error: "Choose targets." };
@@ -87,5 +88,12 @@ export function validateTargetSpec(
     }
     return { ok: true, spec: { mode: "location", locationId } };
   }
-  return { ok: false, error: "Choose tags or a location." };
+  if (r.mode === "group") {
+    const groupId = typeof r.groupId === "string" ? r.groupId.trim() : "";
+    if (!groupId) {
+      return { ok: false, error: "Pick a device group." };
+    }
+    return { ok: true, spec: { mode: "group", groupId } };
+  }
+  return { ok: false, error: "Choose computers, a location, or a device group." };
 }
