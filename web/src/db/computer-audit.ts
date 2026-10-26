@@ -307,12 +307,14 @@ export async function getAuditKpis(filters: AuditKpiFilters = {}): Promise<Audit
   }
 
   const from = defaultFrom(filters.from);
-  const day = startOfUtcDay();
+  // Bind as ISO text — embedding a Date in FILTER (WHERE …) can stringify as a
+  // locale string and blow up the driver (e.g. "Sun Oct 25 2026 20:00:00 GMT-0400").
+  const dayIso = startOfUtcDay().toISOString();
   const selection = {
     total: sql<number>`count(*)::int`,
-    today: sql<number>`(count(*) filter (where ${computerAuditEvents.occurredAt} >= ${day}))::int`,
+    today: sql<number>`coalesce(sum(case when ${computerAuditEvents.occurredAt} >= ${dayIso}::timestamptz then 1 else 0 end), 0)::int`,
     uniqueOperators: sql<number>`count(distinct ${computerAuditEvents.operator})::int`,
-    flagged: sql<number>`(count(*) filter (where ${computerAuditEvents.flagged}))::int`,
+    flagged: sql<number>`coalesce(sum(case when ${computerAuditEvents.flagged} then 1 else 0 end), 0)::int`,
   };
   const timeWhere = and(
     gte(computerAuditEvents.occurredAt, from),
