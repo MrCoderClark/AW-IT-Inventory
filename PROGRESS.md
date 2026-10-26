@@ -7,10 +7,10 @@ via a feature branch + PR.
 
 ---
 
-## 🚧 Device groups v1 (`feat/device-groups`)
+## Shipped ✅ — Device groups v1 (merged #126)
 
 Dynamic device groups (location + OS + compliance filters) as script Run on… /
-schedule targets (`ScriptTargetSpec` mode `group`). Stays 🚧 until merge.
+schedule targets (`ScriptTargetSpec` mode `group`).
 Design: `docs/superpowers/specs/2026-10-26-device-groups-design.md`.
 
 ## Shipped ✅ — Spec 32: Script on alert (merged #125)
