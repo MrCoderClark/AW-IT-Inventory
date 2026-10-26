@@ -46,3 +46,6 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Agent SDD scratch (specs live in docs/superpowers/).
+.superpowers/
