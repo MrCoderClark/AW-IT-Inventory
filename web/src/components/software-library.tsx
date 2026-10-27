@@ -19,6 +19,10 @@ import { toast } from "sonner";
 
 import { deleteSoftwarePackageAction } from "@/app/(app)/software-deploy-actions";
 import type { SoftwareStep } from "@/db/schema";
+import {
+  PACKAGE_TEMPLATES,
+  type EditorStepPartial,
+} from "@/lib/software-package-templates";
 import { HeroHeader } from "@/components/hero-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,6 +35,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -344,6 +354,20 @@ function hydrateStepFields(s: SoftwareStep): EditorStepBase {
 }
 
 /** Hydrate a saved package's steps into editor steps (files already uploaded). */
+function editorStepFromPartial(partial: EditorStepPartial): EditorStep {
+  if (partial.kind === "script") {
+    return { ...partial, uiId: crypto.randomUUID() };
+  }
+  return {
+    ...partial,
+    uiId: crypto.randomUUID(),
+    companions: partial.companions.map((c) => ({
+      ...c,
+      uiId: crypto.randomUUID(),
+    })),
+  };
+}
+
 function toEditorSteps(steps: SoftwareStep[]): EditorStep[] {
   return steps.map((s) =>
     s.kind === "script"
@@ -425,6 +449,15 @@ function PackageEditor({
         script: "",
         ...defaultEditorStepFields(),
       },
+    ]);
+  }
+
+  function addFromTemplate(templateId: string) {
+    const template = PACKAGE_TEMPLATES.find((t) => t.id === templateId);
+    if (!template) return;
+    setSteps((prev) => [
+      ...prev,
+      ...template.buildSteps().map((p) => editorStepFromPartial(p)),
     ]);
   }
 
@@ -656,6 +689,29 @@ function PackageEditor({
               >
                 <Plus className="size-3.5" /> Installer
               </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={<Button variant="outline" size="sm" />}
+                >
+                  Add from template
+                  <ChevronDown className="size-3.5 opacity-70" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="max-w-sm">
+                  {PACKAGE_TEMPLATES.map((t) => (
+                    <DropdownMenuItem
+                      key={t.id}
+                      onClick={() => addFromTemplate(t.id)}
+                    >
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-medium">{t.label}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {t.description}
+                        </span>
+                      </div>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
               <input
                 ref={fileRef}
                 type="file"
