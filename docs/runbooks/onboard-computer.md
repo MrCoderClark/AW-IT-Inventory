@@ -138,23 +138,21 @@ pywinrm's NTLM is picky about the username form:
 
 ## Installing to the collector host itself (self-install)
 
-Pushing a printer to the machine the collector runs on is a special case. The
-collector connects to that box's own IP over SMB, and Windows' **NTLM loopback
-protection** blocks authenticating to yourself by IP — so the `C$` copy fails with
-`STATUS_ACCESS_DENIED` **even after `LocalAccountTokenFilterPolicy=1`**. WinRM
-loopback still works (a printer *list* succeeds), but the SMB transfer doesn't.
+Pushing software or a printer to the machine the collector runs on is a special
+case. The collector used to connect to that box's own IP over SMB, and Windows'
+**NTLM loopback protection** blocks authenticating to yourself by IP — so the `C$`
+copy fails with `STATUS_ACCESS_DENIED` **even after `LocalAccountTokenFilterPolicy=1`**.
 
-Fixes, in order of preference:
-- **Target a different fleet machine** — self-install is the only case that hits
-  this; any other computer (with the token flag set) transfers fine.
-- Only if you genuinely need a printer on the collector box: add a
-  `BackConnectionHostNames` multi-string entry for the IP/hostname under
-  `HKLM\SYSTEM\CurrentControlSet\Control\Lsa\MSV1_0` (restart the `Server` service),
-  or the blunter `DisableLoopbackCheck=1` under `...\Lsa` (needs a reboot, and
-  weakens the box's anti-reflection posture machine-wide).
+**Code fix (current):** when the deploy/install target IP is one of this machine's
+own addresses, the collector **writes under the worker process temp dir**
+(`%TEMP%\h2tecs-deploy\<jobId>\…`) instead of SMB or WinRM-created
+`C:\Windows\Temp\h2tecs-deploy` (that tree is elevated-owned → local `WinError 5`).
+You should see `local copy … (self-target; skipped SMB loopback)` in the worker
+log — not the slow base64 fallback.
 
-Don't rely on the base64-over-WinRM fallback here: it avoids SMB but is
-impractically slow for a real driver (a ~15 MB bundle is thousands of round-trips).
+Optional Windows tweaks (only if you still need SMB loopback for something else):
+`BackConnectionHostNames` under `HKLM\SYSTEM\CurrentControlSet\Control\Lsa\MSV1_0`,
+or `DisableLoopbackCheck=1` under `...\Lsa` (weaker; needs reboot).
 
 ## See also
 

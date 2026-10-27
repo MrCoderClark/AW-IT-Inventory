@@ -156,3 +156,54 @@ def test_continue_on_error_runs_next_step(monkeypatch):
     # whole succeeds (conventional continue-on-error / ignore_errors semantics).
     assert [x["status"] for x in result["steps"]] == ["failed", "ok"]
     assert status == "succeeded" and result["outcome"] == "installed"
+
+
+def test_put_file_self_target_writes_local_disk(tmp_path, monkeypatch):
+    """Self-target must not use SMB (NTLM loopback → ACCESS_DENIED); write locally."""
+    monkeypatch.setattr(software_deploy, "is_self_target", lambda ip: True)
+    wrote: dict = {}
+
+    def fake_local(path, data):
+        wrote["path"] = path
+        wrote["data"] = data
+        # Also land a real file so Path semantics stay honest for callers.
+        p = tmp_path / "staged.exe"
+        p.write_bytes(data)
+        wrote["real"] = str(p)
+
+    monkeypatch.setattr(software_deploy, "put_bytes_local", fake_local)
+    # SMB must not be attempted on self-target.
+    monkeypatch.setattr(software_deploy, "_SMB_AVAILABLE", True)
+
+    out = software_deploy._put_file(
+        session=object(),
+        prof=object(),
+        ip="192.168.70.7",
+        data=DATA,
+        remote_dir=r"C:\Windows\Temp\h2tecs-deploy\d1",
+        filename="app.exe",
+        config=Config(),
+    )
+
+    assert out.endswith("app.exe")
+    assert wrote["data"] == DATA
+    assert "h2tecs-deploy" in wrote["path"]
+
+
+def test_is_self_target_loopback_and_local_ips(monkeypatch):
+    import install_printer
+
+    assert install_printer.is_self_target("127.0.0.1")
+    assert install_printer.is_self_target("localhost")
+    monkeypatch.setattr(install_printer, "local_ipv4s", lambda: {"192.168.70.7"})
+    assert install_printer.is_self_target("192.168.70.7")
+    assert not install_printer.is_self_target("192.168.70.16")
+
+
+def test_self_target_staging_dir_uses_process_temp(monkeypatch, tmp_path):
+    import install_printer
+
+    monkeypatch.setattr(install_printer.tempfile, "gettempdir", lambda: str(tmp_path))
+    d = install_printer.self_target_staging_dir("job-uuid")
+    assert d == str(tmp_path / "h2tecs-deploy" / "job-uuid")
+    assert "Windows\\Temp\\h2tecs-deploy" not in d.replace("/", "\\")

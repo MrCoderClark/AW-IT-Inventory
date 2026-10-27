@@ -20,7 +20,10 @@ import base64
 import hashlib
 import io
 import json
+import socket
+import tempfile
 import zipfile
+from pathlib import Path
 
 import httpx
 import winrm
@@ -48,6 +51,62 @@ console = Console()
 # (An earlier 8 KB chunk produced a ~22 KB command line and failed on chunk 0.)
 # This path is slow for big files — SMB is the real transfer.
 _CHUNK = 2_000
+
+
+# ---------------- Self-target (collector host) ----------------
+
+
+def local_ipv4s() -> set[str]:
+    """IPv4 addresses that belong to this machine (for self-target detection)."""
+    out: set[str] = {"127.0.0.1"}
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            out.add(info[4][0])
+    except OSError:
+        pass
+    try:
+        # Primary outbound interface IP (works even when hostname is odd).
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(("8.8.8.8", 80))
+            out.add(s.getsockname()[0])
+        finally:
+            s.close()
+    except OSError:
+        pass
+    return out
+
+
+def is_self_target(ip: str) -> bool:
+    """True when ``ip`` is this collector host.
+
+    SMB to ``\\\\<own-ip>\\C$`` hits Windows NTLM loopback protection
+    (``STATUS_ACCESS_DENIED``). Callers should write the local filesystem instead.
+    """
+    if not ip:
+        return False
+    normalized = ip.strip().lower()
+    if normalized in ("127.0.0.1", "::1", "localhost"):
+        return True
+    return normalized in local_ipv4s()
+
+
+def put_bytes_local(local_path: str, data: bytes) -> None:
+    """Write ``data`` to an on-box path (self-target fast path). Raises OSError."""
+    path = Path(local_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+
+
+def self_target_staging_dir(job_id: str) -> str:
+    """Staging dir the *collector process* can write (self-target).
+
+    Do not use ``C:\\Windows\\Temp\\h2tecs-deploy\\…`` here: that tree is often
+    created first over WinRM as an elevated user, so a later local write from the
+    worker process hits ``WinError 5 Access is denied``. ``tempfile.gettempdir()``
+    is owned by the worker's account.
+    """
+    return str(Path(tempfile.gettempdir()) / "h2tecs-deploy" / job_id)
 
 
 # ---------------- WinRM helpers ----------------
@@ -160,7 +219,43 @@ def _stage(
     falls back to base64-over-WinRM (slow, universal) when SMB is unavailable or
     refused. Returns step dicts."""
     extract_dir = f"{remote_dir}\\pkg"
-    steps = [
+    steps: list[dict] = []
+
+    user = _winrm_username(prof.username)
+
+    def _expand(zip_local: str) -> dict:
+        return _ps(
+            session,
+            f"if (Test-Path {_psstr(extract_dir)}) "
+            f"{{ Remove-Item {_psstr(extract_dir)} -Recurse -Force }}; "
+            f"Expand-Archive -Path {_psstr(zip_local)} "
+            f"-DestinationPath {_psstr(extract_dir)} -Force",
+        )
+
+    # Self-target: write under the worker's temp dir (caller sets remote_dir via
+    # self_target_staging_dir). Do not WinRM-mkdir first — that elevates ownership
+    # and blocks local writes (WinError 5).
+    if is_self_target(ip):
+        try:
+            zip_local = f"{remote_dir}\\bundle.zip"
+            put_bytes_local(zip_local, zip_bytes)
+            steps.append(
+                {
+                    "name": "local-copy",
+                    "exitCode": 0,
+                    "stdout": f"wrote {len(zip_bytes)} bytes locally (self-target)",
+                    "stderr": "",
+                }
+            )
+            steps.append({"name": "expand", **_expand(zip_local)})
+            return steps
+        except OSError as e:
+            console.print(
+                f"  [yellow]local copy failed ({e}); "
+                "falling back to WinRM base64 chunks (slow).[/yellow]"
+            )
+
+    steps.append(
         {
             "name": "stage-dir",
             **_ps(
@@ -168,11 +263,10 @@ def _stage(
                 f"New-Item -ItemType Directory -Force -Path {_psstr(remote_dir)} | Out-Null",
             ),
         }
-    ]
+    )
     if any(not _ok(s) for s in steps):
         return steps
 
-    user = _winrm_username(prof.username)
     if config.install_smb_transfer and _SMB_AVAILABLE:
         try:
             zip_local = _smb_put_zip(ip, user, prof.password, zip_bytes, remote_dir)
@@ -184,18 +278,7 @@ def _stage(
                     "stderr": "",
                 }
             )
-            steps.append(
-                {
-                    "name": "expand",
-                    **_ps(
-                        session,
-                        f"if (Test-Path {_psstr(extract_dir)}) "
-                        f"{{ Remove-Item {_psstr(extract_dir)} -Recurse -Force }}; "
-                        f"Expand-Archive -Path {_psstr(zip_local)} "
-                        f"-DestinationPath {_psstr(extract_dir)} -Force",
-                    ),
-                }
-            )
+            steps.append({"name": "expand", **_expand(zip_local)})
             return steps
         except Exception as e:  # noqa: BLE001 — SMB blocked/denied → fall back
             console.print(
@@ -570,7 +653,10 @@ def run_install(config: Config, token: str, job: dict) -> dict:
         )
 
     def _do_install(session, prof):
-        remote_dir = f"{config.install_temp_dir}\\{job['id']}"
+        if is_self_target(ip):
+            remote_dir = self_target_staging_dir(job["id"])
+        else:
+            remote_dir = f"{config.install_temp_dir}\\{job['id']}"
         steps: list[dict] = _stage(session, prof, ip, zip_bytes, remote_dir, config)
         if any(not _ok(s) for s in steps):
             _cleanup(session, remote_dir)
