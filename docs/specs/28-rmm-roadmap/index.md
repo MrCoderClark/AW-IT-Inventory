@@ -61,24 +61,22 @@ trend reporting). Numbers are indicative, not commitments.
    recipients (reuses the aw-auth notify path). Generalizes the spec-21/spec-12
    one-off alerts into a configurable engine; consumes spec-29 metrics + compliance.
    **High value, medium effort.**
-3. **Spec 31 — Patch management.** ✅ **v1 shipped** — installed KBs + winget
-   upgrades, daily missing Search, approve/install from Updates, one-host Check
-   for updates. Fleet bulk / reboot-when-done / WSUS = v2 (see spec 31 out of
-   scope).
-4. **Spec 32 — Automation/script library.** Library + run-now (v1) + multi-target
-   / daily·weekly schedules (v2). On-alert / parameters = later.
-   **Medium value, medium effort.**
-5. **Spec 33 — Ticketing / helpdesk.** ✅ **v1 specified** —
-   [33](../33-ticketing/index.md): IT-only tickets + comments, create from
-   notification, global auto-create by notification type. SLA / email-in /
-   end-user portal / AI triage = later. **High value; phased.**
+3. **Spec 31 — Patch management.** ✅ **Complete as shipped** — v1 inventory +
+   install/check, plus v2 fleet OS (#119), scheduled reboot (#121), recurring
+   reboot (#122). **No further v2** (WSUS, WUA hide/approve, etc.) — closed
+   2026-10-27; see [31](../31-patch-management/index.md).
+4. **Spec 32 — Automation/script library.** ✅ Library + run-now + schedules +
+   device groups + script-on-alert. Parameters / richer targeting = optional later.
+5. **Spec 33 — Ticketing / helpdesk.** ✅ **Complete as shipped** — IT tickets,
+   SLA/CSV/waiting, outbound email, reply-only email-in. **No** end-user portal /
+   create-from-mail / attachments — closed 2026-10-27; see [33](../33-ticketing/index.md).
 6. **Spec 34 — AI-assisted IT operations.** Optional technician assist (summaries,
    draft scripts for human approval). Pluggable providers; free cloud
    OpenAI-compatible first; app works with AI off. See
-   [34](../34-ai-assisted-ops/index.md). **Medium value, medium effort; parallel
-   to 33.**
-7. **Later / optional:** license-expiry tracking, GUI remote access, mobile,
-   network-topology mapping. **Fork B only:** multi-tenancy, customer portal, billing.
+   [34](../34-ai-assisted-ops/index.md). **Medium value; continue only if useful.**
+7. **Later / optional (open):** license-expiry tracking, GUI remote access, mobile,
+   network-topology mapping, NSSM/prod packaging. **Fork B only:** multi-tenancy,
+   customer portal, billing.
 
 ## How this maps to "do we need a new spec?"
 

@@ -102,15 +102,16 @@ List KPI strip: **Open / In Progress / Waiting / Resolved** (`waiting` =
    Resend webhook → comment when From is assignee/requester; no create-from-mail
    (shipped #117). Ops: Resend MX, webhook `https://<web>/api/ingest/email`, and
    `npm run db:push` for `ticket_email_messages`.
-5. **Later** — create-from-mail; attachments; end-user portal.
+5. **Won't do (2026-10-27)** — create-from-mail; ticket attachments; end-user
+   portal; further PSA/SLA escalation beyond what already shipped. Spec 33 is
+   **complete as shipped** (v1–v3 above). No more phases planned.
 
 ## Out of scope / non-goals (v1)
 
-- Email-in reply-only shipped (#117). Create-from-mail and attachments stay later.
-  Outbound assignee email shipped (#116).
-- SLA clocks, escalation, “SLA Breached” KPIs.
-- AI triage / auto-triage / confidence UI.
-- End-user self-service.
+- Email-in reply-only shipped (#117). Outbound assignee email shipped (#116).
+- Create-from-mail, attachments, and end-user portal: **won't do** (closed).
+- Further SLA escalation beyond the simple SLA already shipped (#112).
+- AI triage / auto-triage / confidence UI (Spec 34 covers assist; no ticket triage UI).
 - New RBAC permission (`ticket:write`).
 - Billing / MSP multi-tenant PSA (roadmap fork B).
 

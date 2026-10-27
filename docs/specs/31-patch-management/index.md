@@ -414,11 +414,16 @@ fleet visibility gap called out in phase 1.
 
 **Recurring reboot v2 slice:** [Per-computer daily/weekly](../../superpowers/specs/2026-10-23-spec-31-v2-recurring-reboot-design.md) — `reboot_schedules` materializes next `reboot_jobs` child; Updates tab cadence/time; skip missed windows. Merged #122.
 
-Still deferred — do not block marking 31 complete:
+**Won't do (2026-10-27)** — further Spec 31 v2 work is closed. Shipped slices
+(#119 fleet OS, #121 scheduled reboot, #122 recurring reboot) stand; do **not**
+implement:
+
 - WSUS / target-group scoping
 - `.msu` install via Software Library (use spec 23 for packaged push)
 - Spec 30 built-in rules for pending reboot / missing / app-upgrade counts
 - Win10/11 DISM package list if QFE stays thin; `IsHidden=0` Search filter
+- Approve/hide via WUA / “gray out until approved” OS UI control
+- Default auto-reboot-after-install flag beyond existing scheduled/recurring reboot
 
 ## Consequences
 
