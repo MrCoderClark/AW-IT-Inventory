@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronUp,
   FileCode2,
+  Download,
   Loader2,
   Package,
   PackagePlus,
@@ -72,10 +73,26 @@ function typeFromName(name: string): "msi" | "exe" | null {
  * token; the proxy refreshes the cookie on the failing request, so the retry goes
  * through with the fresh cookie and the user never sees the lapse.
  */
-async function postWithRetry(url: string, init: RequestInit): Promise<Response> {
+async function fetchWithRetry(
+  url: string,
+  init?: RequestInit,
+): Promise<Response> {
   const res = await fetch(url, init);
   if (res.status !== 401) return res;
   return fetch(url, init);
+}
+
+async function postWithRetry(url: string, init: RequestInit): Promise<Response> {
+  return fetchWithRetry(url, init);
+}
+
+function filenameFromDisposition(
+  header: string | null,
+  fallback: string,
+): string {
+  if (!header) return fallback;
+  const match = /filename="([^"]+)"/i.exec(header);
+  return match?.[1] ?? fallback;
 }
 
 /**
@@ -86,9 +103,12 @@ async function postWithRetry(url: string, init: RequestInit): Promise<Response> 
 export function SoftwareLibrary({
   initialItems,
   storageConfigured,
+  aiEnabled = false,
 }: {
   initialItems: SoftwarePackageItem[];
   storageConfigured: boolean;
+  /** Spec 34 — optional AI preface on break-glass export scripts. */
+  aiEnabled?: boolean;
 }) {
   const router = useRouter();
   const [editorState, setEditorState] = React.useState<
@@ -96,6 +116,10 @@ export function SoftwareLibrary({
   >(null);
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
   const [expanded, setExpanded] = React.useState<string | null>(null);
+  const [exportTarget, setExportTarget] =
+    React.useState<SoftwarePackageItem | null>(null);
+  const [exportWithAi, setExportWithAi] = React.useState(false);
+  const [exporting, setExporting] = React.useState(false);
 
   async function remove(pkg: SoftwarePackageItem) {
     if (
@@ -115,6 +139,47 @@ export function SoftwareLibrary({
       }
     } finally {
       setDeletingId(null);
+    }
+  }
+
+  async function downloadExport() {
+    const pkg = exportTarget;
+    if (!pkg) return;
+    setExporting(true);
+    try {
+      const qs =
+        exportWithAi && aiEnabled ? "?aiComments=1" : "";
+      const res = await fetchWithRetry(
+        `/api/software/packages/${pkg.id}/export${qs}`,
+      );
+      if (!res.ok) {
+        const d = await res.json().catch(() => null);
+        toast.error(d?.error ?? "Could not export the install script.");
+        return;
+      }
+      const blob = await res.blob();
+      const fallback = `${pkg.name}-${pkg.version}-install.ps1`.replace(
+        /[^\w.-]+/g,
+        "_",
+      );
+      const filename = filenameFromDisposition(
+        res.headers.get("Content-Disposition"),
+        fallback,
+      );
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(objectUrl);
+      toast.success(
+        "Install script downloaded. Embedded file URLs expire in about 1 hour.",
+      );
+      setExportTarget(null);
+    } catch {
+      toast.error("Could not export the install script.");
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -197,6 +262,18 @@ export function SoftwareLibrary({
                           size="icon"
                           onClick={(e) => {
                             e.stopPropagation();
+                            setExportWithAi(false);
+                            setExportTarget(p);
+                          }}
+                          aria-label={`Export ${p.name}`}
+                        >
+                          <Download className="size-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setEditorState({ mode: "edit", pkg: p });
                           }}
                           aria-label={`Edit ${p.name}`}
@@ -253,6 +330,54 @@ export function SoftwareLibrary({
             </TableBody>
           </Table>
         </div>
+      )}
+
+      {exportTarget && (
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open && !exporting) setExportTarget(null);
+          }}
+        >
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Export install script</DialogTitle>
+              <DialogDescription>
+                Downloads a break-glass PowerShell script for{" "}
+                <span className="font-medium text-foreground">
+                  {exportTarget.name} {exportTarget.version}
+                </span>
+                . File download URLs inside the script expire in about one hour.
+              </DialogDescription>
+            </DialogHeader>
+            <label
+              className="flex items-center gap-2 text-sm text-muted-foreground"
+              title={aiEnabled ? undefined : "AI not configured"}
+            >
+              <input
+                type="checkbox"
+                className="size-3.5 disabled:opacity-50"
+                checked={exportWithAi}
+                disabled={!aiEnabled}
+                onChange={(e) => setExportWithAi(e.target.checked)}
+              />
+              Add AI comments (warnings only; install steps unchanged)
+            </label>
+            <DialogFooter>
+              <DialogClose render={<Button variant="outline" disabled={exporting} />}>
+                Cancel
+              </DialogClose>
+              <Button onClick={() => void downloadExport()} disabled={exporting}>
+                {exporting ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Download className="size-4" />
+                )}
+                Download .ps1
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
 
       {editorState && (

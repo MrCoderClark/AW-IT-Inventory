@@ -6,6 +6,7 @@ import {
   type SoftwarePackageItem,
 } from "@/components/software-library";
 import { listSoftwarePackages } from "@/db/software-packages";
+import { isAiConfigured } from "@/lib/ai/config";
 import { hasPermission, requireUser } from "@/lib/auth/session";
 import { isStorageConfigured } from "@/lib/storage";
 
@@ -46,6 +47,7 @@ export default async function Page() {
       <SoftwareLibrary
         initialItems={items}
         storageConfigured={isStorageConfigured()}
+        aiEnabled={isAiConfigured()}
       />
     </div>
   );
