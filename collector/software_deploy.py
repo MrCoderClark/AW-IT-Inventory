@@ -33,6 +33,9 @@ from install_printer import (
     _unc,
     _winrm_username,
     _with_session,
+    is_self_target,
+    put_bytes_local,
+    self_target_staging_dir,
 )
 from remote_session import _clean_stderr
 
@@ -88,9 +91,29 @@ def _put_file(
     session: winrm.Session, prof, ip: str, data: bytes, remote_dir: str,
     filename: str, config: Config,
 ) -> str:
-    """Get the installer onto the target (SMB fast / base64 fallback). Returns its
-    on-target path. The remote dir is created by the caller."""
+    """Get the installer onto the target. Order: local write (self-target) → SMB
+    admin share → base64-over-WinRM. Returns the on-target path. The remote dir is
+    created by the caller (except the local-write path, which mkdir's parents)."""
     remote_path = f"{remote_dir}\\{filename}"
+
+    # Deploying onto the collector host itself: SMB to \\\\<own-ip>\\C$ fails with
+    # STATUS_ACCESS_DENIED (NTLM loopback protection). Write the file directly.
+    if is_self_target(ip):
+        try:
+            put_bytes_local(remote_path, data)
+            console.print(
+                f"  local copy {len(data)} bytes → {filename} "
+                "(self-target; skipped SMB loopback)"
+            )
+            return remote_path
+        except OSError as e:
+            console.print(
+                f"  [yellow]local copy failed ({e}); "
+                "falling back to slow WinRM base64.[/yellow]"
+            )
+            _put_file_b64(session, data, remote_dir, remote_path)
+            return remote_path
+
     user = _winrm_username(prof.username)
     if config.install_smb_transfer and _SMB_AVAILABLE:
         try:
@@ -204,11 +227,18 @@ def run_deployment(config: Config, token: str, job: dict) -> tuple[str, dict]:
     steps = snapshot.get("steps") or []
 
     def _do(session: winrm.Session, prof) -> tuple[str, dict]:
-        remote_dir = f"{config.software_deploy_temp_dir}\\{job['id']}"
-        _ps(
-            session,
-            f"New-Item -ItemType Directory -Force -Path {_psstr(remote_dir)} | Out-Null",
-        )
+        # Self-target: stage under the worker's temp dir (writable by this process).
+        # WinRM-created C:\Windows\Temp\h2tecs-deploy\<id> is owned by the elevated
+        # session and local writes then fail with WinError 5.
+        if is_self_target(ip):
+            remote_dir = self_target_staging_dir(job["id"])
+            put_bytes_local(f"{remote_dir}\\.keep", b"")
+        else:
+            remote_dir = f"{config.software_deploy_temp_dir}\\{job['id']}"
+            _ps(
+                session,
+                f"New-Item -ItemType Directory -Force -Path {_psstr(remote_dir)} | Out-Null",
+            )
 
         results: list[dict] = []
         stopped = False
