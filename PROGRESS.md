@@ -7,6 +7,15 @@ via a feature branch + PR.
 
 ---
 
+## In progress 🚧 — Software deploy polish slice 1 (branch `feat/software-deploy-polish`)
+
+**Skip-if-installed** (`skipIf.product_installed` on package steps) and **per-step
+timeouts** (`timeoutSec`, default 900s) on web schema/parser, collector run path,
+package editor, and deploy history badges (skipped / timed out). Design:
+`docs/superpowers/specs/2026-10-27-software-deploy-polish-design.md` · plan:
+`docs/superpowers/plans/2026-10-27-software-deploy-polish.md`. **Slice 2–3**
+(templates, break-glass export) still on this branch before PR.
+
 ## Decision — Spec 33 & Spec 31 v2 follow-ups won't do (2026-10-27)
 
 No further work on Spec 33 (portal / create-from-mail / attachments) or remaining
@@ -693,8 +702,8 @@ WUA approve-hide / further patch orchestration.
 
 - **NSSM / prod service packaging** — web + aw-auth + collector worker as Windows
   services (the real on-prem deploy step).
-- **Software deploy polish** — conditional steps (“skip if installed”), step
-  timeouts, or package templates (e.g. Wise ePad) documented in-app.
+- **Software deploy polish (slice 2–3)** — package templates (e.g. Wise ePad) and
+  break-glass export; slice 1 (skip-if + timeouts) on `feat/software-deploy-polish`.
 - **Spec 34 deepen** — more assist surfaces (script explain, ticket reply draft)
   only where technicians already work.
 - **License / warranty expiry** — track and alert on software licenses + asset
