@@ -1210,6 +1210,13 @@ export type SoftwareFileRef = {
   fileSize: number;
 };
 
+export type SoftwareStepSkipIf = {
+  type: "product_installed";
+  displayName: string;
+  displayNameMatch?: "eq" | "prefix";
+  displayVersion?: string;
+};
+
 export type SoftwareStep =
   | {
       id: string; // stable per step (reorder/remove in the UI, per-step results)
@@ -1217,6 +1224,8 @@ export type SoftwareStep =
       name: string;
       script: string; // PowerShell, run elevated over WinRM
       continueOnError?: boolean; // default false: a non-zero exit stops the package
+      timeoutSec?: number;
+      skipIf?: SoftwareStepSkipIf;
     }
   | {
       id: string;
@@ -1235,6 +1244,8 @@ export type SoftwareStep =
       // executed): response files, transforms, config, etc.
       companions?: SoftwareFileRef[];
       continueOnError?: boolean;
+      timeoutSec?: number;
+      skipIf?: SoftwareStepSkipIf;
     };
 
 /** The package frozen onto a deployment at enqueue, so a later edit or delete of
@@ -1249,7 +1260,9 @@ export type SoftwareStepResult = {
   stepId: string;
   name: string;
   kind: "script" | "install";
-  status: "ok" | "failed" | "skipped"; // skipped = a prior step failed and stopped
+  status: "ok" | "failed" | "skipped";
+  /** cascade = prior failure stopped the package; product_installed = skipIf; timed_out on failed */
+  reason?: "cascade" | "product_installed" | "timed_out";
   exitCode: number | null;
   outputTail: string;
 };

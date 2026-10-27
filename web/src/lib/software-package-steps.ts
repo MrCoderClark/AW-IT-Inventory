@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import type { SoftwareStep } from "@/db/schema";
+import type { SoftwareStep, SoftwareStepSkipIf } from "@/db/schema";
 
 /**
  * Validate + normalize the raw `steps` from a package create/edit request into
@@ -8,6 +8,43 @@ import type { SoftwareStep } from "@/db/schema";
  * frozen deploy snapshot. Shared by POST (create) and PUT (edit).
  */
 export type ParsedSteps = { steps: SoftwareStep[] } | { error: string };
+
+function parseTimeoutSec(
+  raw: unknown,
+  stepLabel: string,
+): { timeoutSec?: number } | { error: string } {
+  if (raw === undefined || raw === null) return {};
+  if (typeof raw !== "number" || !Number.isFinite(raw) || raw <= 0)
+    return { error: `${stepLabel}: timeoutSec must be a positive number` };
+  return { timeoutSec: Math.floor(raw) };
+}
+
+function parseSkipIf(
+  raw: unknown,
+  stepLabel: string,
+): { skipIf?: SoftwareStepSkipIf } | { error: string } {
+  if (raw === undefined || raw === null) return {};
+  if (typeof raw !== "object" || raw === null)
+    return { error: `${stepLabel}: skipIf is malformed` };
+  const o = raw as Record<string, unknown>;
+  if (o.type !== "product_installed")
+    return { error: `${stepLabel}: skipIf.type must be product_installed` };
+  const displayName = typeof o.displayName === "string" ? o.displayName.trim() : "";
+  if (!displayName) return { error: `${stepLabel}: skipIf.displayName is required` };
+  const displayNameMatch = o.displayNameMatch === "prefix" ? "prefix" : "eq";
+  const displayVersion =
+    typeof o.displayVersion === "string" && o.displayVersion.trim()
+      ? o.displayVersion.trim()
+      : undefined;
+  return {
+    skipIf: {
+      type: "product_installed",
+      displayName,
+      displayNameMatch,
+      ...(displayVersion ? { displayVersion } : {}),
+    },
+  };
+}
 
 export function parseSteps(raw: unknown): ParsedSteps {
   if (!Array.isArray(raw) || raw.length === 0)
@@ -22,15 +59,23 @@ export function parseSteps(raw: unknown): ParsedSteps {
     const continueOnError = step.continueOnError === true;
     const id = randomUUID();
 
+    const stepLabel = `step ${i + 1}`;
+    const timeout = parseTimeoutSec(step.timeoutSec, stepLabel);
+    if ("error" in timeout) return timeout;
+    const skip = parseSkipIf(step.skipIf, stepLabel);
+    if ("error" in skip) return skip;
+
     if (step.kind === "script") {
       const script = typeof step.script === "string" ? step.script : "";
-      if (!script.trim()) return { error: `step ${i + 1}: the script is empty` };
+      if (!script.trim()) return { error: `${stepLabel}: the script is empty` };
       steps.push({
         id,
         kind: "script",
         name: name || `Script step ${i + 1}`,
         script,
         continueOnError,
+        ...timeout,
+        ...skip,
       });
     } else if (step.kind === "install") {
       const installerType = step.installerType === "exe" ? "exe" : "msi";
@@ -76,6 +121,8 @@ export function parseSteps(raw: unknown): ParsedSteps {
         fileSize,
         ...(companions.length ? { companions } : {}),
         continueOnError,
+        ...timeout,
+        ...skip,
       });
     } else {
       return { error: `step ${i + 1}: unknown step type` };
