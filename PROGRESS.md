@@ -7,12 +7,25 @@ via a feature branch + PR.
 
 ---
 
-## 🚧 In progress — Device groups consumers (alerts + fleet OS)
+## Shipped ✅ — Ingest: preserve fields on empty CIM (merged #130)
 
-Wire saved device groups into Spec 30 alert rules (`alert_rules.device_group_id`,
+Partial WinRM collects (null hostname/OS/hardware) no longer blank a prior good
+`machines` row; collector tags `cim_collect_empty` when the shell has no identity.
+Branch: `fix/ingest-cim-preserve-nulls`.
+
+## Shipped ✅ — Device groups consumers (merged #129)
+
+Saved device groups on Spec 30 alert rules (`alert_rules.device_group_id`,
 membership without IP) and Spec 31 fleet **Install OS updates** (group resolve
-with IP gate). Branch: `feat/device-groups-consumers`.
+with IP gate).
 Design: `docs/superpowers/specs/2026-10-26-device-groups-consumers-design.md`.
+
+## Shipped ✅ — Deploy to collector host (merged #128)
+
+Self-target software/printer deploys write under the worker temp dir instead of
+SMB to the box’s own IP (NTLM loopback `ACCESS_DENIED`). Wise ePad x86 COM
+runbook: `docs/runbooks/wise-epad-x86-com.md`.
+Branch: `fix/deploy-self-target-local-copy`.
 
 ## Shipped ✅ — Device groups v1 (merged #126)
 
