@@ -371,11 +371,11 @@ Tracer-bullet slices — a thin thread end to end, then thicken.
 - [ ] **Scheduling / maintenance windows** — enqueue deployments to run later.
 - [ ] **Uninstall / repair** — msiexec `/x`, and version-aware upgrade.
 - [ ] **Dependency/order chains** — deploy a set in order, stop on first failure.
-- [x] **Skip-if-installed + step timeouts (polish slice 1)** — per-step
-  `skipIf.product_installed` (DisplayName match/version) and `timeoutSec` on collector
-  + Software Library UI; see
-  [polish design](../../superpowers/specs/2026-10-27-software-deploy-polish-design.md)
-  (`feat/software-deploy-polish`; templates + export = slices 2–3).
+- [x] **Spec 23 polish (slices 1–3)** — skip-if-installed + step timeouts;
+  client-side package templates in the editor; break-glass export (`.ps1` +
+  signed file URLs). Shipped on branch `feat/software-deploy-polish` (awaiting merge).
+  Design:
+  [2026-10-27-software-deploy-polish-design.md](../../superpowers/specs/2026-10-27-software-deploy-polish-design.md).
 - [ ] **Broader detection rules** — e.g. skip when product **absent**, beyond slice-1
   `product_installed` and the post-install registry check.
 - [ ] **Deep spec-15 integration** — auto-add a deployed title to the tracked
