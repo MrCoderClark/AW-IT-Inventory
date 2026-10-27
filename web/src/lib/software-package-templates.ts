@@ -106,8 +106,8 @@ New-ItemProperty -Path $edgePol -Name 'ExtensionSettings' -PropertyType String -
 
 Write-Output "ExtensionSettings=$settings"
 Write-Output 'Fully quit Chrome and Edge, then:'
-Write-Output '  chrome://policy → Reload policies'
-Write-Output '  edge://policy → Reload policies'
+Write-Output '  chrome://policy -> Reload policies'
+Write-Output '  edge://policy -> Reload policies'
 Write-Output 'If an extension still shows locked, remove it once and reopen the browser (may take a minute to reappear).'
 `;
 

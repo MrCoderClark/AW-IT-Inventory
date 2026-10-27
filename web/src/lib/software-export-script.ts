@@ -110,11 +110,13 @@ function emitInstallRun(
       `$__exit = $LASTEXITCODE`,
     );
   } else {
+    // silentArgs often contain quotes (InstallShield /f1"…" /v"/qn") — escape
+    // them so they survive inside the $__cmd = "…" double-quoted PowerShell string.
     lines.push(
       '$__cmd = "' +
         psQuotedInstallerPath(step.fileName) +
         " " +
-        silent +
+        psEscapeDouble(silent) +
         '"',
       `$__bat = Join-Path $WorkDir 'h2tecs_run.cmd'`,
       WRITE_RUN_BAT,
@@ -130,10 +132,15 @@ function emitScriptRun(
   step: Extract<SoftwareStep, { kind: "script" }>,
   continueOnError: boolean,
 ): string[] {
+  // Embed as Base64 so Unicode (e.g. →) and quotes in the step never break the
+  // parent .ps1 under Windows PowerShell's default ANSI file encoding.
+  const b64 = Buffer.from(step.script, "utf8").toString("base64");
   const scriptFile = `${step.id}.ps1`;
   const scriptPath = `(Join-Path $WorkDir ${psQuoteSingle(scriptFile)})`;
   return [
-    `[IO.File]::WriteAllText(${scriptPath}, ${psQuoteSingle(step.script)})`,
+    `$__script = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(${psQuoteSingle(b64)}))`,
+    // UTF-8 BOM so Windows PowerShell 5.1 does not re-parse Unicode as ANSI
+    `[IO.File]::WriteAllText(${scriptPath}, $__script, (New-Object System.Text.UTF8Encoding $true))`,
     `$ProgressPreference = 'SilentlyContinue'`,
     `& ${scriptPath}`,
     `$__exit = $LASTEXITCODE`,
@@ -181,23 +188,43 @@ function wrapContinueOnError(lines: string[], stepName: string): string[] {
 
 function emitDownloads(files: ExportPs1File[]): string[] {
   if (files.length === 0) return [];
-  const lines: string[] = [`Write-Host 'Downloading package files...'`];
+  // Defense in depth: one download per staging fileName (caller should already dedupe).
+  const seen = new Set<string>();
+  // Invoke-WebRequest progress UI is extremely slow on Windows PowerShell 5.1;
+  // WebClient.DownloadFile streams without that tax. Prefer curl.exe when present.
+  const lines: string[] = [
+    `Write-Host 'Downloading package files...'`,
+    `$ProgressPreference = 'SilentlyContinue'`,
+    `$__wc = New-Object System.Net.WebClient`,
+  ];
   for (const file of files) {
+    const name = file.fileName.trim();
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    const urlLit = psQuoteSingle(file.url);
+    const nameLit = psQuoteSingle(name);
     lines.push(
-      `$__out = Join-Path $WorkDir ${psQuoteSingle(file.fileName)}`,
-      `Invoke-WebRequest -Uri ${psQuoteSingle(file.url)} -OutFile $__out`,
+      `$__out = Join-Path $WorkDir ${nameLit}`,
+      `Write-Host ('  ' + ${nameLit})`,
+      `if (Get-Command curl.exe -ErrorAction SilentlyContinue) {`,
+      `  & curl.exe -fsSL --retry 3 -o $__out ${urlLit}`,
+      `  if ($LASTEXITCODE -ne 0) { throw "download failed: ${psEscapeDouble(name)}" }`,
+      `} else {`,
+      `  $__wc.DownloadFile(${urlLit}, $__out)`,
+      `}`,
     );
     if (file.sha256?.trim()) {
       const expected = file.sha256.trim().toLowerCase();
       lines.push(
         `$__hash = (Get-FileHash -Path $__out -Algorithm SHA256).Hash.ToLower()`,
         `if ($__hash -ne ${psQuoteSingle(expected)}) {`,
-        `  Write-Error "integrity check failed for ${psEscapeDouble(file.fileName)}"`,
+        `  Write-Error "integrity check failed for ${psEscapeDouble(name)}"`,
         `  exit 1`,
         `}`,
       );
     }
   }
+  lines.push(`$__wc.Dispose()`);
   return lines;
 }
 

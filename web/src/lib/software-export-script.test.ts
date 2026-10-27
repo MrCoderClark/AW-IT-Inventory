@@ -59,9 +59,11 @@ describe("buildExportPs1", () => {
   it("embeds signed download URLs and optional sha256 verification", () => {
     const ps1 = build();
     expect(ps1).toContain(baseFiles[0].url);
-    expect(ps1).toContain("Invoke-WebRequest");
+    expect(ps1).toContain("curl.exe");
+    expect(ps1).toContain("WebClient");
     expect(ps1).toContain("Get-FileHash");
     expect(ps1).toContain("a".repeat(64));
+    expect(ps1).not.toContain("Invoke-WebRequest");
   });
 
   it("embeds skipIf Uninstall probe with displayName", () => {
@@ -78,6 +80,14 @@ describe("buildExportPs1", () => {
     expect(ps1).toMatch(/\$WorkDir.*app\.iss/);
   });
 
+  it("escapes quotes inside InstallShield silentArgs for $__cmd", () => {
+    const ps1 = build();
+    // Must be backtick-escaped so PS does not terminate the string at /f1"
+    expect(ps1).toContain(
+      '$__cmd = "`"$WorkDir\\setup.exe`" /s /f1`"$WorkDir\\app.iss`" /v`"/qn`""',
+    );
+  });
+
   it("writes script steps to a ps1 file and invokes them", () => {
     const ps1 = build({
       steps: [
@@ -91,8 +101,29 @@ describe("buildExportPs1", () => {
       files: [],
     });
     expect(ps1).toContain("step-script.ps1");
-    expect(ps1).toContain("Write-Output ''ok''");
+    expect(ps1).toContain("FromBase64String");
+    expect(ps1).toContain(
+      Buffer.from("Write-Output 'ok'", "utf8").toString("base64"),
+    );
+    expect(ps1).not.toContain("Write-Output ''ok''");
     expect(ps1).toMatch(/& .*step-script\.ps1/);
+  });
+
+  it("base64-embeds Unicode so parent .ps1 stays ASCII-safe", () => {
+    const script = "Write-Output 'chrome://policy → Reload'";
+    const ps1 = build({
+      steps: [
+        {
+          id: "step-uni",
+          kind: "script",
+          name: "Unicode tip",
+          script,
+        },
+      ],
+      files: [],
+    });
+    expect(ps1).not.toContain("→");
+    expect(ps1).toContain(Buffer.from(script, "utf8").toString("base64"));
   });
 
   it("prefixes optional AI commentary as comment lines only", () => {

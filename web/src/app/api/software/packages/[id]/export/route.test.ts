@@ -128,4 +128,90 @@ describe("GET /api/software/packages/[id]/export", () => {
     );
     await expect(res.text()).resolves.toContain("RunAsAdministrator");
   });
+
+  it("dedupes the same EXE used on uninstall + install steps", async () => {
+    const hash = "c".repeat(64);
+    getPkgMock.mockResolvedValue({
+      ...samplePkg,
+      steps: [
+        {
+          id: "u1",
+          kind: "install" as const,
+          name: "Uninstall",
+          installerType: "exe" as const,
+          fileName: "setup.exe",
+          silentArgs: '/s /f1"%DIR%\\uninstall.iss"',
+          sha256: hash,
+          storageKey: "software/upload-a/setup.exe",
+          fileSize: 10,
+          continueOnError: true,
+          companions: [
+            {
+              fileName: "uninstall.iss",
+              storageKey: "software/upload-a/uninstall.iss",
+              sha256: "d".repeat(64),
+              fileSize: 1,
+            },
+          ],
+        },
+        {
+          id: "i1",
+          kind: "install" as const,
+          name: "Install",
+          installerType: "exe" as const,
+          fileName: "setup.exe",
+          silentArgs: '/s /f1"%DIR%\\install.iss"',
+          sha256: hash,
+          storageKey: "software/upload-b/setup.exe",
+          fileSize: 10,
+          companions: [
+            {
+              fileName: "install.iss",
+              storageKey: "software/upload-b/install.iss",
+              sha256: "e".repeat(64),
+              fileSize: 1,
+            },
+          ],
+        },
+      ],
+    });
+
+    const res = await GET(req(), ctx());
+    expect(res.status).toBe(200);
+    const files = buildMock.mock.calls[0][0].files as { fileName: string }[];
+    expect(files.map((f) => f.fileName).sort()).toEqual([
+      "install.iss",
+      "setup.exe",
+      "uninstall.iss",
+    ]);
+    expect(mintMock.mock.calls.filter((c) => c[1] === "setup.exe")).toHaveLength(
+      1,
+    );
+  });
+
+  it("500 when the same fileName maps to different content", async () => {
+    getPkgMock.mockResolvedValue({
+      ...samplePkg,
+      steps: [
+        {
+          ...samplePkg.steps[0],
+          id: "a",
+          sha256: "a".repeat(64),
+          storageKey: "software/a.exe",
+        },
+        {
+          ...samplePkg.steps[0],
+          id: "b",
+          name: "Other",
+          sha256: "b".repeat(64),
+          storageKey: "software/b.exe",
+        },
+      ],
+    });
+    const res = await GET(req(), ctx());
+    expect(res.status).toBe(500);
+    await expect(res.json()).resolves.toMatchObject({
+      error: expect.stringContaining("duplicate fileName"),
+    });
+  });
 });

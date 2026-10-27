@@ -31,24 +31,47 @@ function publicBaseUrl(request: Request): string {
   return new URL(request.url).origin;
 }
 
-function filesFromSteps(steps: SoftwareStep[]): PackageFileRef[] {
-  const out: PackageFileRef[] = [];
+/**
+ * Collect install EXE/MSI + companions for download. Deduplicate by staging
+ * `fileName` so uninstall+install steps that reuse the same EXE (common for
+ * InstallShield) do not overwrite each other in $WorkDir.
+ */
+export function filesFromSteps(steps: SoftwareStep[]): PackageFileRef[] {
+  const byName = new Map<string, PackageFileRef>();
+
+  const add = (file: PackageFileRef) => {
+    const name = file.fileName.trim();
+    if (!name) return;
+    const existing = byName.get(name);
+    if (!existing) {
+      byName.set(name, { ...file, fileName: name });
+      return;
+    }
+    if (existing.storageKey === file.storageKey) return;
+    const a = (existing.sha256 ?? "").trim().toLowerCase();
+    const b = (file.sha256 ?? "").trim().toLowerCase();
+    if (a && b && a === b) return;
+    throw new Error(
+      `export: duplicate fileName "${name}" refers to different package files — rename one step's file before exporting`,
+    );
+  };
+
   for (const s of steps) {
     if (s.kind !== "install") continue;
-    out.push({
+    add({
       fileName: s.fileName,
       storageKey: s.storageKey,
       sha256: s.sha256,
     });
     for (const c of s.companions ?? []) {
-      out.push({
+      add({
         fileName: c.fileName,
         storageKey: c.storageKey,
         sha256: c.sha256,
       });
     }
   }
-  return out;
+  return [...byName.values()];
 }
 
 function mintFileUrl(
