@@ -631,6 +631,11 @@ def collect_windows(
                 credential_profile=prof.id,
                 software=software,
             )
+            # CIM can fail under SilentlyContinue while registry software still
+            # returns — surface that so the scan table isn't a silent "?" row and
+            # ingest can avoid treating the empty shell as authoritative.
+            if not hostname and not hw.serial and not health.os_name:
+                out["errors"].append("cim_collect_empty")
 
             # Enrichment calls (posture, local admins, endpoint, displays). Each is
             # best-effort AND wall-clock bounded: a hung server-side query (e.g. a

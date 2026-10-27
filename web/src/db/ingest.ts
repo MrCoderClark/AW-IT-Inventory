@@ -116,6 +116,46 @@ function clean(value: string | null | undefined): string | null {
   return v || null;
 }
 
+/**
+ * True when the WinRM hardware block has at least one identifying / inventory
+ * field. An empty shell (CIM failed but the PS call still returned JSON) must
+ * not wipe a previously good `machines.hardware` row on upsert.
+ */
+function hasHardwareSignal(hw: IngestHardware | null | undefined): boolean {
+  if (!hw) return false;
+  if (clean(hw.serial) || clean(hw.hardware_uuid as string | null | undefined)) {
+    return true;
+  }
+  if (clean(hw.manufacturer) || clean(hw.model) || clean(hw.cpu)) return true;
+  if (typeof hw.ram_gb === "number" && hw.ram_gb > 0) return true;
+  if (Array.isArray(hw.disks) && hw.disks.length > 0) return true;
+  return false;
+}
+
+/**
+ * Merge scan JSON onto a prior machines.* jsonb blob. Incoming null / empty
+ * string keys are skipped so a partial enrich (e.g. adapters only) cannot blank
+ * os_name that an earlier good collect wrote.
+ */
+function mergeJsonRecords(
+  prior: Record<string, unknown> | null | undefined,
+  incoming: Record<string, unknown> | null | undefined,
+): Record<string, unknown> | null {
+  const base =
+    prior && typeof prior === "object" && !Array.isArray(prior)
+      ? { ...prior }
+      : {};
+  if (!incoming || typeof incoming !== "object" || Array.isArray(incoming)) {
+    return Object.keys(base).length ? base : null;
+  }
+  for (const [k, v] of Object.entries(incoming)) {
+    if (v === null || v === undefined) continue;
+    if (typeof v === "string" && !v.trim()) continue;
+    base[k] = v;
+  }
+  return Object.keys(base).length ? base : null;
+}
+
 /** A human storage summary from the scanned disks, e.g. "476 GB + 931 GB". */
 function summarizeDisks(disks: IngestDisk[] | null | undefined): string | null {
   if (!Array.isArray(disks)) return null;
@@ -360,23 +400,68 @@ export async function ingestScan(payload: IngestPayload): Promise<IngestResult> 
     const hasData = Boolean(hw || pr || ph);
     const status = !hasData && h.errors?.length ? "error" : "ok";
 
+    const osName = clean(h.health?.os_name ?? null);
+    const osVersion = clean(h.health?.os_version ?? null);
+    const osBuild = clean(h.health?.os_build ?? null);
+    const subnet = clean(h.subnet ?? null);
+    const credentialProfile = clean(h.credential_profile ?? null);
+    const hardwareSignal = hasHardwareSignal(hw) ? hw : null;
+
+    // Prior row (if any): a partial collect must not blank fields a good scan
+    // already wrote (same rule as applyScanToAsset).
+    const [existing] = await db
+      .select({
+        id: machines.id,
+        assetId: machines.assetId,
+        hostname: machines.hostname,
+        ip: machines.ip,
+        subnet: machines.subnet,
+        serial: machines.serial,
+        hardwareUuid: machines.hardwareUuid,
+        osName: machines.osName,
+        osVersion: machines.osVersion,
+        osBuild: machines.osBuild,
+        hardware: machines.hardware,
+        health: machines.health,
+        printer: machines.printer,
+        phone: machines.phone,
+        credentialProfile: machines.credentialProfile,
+      })
+      .from(machines)
+      .where(eq(machines.matchKey, matchKey))
+      .limit(1);
+
+    const mergedHealth = mergeJsonRecords(
+      existing?.health as Record<string, unknown> | null | undefined,
+      h.health as Record<string, unknown> | null | undefined,
+    );
+    const mergedPrinter = mergeJsonRecords(
+      existing?.printer as Record<string, unknown> | null | undefined,
+      pr as Record<string, unknown> | null | undefined,
+    );
+    const mergedPhone = mergeJsonRecords(
+      existing?.phone as Record<string, unknown> | null | undefined,
+      ph as Record<string, unknown> | null | undefined,
+    );
+
     const row = {
       matchKey,
-      assetId,
+      assetId: existing?.assetId ?? assetId,
       kind,
-      hostname,
-      ip,
-      subnet: clean(h.subnet ?? null),
-      serial,
-      hardwareUuid,
-      osName: clean(h.health?.os_name ?? null),
-      osVersion: clean(h.health?.os_version ?? null),
-      osBuild: clean(h.health?.os_build ?? null),
-      hardware: hw,
-      health: h.health ?? null,
-      printer: pr,
-      phone: ph,
-      credentialProfile: clean(h.credential_profile ?? null),
+      hostname: hostname ?? existing?.hostname ?? null,
+      ip: ip ?? existing?.ip ?? null,
+      subnet: subnet ?? existing?.subnet ?? null,
+      serial: serial ?? existing?.serial ?? null,
+      hardwareUuid: hardwareUuid ?? existing?.hardwareUuid ?? null,
+      osName: osName ?? existing?.osName ?? null,
+      osVersion: osVersion ?? existing?.osVersion ?? null,
+      osBuild: osBuild ?? existing?.osBuild ?? null,
+      hardware: hardwareSignal ?? existing?.hardware ?? hw,
+      health: mergedHealth ?? h.health ?? null,
+      printer: mergedPrinter ?? pr,
+      phone: mergedPhone ?? ph,
+      credentialProfile:
+        credentialProfile ?? existing?.credentialProfile ?? null,
       lastScanStatus: status,
       lastSeenAt: now,
     };

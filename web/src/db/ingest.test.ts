@@ -211,6 +211,7 @@ describe("ingestScan — desk phones (spec 27)", () => {
   it("assigns an unassigned phone to the unique People match for the SIP display name", async () => {
     H.state.selectResults = [
       [{ id: "p1", type: "Phone" }], // serial match
+      [], // existing machines row by matchKey
       [{ assigneeId: null, type: "Phone" }], // currently unassigned
       [{ id: "person-nya" }], // unique active person named Nya Fauntleroy
     ];
@@ -236,6 +237,7 @@ describe("ingestScan — desk phones (spec 27)", () => {
   it("does not reassign a phone that already has an Assigned To", async () => {
     H.state.selectResults = [
       [{ id: "p1", type: "Phone" }],
+      [], // existing machines row
       [{ assigneeId: "already-held", type: "Phone" }],
     ];
     await ingestScan({
@@ -257,6 +259,7 @@ describe("ingestScan — desk phones (spec 27)", () => {
   it("does not assign when two people share the SIP display name", async () => {
     H.state.selectResults = [
       [{ id: "p1", type: "Phone" }],
+      [], // existing machines row
       [{ assigneeId: null, type: "Phone" }],
       [{ id: "person-a" }, { id: "person-b" }],
     ];
@@ -358,5 +361,70 @@ describe("ingestScan — orphan shadow-row cleanup", () => {
       ],
     });
     expect(H.state.deletes.length).toBe(0);
+  });
+});
+
+describe("ingestScan — partial collect must not blank prior machine fields", () => {
+  it("keeps hostname/OS/hardware when CIM returns an empty shell", async () => {
+    H.state.selectResults = [
+      [{ id: "a1", type: "Computer" }], // IP match (no serial on this host)
+      [
+        {
+          id: "m1",
+          assetId: "a1",
+          hostname: "DESKTOP-GOOD",
+          ip: "192.168.70.16",
+          subnet: "192.168.70.0/24",
+          serial: "OLD-SN",
+          hardwareUuid: "uuid-old",
+          osName: "Microsoft Windows 10 Pro",
+          osVersion: "10.0.19045",
+          osBuild: "19045",
+          hardware: { serial: "OLD-SN", model: "OptiPlex", ram_gb: 16 },
+          health: { os_name: "Microsoft Windows 10 Pro", uptime_hours: 12 },
+          printer: null,
+          phone: null,
+          credentialProfile: "win10-infotech",
+        },
+      ],
+    ];
+    await ingestScan({
+      hosts: [
+        {
+          ip: "192.168.70.16",
+          device_type: "windows",
+          hostname: null,
+          hardware: {
+            manufacturer: null,
+            model: null,
+            serial: null,
+            ram_gb: 0,
+            disks: [],
+          },
+          health: {
+            os_name: null,
+            os_version: null,
+            network_adapters: [{ name: "Ethernet", mac: "50-9A-4C-4B-E8-96" }],
+            logged_on_users: ["mjohnson"],
+          },
+          credential_profile: "win10-infotech",
+        },
+      ],
+    });
+
+    const m = H.state.inserts.find((i) => i.table === machines);
+    expect(m?.conflictSet).toMatchObject({
+      hostname: "DESKTOP-GOOD",
+      serial: "OLD-SN",
+      osName: "Microsoft Windows 10 Pro",
+      osVersion: "10.0.19045",
+      hardware: { serial: "OLD-SN", model: "OptiPlex", ram_gb: 16 },
+    });
+    expect(m?.conflictSet?.health).toMatchObject({
+      os_name: "Microsoft Windows 10 Pro",
+      uptime_hours: 12,
+      network_adapters: [{ name: "Ethernet", mac: "50-9A-4C-4B-E8-96" }],
+      logged_on_users: ["mjohnson"],
+    });
   });
 });
