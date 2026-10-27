@@ -717,6 +717,12 @@ export const alertRules = pgTable("alert_rules", {
     (): AnyPgColumn => scripts.id,
     { onDelete: "set null" },
   ),
+  // Optional device-group scope (null = fleet-wide). Membership without IP gate.
+  // FK targets `device_groups` (defined later); set-null if the group is deleted.
+  deviceGroupId: uuid("device_group_id").references(
+    (): AnyPgColumn => deviceGroups.id,
+    { onDelete: "set null" },
+  ),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

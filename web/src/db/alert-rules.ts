@@ -3,10 +3,12 @@ import "server-only";
 import { and, asc, eq, inArray } from "drizzle-orm";
 
 import { maybeEnqueueAlertRemediation } from "./alert-rule-remediation";
+import { listDeviceGroupOptions } from "./device-groups";
 import { db } from "./index";
 import { alertRules, alertRuleStates, assets, scripts } from "./schema";
 import { createNotification } from "./notifications";
 import type { MetricSample } from "./metrics";
+import { resolveDeviceGroupAssetIds } from "./script-targets";
 import type { AlertRuleInput } from "@/lib/alert-rule-schema";
 import { sendAlertRuleEmail } from "@/lib/notify";
 import {
@@ -83,8 +85,10 @@ function toRecord(
     enabled: boolean;
     ticketAutoCreate: AlertRuleRecord["ticketAutoCreate"];
     remediationScriptId?: string | null;
+    deviceGroupId?: string | null;
   },
   scriptName: string | null = null,
+  groupName: string | null = null,
 ): AlertRuleRecord {
   return {
     id: row.id,
@@ -98,6 +102,8 @@ function toRecord(
     ticketAutoCreate: row.ticketAutoCreate,
     remediationScriptId: row.remediationScriptId ?? null,
     remediationScriptName: scriptName,
+    deviceGroupId: row.deviceGroupId ?? null,
+    deviceGroupName: groupName,
   };
 }
 
@@ -111,6 +117,36 @@ async function scriptNamesById(
     .from(scripts)
     .where(inArray(scripts.id, unique));
   return new Map(rows.map((r) => [r.id, r.name]));
+}
+
+async function groupNamesById(
+  ids: string[],
+): Promise<Map<string, string>> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (unique.length === 0) return new Map();
+  const options = await listDeviceGroupOptions();
+  const want = new Set(unique);
+  return new Map(
+    options.filter((o) => want.has(o.id)).map((o) => [o.id, o.name]),
+  );
+}
+
+function displayNames(
+  row: {
+    remediationScriptId?: string | null;
+    deviceGroupId?: string | null;
+  },
+  scripts: Map<string, string>,
+  groups: Map<string, string>,
+): { scriptName: string | null; groupName: string | null } {
+  return {
+    scriptName: row.remediationScriptId
+      ? (scripts.get(row.remediationScriptId) ?? null)
+      : null,
+    groupName: row.deviceGroupId
+      ? (groups.get(row.deviceGroupId) ?? null)
+      : null,
+  };
 }
 
 /** Insert the three defaults only when the table is empty, so an admin delete
@@ -132,14 +168,20 @@ export async function listAlertRules(): Promise<AlertRuleRecord[]> {
     .select()
     .from(alertRules)
     .orderBy(asc(alertRules.name));
-  const names = await scriptNamesById(
-    rows
-      .map((r) => r.remediationScriptId)
-      .filter((id): id is string => !!id),
-  );
-  return rows.map((r) =>
-    toRecord(r, r.remediationScriptId ? (names.get(r.remediationScriptId) ?? null) : null),
-  );
+  const scriptIds = rows
+    .map((r) => r.remediationScriptId)
+    .filter((id): id is string => !!id);
+  const groupIds = rows
+    .map((r) => r.deviceGroupId)
+    .filter((id): id is string => !!id);
+  const [scripts, groups] = await Promise.all([
+    scriptNamesById(scriptIds),
+    groupNamesById(groupIds),
+  ]);
+  return rows.map((r) => {
+    const { scriptName, groupName } = displayNames(r, scripts, groups);
+    return toRecord(r, scriptName, groupName);
+  });
 }
 
 export async function createAlertRule(
@@ -156,14 +198,19 @@ export async function createAlertRule(
       severity: input.severity,
       ticketAutoCreate: input.ticketAutoCreate,
       remediationScriptId: input.remediationScriptId ?? null,
+      deviceGroupId: input.deviceGroupId ?? null,
       enabled: true,
     })
     .returning();
   if (!row) throw new Error("Failed to create alert rule");
-  const name = row.remediationScriptId
-    ? (await scriptNamesById([row.remediationScriptId])).get(row.remediationScriptId) ?? null
-    : null;
-  return toRecord(row, name);
+  const [scripts, groups] = await Promise.all([
+    scriptNamesById(
+      row.remediationScriptId ? [row.remediationScriptId] : [],
+    ),
+    groupNamesById(row.deviceGroupId ? [row.deviceGroupId] : []),
+  ]);
+  const { scriptName, groupName } = displayNames(row, scripts, groups);
+  return toRecord(row, scriptName, groupName);
 }
 
 export async function updateAlertRule(
@@ -182,15 +229,20 @@ export async function updateAlertRule(
       severity: input.severity,
       ticketAutoCreate: input.ticketAutoCreate,
       remediationScriptId: input.remediationScriptId ?? null,
+      deviceGroupId: input.deviceGroupId ?? null,
       updatedAt: new Date(),
     })
     .where(eq(alertRules.id, id))
     .returning();
   if (!row) return null;
-  const name = row.remediationScriptId
-    ? (await scriptNamesById([row.remediationScriptId])).get(row.remediationScriptId) ?? null
-    : null;
-  return toRecord(row, name);
+  const [scripts, groups] = await Promise.all([
+    scriptNamesById(
+      row.remediationScriptId ? [row.remediationScriptId] : [],
+    ),
+    groupNamesById(row.deviceGroupId ? [row.deviceGroupId] : []),
+  ]);
+  const { scriptName, groupName } = displayNames(row, scripts, groups);
+  return toRecord(row, scriptName, groupName);
 }
 
 export async function deleteAlertRule(id: string): Promise<boolean> {
@@ -213,12 +265,14 @@ export async function setAlertRuleEnabled(
     .where(eq(alertRules.id, id))
     .returning();
   if (!row) return null;
-  const name = row.remediationScriptId
-    ? (await scriptNamesById([row.remediationScriptId])).get(
-        row.remediationScriptId,
-      ) ?? null
-    : null;
-  return toRecord(row, name);
+  const [scripts, groups] = await Promise.all([
+    scriptNamesById(
+      row.remediationScriptId ? [row.remediationScriptId] : [],
+    ),
+    groupNamesById(row.deviceGroupId ? [row.deviceGroupId] : []),
+  ]);
+  const { scriptName, groupName } = displayNames(row, scripts, groups);
+  return toRecord(row, scriptName, groupName);
 }
 
 function latestByAsset(samples: MetricSample[]): Map<string, MetricSample> {
@@ -269,6 +323,21 @@ export async function evaluateMetricAlerts(
     .where(inArray(assets.id, assetIds));
   const assetById = new Map(assetRows.map((a) => [a.id, a]));
 
+  // Precompute membership for scoped rules (no IP gate — metrics ≠ WinRM).
+  const scopedGroupIds = [
+    ...new Set(
+      rules
+        .map((r) => r.deviceGroupId)
+        .filter((id): id is string => !!id),
+    ),
+  ];
+  const membersByGroup = new Map<string, Set<string>>();
+  await Promise.all(
+    scopedGroupIds.map(async (gid) => {
+      membersByGroup.set(gid, await resolveDeviceGroupAssetIds(gid));
+    }),
+  );
+
   const stateRows = await db
     .select()
     .from(alertRuleStates)
@@ -286,8 +355,13 @@ export async function evaluateMetricAlerts(
 
   const now = new Date();
   for (const rule of rules) {
+    const scope =
+      rule.deviceGroupId != null
+        ? (membersByGroup.get(rule.deviceGroupId) ?? new Set<string>())
+        : null;
     const spec = asSpec(rule);
     for (const [assetId, sample] of byAsset) {
+      if (scope && !scope.has(assetId)) continue;
       const asset = assetById.get(assetId);
       if (!asset) continue;
       try {

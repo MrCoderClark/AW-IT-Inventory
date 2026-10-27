@@ -12,6 +12,7 @@ const {
   deleteMock,
   setEnabledMock,
   getActiveScriptMock,
+  getGroupMock,
   getCurrentUserMock,
   hasPermissionMock,
   revalidateMock,
@@ -21,6 +22,7 @@ const {
   deleteMock: vi.fn(),
   setEnabledMock: vi.fn(),
   getActiveScriptMock: vi.fn(),
+  getGroupMock: vi.fn(),
   getCurrentUserMock: vi.fn(),
   hasPermissionMock: vi.fn(),
   revalidateMock: vi.fn(),
@@ -35,6 +37,9 @@ vi.mock("@/db/alert-rules", () => ({
 vi.mock("@/db/alert-rule-remediation", () => ({
   getActiveRemediationScript: (...args: unknown[]) =>
     getActiveScriptMock(...args),
+}));
+vi.mock("@/db/device-groups", () => ({
+  getDeviceGroup: (...args: unknown[]) => getGroupMock(...args),
 }));
 vi.mock("@/lib/auth/session", () => ({
   getCurrentUser: getCurrentUserMock,
@@ -58,9 +63,11 @@ const VALID = {
   severity: "warning",
   ticketAutoCreate: "inherit" as const,
   remediationScriptId: null as string | null,
+  deviceGroupId: null as string | null,
 };
 
-const SCRIPT_ID = "s3000000-0000-4000-8000-000000000001";
+const SCRIPT_ID = "53000000-0000-4000-8000-000000000001";
+const GROUP_ID = "63000000-0000-4000-8000-000000000001";
 const RULE_ID = "a3000000-0000-4000-8000-000000000001";
 
 function grant(allowed: boolean) {
@@ -71,6 +78,7 @@ function grant(allowed: boolean) {
 beforeEach(() => {
   vi.clearAllMocks();
   getActiveScriptMock.mockResolvedValue(null);
+  getGroupMock.mockResolvedValue(null);
 });
 
 describe("alert-rule actions — permission gate (AC-1)", () => {
@@ -132,6 +140,37 @@ describe("createAlertRuleAction", () => {
     expect(createMock).toHaveBeenCalledWith({
       ...VALID,
       remediationScriptId: SCRIPT_ID,
+    });
+    expect(res.ok).toBe(true);
+  });
+
+  it("rejects a missing device group without writing", async () => {
+    getGroupMock.mockResolvedValue(null);
+    const res = await createAlertRuleAction({
+      ...VALID,
+      deviceGroupId: GROUP_ID,
+    });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/device group/i);
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it("accepts an existing device group", async () => {
+    getGroupMock.mockResolvedValue({ id: GROUP_ID, name: "Win11" });
+    createMock.mockResolvedValue({
+      id: "new-id",
+      ...VALID,
+      deviceGroupId: GROUP_ID,
+      enabled: true,
+    });
+    const res = await createAlertRuleAction({
+      ...VALID,
+      deviceGroupId: GROUP_ID,
+    });
+    expect(getGroupMock).toHaveBeenCalledWith(GROUP_ID);
+    expect(createMock).toHaveBeenCalledWith({
+      ...VALID,
+      deviceGroupId: GROUP_ID,
     });
     expect(res.ok).toBe(true);
   });

@@ -11,6 +11,7 @@ import {
 } from "@/app/(app)/alert-rule-actions";
 import {
   AlertRuleFormDialog,
+  type AlertRuleGroupOption,
   type AlertRuleScriptOption,
 } from "@/components/alert-rule-form-dialog";
 import { HeroHeader } from "@/components/hero-header";
@@ -44,9 +45,11 @@ function severityVariant(
 export function AlertRulesTable({
   rules,
   scripts,
+  groups,
 }: {
   rules: AlertRuleRecord[];
   scripts: AlertRuleScriptOption[];
+  groups: AlertRuleGroupOption[];
 }) {
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = React.useState(false);
@@ -113,7 +116,7 @@ export function AlertRulesTable({
     <>
       <HeroHeader
         title="Alert rules"
-        subtitle="Thresholds on CPU, memory, disk and uptime. When a condition holds for enough samples, admins get a notification — and may run a library script on the host."
+        subtitle="Thresholds on CPU, memory, disk and uptime. Scope a rule to a device group, notify when a condition holds, and optionally run a library script on fire."
         icon={<TriangleAlert className="size-6" />}
         actions={
           <Button onClick={openCreate}>
@@ -140,6 +143,7 @@ export function AlertRulesTable({
                 <TableHead>Name</TableHead>
                 <TableHead>Signal</TableHead>
                 <TableHead>Condition</TableHead>
+                <TableHead>Scope</TableHead>
                 <TableHead>Severity</TableHead>
                 <TableHead>Auto-create</TableHead>
                 <TableHead>On fire</TableHead>
@@ -154,6 +158,9 @@ export function AlertRulesTable({
                   <TableCell>{SIGNAL_LABEL[rule.signal]}</TableCell>
                   <TableCell className="text-muted-foreground">
                     {formatCondition(rule)}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {rule.deviceGroupName ?? "All"}
                   </TableCell>
                   <TableCell>
                     <Badge variant={severityVariant(rule.severity)}>
@@ -213,6 +220,7 @@ export function AlertRulesTable({
         onOpenChange={onDialogOpenChange}
         rule={editing}
         scripts={scripts}
+        groups={groups}
       />
     </>
   );

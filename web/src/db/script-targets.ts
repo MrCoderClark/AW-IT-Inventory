@@ -86,6 +86,12 @@ export async function resolveScriptTargets(
   return splitByIp(rows);
 }
 
+export type MatchedComputer = {
+  assetId: string;
+  tag: string;
+  ip: string | null;
+};
+
 /**
  * Match Computers against a saved device group's rules, then gate on IP.
  * Missing / empty group → empty. Compliance uses scoreCompliance + isAtRisk.
@@ -101,16 +107,43 @@ export async function resolveDeviceGroup(
   return resolveDeviceGroupRules(group.rules);
 }
 
+/**
+ * Asset ids in a saved group (no IP gate). For alert-rule scoping — metrics
+ * ingest does not require WinRM reachability.
+ */
+export async function resolveDeviceGroupAssetIds(
+  groupId: string,
+): Promise<Set<string>> {
+  const group = await getDeviceGroup(groupId);
+  if (!group) {
+    console.warn(`[device-groups] missing group ${groupId}`);
+    return new Set();
+  }
+  const matched = await matchDeviceGroupComputers(group.rules);
+  return new Set(matched.map((m) => m.assetId));
+}
+
 /** Preview / resolve without a saved row (also used by create form preview). */
 export async function resolveDeviceGroupRules(
   rawRules: DeviceGroupRules,
 ): Promise<ResolveTargetsResult> {
+  const matched = await matchDeviceGroupComputers(rawRules);
+  return splitByIp(matched);
+}
+
+/**
+ * Computers matching group rules (before IP split). Shared by scripts/patches
+ * (then splitByIp) and alert scoping (asset ids only).
+ */
+export async function matchDeviceGroupComputers(
+  rawRules: DeviceGroupRules,
+): Promise<MatchedComputer[]> {
   const rules = normalizeDeviceGroupRules(rawRules);
   const conditions = [eq(assets.type, "Computer")];
 
   if (rules.locationId) {
     const subtree = await getSubtreeIds(rules.locationId);
-    if (subtree.length === 0) return { resolved: [], skippedNoIp: 0 };
+    if (subtree.length === 0) return [];
     conditions.push(inArray(assets.locationId, subtree));
   }
 
@@ -171,9 +204,11 @@ export async function resolveDeviceGroupRules(
             : !atRisk && score.assessed;
         });
 
-  return splitByIp(
-    filtered.map((r) => ({ assetId: r.assetId, tag: r.tag, ip: r.ip })),
-  );
+  return filtered.map((r) => ({
+    assetId: r.assetId,
+    tag: r.tag,
+    ip: r.ip,
+  }));
 }
 
 function escapeLike(value: string): string {

@@ -22,11 +22,12 @@ describe("alertRuleInputSchema (AC-1)", () => {
       severity: "warning",
       ticketAutoCreate: "inherit",
       remediationScriptId: null,
+      deviceGroupId: null,
     });
   });
 
   it("accepts a remediation script UUID or clears with empty string", () => {
-    const id = "s3000000-0000-4000-8000-000000000001";
+    const id = "53000000-0000-4000-8000-000000000001";
     expect(
       alertRuleInputSchema.parse({
         name: "CPU",
@@ -50,6 +51,34 @@ describe("alertRuleInputSchema (AC-1)", () => {
         ticketAutoCreate: "inherit",
         remediationScriptId: "",
       }).remediationScriptId,
+    ).toBeNull();
+  });
+
+  it("accepts a device group UUID or clears with empty string", () => {
+    const id = "63000000-0000-4000-8000-000000000001";
+    expect(
+      alertRuleInputSchema.parse({
+        name: "CPU",
+        signal: "cpu_pct",
+        op: "gte",
+        threshold: 90,
+        consecutive: 1,
+        severity: "warning",
+        ticketAutoCreate: "inherit",
+        deviceGroupId: id,
+      }).deviceGroupId,
+    ).toBe(id);
+    expect(
+      alertRuleInputSchema.parse({
+        name: "CPU",
+        signal: "cpu_pct",
+        op: "gte",
+        threshold: 90,
+        consecutive: 1,
+        severity: "warning",
+        ticketAutoCreate: "inherit",
+        deviceGroupId: "",
+      }).deviceGroupId,
     ).toBeNull();
   });
 
