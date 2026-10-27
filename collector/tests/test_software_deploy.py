@@ -200,6 +200,62 @@ def test_is_self_target_loopback_and_local_ips(monkeypatch):
     assert not install_printer.is_self_target("192.168.70.16")
 
 
+def test_skip_if_product_installed_skips_without_download(monkeypatch):
+    _patch_common(monkeypatch)
+    downloaded = {"n": 0}
+    monkeypatch.setattr(
+        software_deploy,
+        "_download_file",
+        lambda *a, **k: downloaded.__setitem__("n", downloaded["n"] + 1) or DATA,
+    )
+    monkeypatch.setattr(
+        software_deploy,
+        "_product_installed",
+        lambda session, skip: True,
+    )
+    step = {
+        **_install("s1"),
+        "skipIf": {"type": "product_installed", "displayName": "App"},
+    }
+    status, result = software_deploy.run_deployment(
+        Config(ingest_url="http://web"), "tok", _job([step])
+    )
+    assert status == "succeeded"
+    assert result["steps"][0]["status"] == "skipped"
+    assert result["steps"][0]["reason"] == "product_installed"
+    assert downloaded["n"] == 0
+
+
+def test_run_with_timeout_raises():
+    def slow():
+        import time
+
+        time.sleep(2)
+        return (0, "", "")
+
+    try:
+        software_deploy._run_with_timeout(0.05, slow)
+        assert False, "expected timeout"
+    except software_deploy.StepTimeoutError:
+        pass
+
+
+def test_step_timeout_marks_timed_out(monkeypatch):
+    _patch_common(monkeypatch)
+
+    def boom(*_a, **_k):
+        raise software_deploy.StepTimeoutError("timed out")
+
+    monkeypatch.setattr(software_deploy, "_run_with_timeout", boom)
+    step = {**_script("s1"), "timeoutSec": 1}
+    status, result = software_deploy.run_deployment(
+        Config(ingest_url="http://web"), "tok", _job([step])
+    )
+    assert status == "failed"
+    assert result["steps"][0]["status"] == "failed"
+    assert result["steps"][0]["reason"] == "timed_out"
+
+
 def test_self_target_staging_dir_uses_process_temp(monkeypatch, tmp_path):
     import install_printer
 
