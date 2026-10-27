@@ -78,7 +78,7 @@ def test_reboot_required_still_succeeds(monkeypatch):
     assert result["rebootRequired"] is True
 
 
-def test_failed_step_stops_and_skips_rest(monkeypatch):
+def test_failed_step_cascade_skips_rest_with_reason(monkeypatch):
     _patch_common(monkeypatch)
     monkeypatch.setattr(software_deploy, "_run_install", lambda s, p, t, a: (1603, "", "fatal"))
     monkeypatch.setattr(software_deploy, "_run_script", lambda s, script: (0, "", ""))
@@ -89,6 +89,30 @@ def test_failed_step_stops_and_skips_rest(monkeypatch):
 
     assert status == "failed" and result["outcome"] == "install-failed"
     assert [x["status"] for x in result["steps"]] == ["failed", "skipped"]
+    assert result["steps"][1]["reason"] == "cascade"
+
+
+def test_step_timeout_continue_on_error_runs_next_step(monkeypatch):
+    _patch_common(monkeypatch)
+    calls = {"n": 0}
+
+    def run_timeout(_timeout, fn):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise software_deploy.StepTimeoutError("timed out")
+        return fn()
+
+    monkeypatch.setattr(software_deploy, "_run_with_timeout", run_timeout)
+    monkeypatch.setattr(software_deploy, "_run_script", lambda s, script: (0, "", ""))
+    step = {**_script("s1"), "timeoutSec": 1, "continueOnError": True}
+
+    status, result = software_deploy.run_deployment(
+        Config(ingest_url="http://web"), "tok", _job([step, _script("s2")])
+    )
+
+    assert [x["status"] for x in result["steps"]] == ["failed", "ok"]
+    assert result["steps"][0]["reason"] == "timed_out"
+    assert status == "succeeded" and result["outcome"] == "installed"
 
 
 def test_integrity_mismatch_aborts_without_running(monkeypatch):

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getSoftwarePackage } from "@/db/software-packages";
 import type { SoftwareStep } from "@/db/schema";
+import { attachmentContentDisposition } from "@/lib/content-disposition";
 import { verifyExportFileSig } from "@/lib/software-export-sign";
 import { getObjectBytes } from "@/lib/storage";
 
@@ -75,7 +76,7 @@ export async function GET(request: Request, context: Context) {
   return new NextResponse(Buffer.from(obj.bytes), {
     headers: {
       "Content-Type": "application/octet-stream",
-      "Content-Disposition": `attachment; filename="${fileName}"`,
+      "Content-Disposition": attachmentContentDisposition(fileName),
       "Content-Length": String(obj.bytes.byteLength),
     },
   });

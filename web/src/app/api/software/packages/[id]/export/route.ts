@@ -144,13 +144,12 @@ export async function GET(request: Request, context: Context) {
   }
 
   const baseUrl = publicBaseUrl(request);
-  const expUnix = exportExpiryUnix();
-  const files = filesFromSteps(pkg.steps).map((f) =>
-    mintFileUrl(baseUrl, id, f, expUnix),
-  );
-
   let body: string;
   try {
+    const expUnix = exportExpiryUnix();
+    const files = filesFromSteps(pkg.steps).map((f) =>
+      mintFileUrl(baseUrl, id, f, expUnix),
+    );
     body = buildExportPs1({
       packageName: pkg.name,
       version: pkg.version,

@@ -7,7 +7,7 @@ via a feature branch + PR.
 
 ---
 
-## Ready for merge 🚧 — Software deploy polish (branch `feat/software-deploy-polish`, HEAD `626210b`)
+## Ready for merge 🚧 — Software deploy polish (branch `feat/software-deploy-polish`)
 
 All three polish slices implemented on one branch (awaiting PR / merge to `main`):
 

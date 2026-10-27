@@ -106,4 +106,49 @@ describe("buildExportPs1", () => {
     const ps1 = build();
     expect(ps1).toContain("exit 1");
   });
+
+  it("continueOnError steps warn instead of exit 1 inside try", () => {
+    const ps1 = build({
+      steps: [
+        {
+          id: "step-uninstall",
+          kind: "install",
+          name: "Uninstall prior",
+          installerType: "exe",
+          fileName: "uninstall.exe",
+          silentArgs: "/S",
+          sha256: "b".repeat(64),
+          storageKey: "software/uninstall.exe",
+          fileSize: 50,
+          continueOnError: true,
+        },
+        {
+          id: "step-install",
+          kind: "install",
+          name: "Install ePad",
+          installerType: "exe",
+          fileName: "setup.exe",
+          silentArgs: "/S",
+          sha256: "a".repeat(64),
+          storageKey: "software/pkg/setup.exe",
+          fileSize: 100,
+        },
+      ],
+      files: [
+        ...baseFiles,
+        {
+          fileName: "uninstall.exe",
+          url: "https://h2tecs.example/uninstall.exe",
+          sha256: "b".repeat(64),
+        },
+      ],
+    });
+    const uninstallTry = ps1.match(
+      /try \{[\s\S]*?Uninstall prior[\s\S]*?\} catch/,
+    );
+    expect(uninstallTry).toBeTruthy();
+    expect(uninstallTry![0]).not.toContain("exit 1");
+    expect(uninstallTry![0]).toContain("Write-Warning");
+    expect(ps1).toContain("Step: Install ePad");
+  });
 });

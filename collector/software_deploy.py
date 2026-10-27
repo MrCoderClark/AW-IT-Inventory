@@ -55,6 +55,10 @@ class StepTimeoutError(Exception):
     pass
 
 
+class IntegrityCheckError(Exception):
+    """Installer or companion bytes did not match the frozen SHA-256."""
+
+
 def _dec(b: bytes | None) -> str:
     return (b or b"").decode("utf-8", "ignore")
 
@@ -341,7 +345,7 @@ def run_deployment(config: Config, token: str, job: dict) -> tuple[str, dict]:
                             data = _download_file(config, token, job, step, fr["fileName"])
                             actual = hashlib.sha256(data).hexdigest()
                             if actual != fr.get("sha256"):
-                                raise RuntimeError(
+                                raise IntegrityCheckError(
                                     f"integrity check failed for {fr['fileName']} "
                                     f"(expected {str(fr.get('sha256'))[:12]}…, got {actual[:12]}…)"
                                 )
@@ -369,7 +373,16 @@ def run_deployment(config: Config, token: str, job: dict) -> tuple[str, dict]:
                     "exitCode": None,
                     "outputTail": "timed_out",
                 })
-                failure = failure or "install-failed"
+                if not step.get("continueOnError"):
+                    failure = failure or "install-failed"
+                stopped = not step.get("continueOnError")
+                continue
+            except IntegrityCheckError as e:
+                results.append({
+                    **base, "status": "failed", "exitCode": None,
+                    "outputTail": f"{type(e).__name__}: {e}"[:_OUTPUT_TAIL],
+                })
+                failure = "integrity-failed"
                 stopped = not step.get("continueOnError")
                 continue
             except Exception as e:  # noqa: BLE001 — a step error fails that step, not the worker
@@ -377,10 +390,7 @@ def run_deployment(config: Config, token: str, job: dict) -> tuple[str, dict]:
                     **base, "status": "failed", "exitCode": None,
                     "outputTail": f"{type(e).__name__}: {e}"[:_OUTPUT_TAIL],
                 })
-                if "integrity check failed" in str(e):
-                    failure = "integrity-failed"
-                else:
-                    failure = failure or "install-failed"
+                failure = failure or "install-failed"
                 stopped = not step.get("continueOnError")
                 continue
 

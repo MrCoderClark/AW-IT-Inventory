@@ -89,6 +89,20 @@ describe("GET /api/software/packages/[id]/export", () => {
     expect((await GET(req(), ctx())).status).toBe(404);
   });
 
+  it("500 JSON when signing secret is missing at mint time", async () => {
+    mintMock.mockImplementation(() => {
+      throw new Error(
+        "SOFTWARE_EXPORT_SIGNING_SECRET is required for package export file URLs",
+      );
+    });
+    const res = await GET(req(), ctx());
+    expect(res.status).toBe(500);
+    await expect(res.json()).resolves.toMatchObject({
+      error: expect.stringContaining("SOFTWARE_EXPORT_SIGNING_SECRET"),
+    });
+    expect(buildMock).not.toHaveBeenCalled();
+  });
+
   it("returns a text/plain attachment with minted file URLs", async () => {
     const res = await GET(req(), ctx());
     expect(res.status).toBe(200);

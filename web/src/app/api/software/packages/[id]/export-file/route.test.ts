@@ -90,6 +90,21 @@ describe("GET /api/software/packages/[id]/export-file", () => {
     expect(res.status).toBe(404);
   });
 
+  it("quotes Content-Disposition for exotic file names", async () => {
+    const exotic = 'weird"name.exe';
+    getPkgMock.mockResolvedValue({
+      steps: [{ ...samplePkg.steps[0], fileName: exotic }],
+    });
+    const res = await GET(
+      signedReq({ fileName: exotic, storageKey: "software/setup.exe" }),
+      ctx(),
+    );
+    expect(res.status).toBe(200);
+    const cd = res.headers.get("Content-Disposition") ?? "";
+    expect(cd).toContain('filename="weird_name.exe"');
+    expect(cd).toContain("filename*=UTF-8''");
+  });
+
   it("streams object bytes on a valid signature", async () => {
     const res = await GET(signedReq(), ctx());
     expect(res.status).toBe(200);

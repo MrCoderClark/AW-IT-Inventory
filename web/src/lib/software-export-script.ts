@@ -66,7 +66,33 @@ function psQuotedInstallerPath(fileName: string): string {
   return '`"' + '$WorkDir\\' + psEscapeDouble(fileName) + '`"';
 }
 
-function emitInstallRun(step: Extract<SoftwareStep, { kind: "install" }>): string[] {
+function emitFailureHandling(
+  stepLabel: string,
+  continueOnError: boolean,
+  treat3010AsSuccess: boolean,
+): string[] {
+  const cond = treat3010AsSuccess
+    ? "$__exit -ne 0 -and $__exit -ne 3010"
+    : "$__exit -ne 0";
+  if (continueOnError) {
+    return [
+      `if (${cond}) {`,
+      `  Write-Warning "Step continued after non-zero exit: ${stepLabel} (exit $__exit)"`,
+      `}`,
+    ];
+  }
+  return [
+    `if (${cond}) {`,
+    `  Write-Error "Step failed: ${stepLabel} (exit $__exit)"`,
+    `  exit 1`,
+    `}`,
+  ];
+}
+
+function emitInstallRun(
+  step: Extract<SoftwareStep, { kind: "install" }>,
+  continueOnError: boolean,
+): string[] {
   const silent = step.silentArgs.replace(/%DIR%/g, "$WorkDir");
   const stepLabel = psEscapeDouble(step.name);
   const lines: string[] = [];
@@ -96,16 +122,14 @@ function emitInstallRun(step: Extract<SoftwareStep, { kind: "install" }>): strin
       `$__exit = $LASTEXITCODE`,
     );
   }
-  lines.push(
-    `if ($__exit -ne 0 -and $__exit -ne 3010) {`,
-    `  Write-Error "Step failed: ${stepLabel} (exit $__exit)"`,
-    `  exit 1`,
-    `}`,
-  );
+  lines.push(...emitFailureHandling(stepLabel, continueOnError, true));
   return lines;
 }
 
-function emitScriptRun(step: Extract<SoftwareStep, { kind: "script" }>): string[] {
+function emitScriptRun(
+  step: Extract<SoftwareStep, { kind: "script" }>,
+  continueOnError: boolean,
+): string[] {
   const scriptFile = `${step.id}.ps1`;
   const scriptPath = `(Join-Path $WorkDir ${psQuoteSingle(scriptFile)})`;
   return [
@@ -113,10 +137,7 @@ function emitScriptRun(step: Extract<SoftwareStep, { kind: "script" }>): string[
     `$ProgressPreference = 'SilentlyContinue'`,
     `& ${scriptPath}`,
     `$__exit = $LASTEXITCODE`,
-    `if ($__exit -ne 0) {`,
-    `  Write-Error "Step failed: ${psEscapeDouble(step.name)} (exit $__exit)"`,
-    `  exit 1`,
-    `}`,
+    ...emitFailureHandling(psEscapeDouble(step.name), continueOnError, false),
   ];
 }
 
@@ -126,8 +147,9 @@ function emitStep(step: SoftwareStep): string[] {
     `Write-Host ${psQuoteSingle(`Step: ${step.name}`)}`,
   ];
 
+  const cont = Boolean(step.continueOnError);
   const runBody =
-    step.kind === "script" ? emitScriptRun(step) : emitInstallRun(step);
+    step.kind === "script" ? emitScriptRun(step, cont) : emitInstallRun(step, cont);
 
   if (step.skipIf?.type === "product_installed") {
     lines.push(...emitSkipIfProbe(step.skipIf));
