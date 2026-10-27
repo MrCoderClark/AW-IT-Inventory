@@ -268,15 +268,25 @@ type CompanionFile = {
   uploading: boolean;
 };
 
+const DEFAULT_STEP_TIMEOUT_SEC = 900;
+
+type EditorStepBase = {
+  timeoutSec: number;
+  skipIfEnabled: boolean;
+  skipIfDisplayName: string;
+  skipIfMatch: "eq" | "prefix";
+  skipIfVersion: string;
+  continueOnError: boolean;
+};
+
 type EditorStep =
-  | {
+  | ({
       uiId: string;
       kind: "script";
       name: string;
       script: string;
-      continueOnError: boolean;
-    }
-  | {
+    } & EditorStepBase)
+  | ({
       uiId: string;
       kind: "install";
       name: string;
@@ -288,8 +298,50 @@ type EditorStep =
       fileSize: number;
       uploading: boolean;
       companions: CompanionFile[];
-      continueOnError: boolean;
-    };
+    } & EditorStepBase);
+
+function defaultEditorStepFields(): EditorStepBase {
+  return {
+    timeoutSec: DEFAULT_STEP_TIMEOUT_SEC,
+    skipIfEnabled: false,
+    skipIfDisplayName: "",
+    skipIfMatch: "eq",
+    skipIfVersion: "",
+    continueOnError: false,
+  };
+}
+
+function editorStepExtras(s: EditorStep) {
+  const timeoutSec = s.timeoutSec;
+  const skipIf =
+    s.skipIfEnabled && s.skipIfDisplayName.trim()
+      ? {
+          type: "product_installed" as const,
+          displayName: s.skipIfDisplayName.trim(),
+          ...(s.skipIfMatch !== "eq" ? { displayNameMatch: s.skipIfMatch } : {}),
+          ...(s.skipIfVersion.trim()
+            ? { displayVersion: s.skipIfVersion.trim() }
+            : {}),
+        }
+      : undefined;
+  return {
+    timeoutSec,
+    continueOnError: s.continueOnError,
+    ...(skipIf ? { skipIf } : {}),
+  };
+}
+
+function hydrateStepFields(s: SoftwareStep): EditorStepBase {
+  const skipIf = s.skipIf;
+  return {
+    timeoutSec: s.timeoutSec ?? DEFAULT_STEP_TIMEOUT_SEC,
+    skipIfEnabled: !!skipIf,
+    skipIfDisplayName: skipIf?.displayName ?? "",
+    skipIfMatch: skipIf?.displayNameMatch ?? "eq",
+    skipIfVersion: skipIf?.displayVersion ?? "",
+    continueOnError: s.continueOnError ?? false,
+  };
+}
 
 /** Hydrate a saved package's steps into editor steps (files already uploaded). */
 function toEditorSteps(steps: SoftwareStep[]): EditorStep[] {
@@ -300,7 +352,7 @@ function toEditorSteps(steps: SoftwareStep[]): EditorStep[] {
           kind: "script",
           name: s.name,
           script: s.script,
-          continueOnError: s.continueOnError ?? false,
+          ...hydrateStepFields(s),
         }
       : {
           uiId: crypto.randomUUID(),
@@ -313,7 +365,6 @@ function toEditorSteps(steps: SoftwareStep[]): EditorStep[] {
           storageKey: s.storageKey,
           fileSize: s.fileSize,
           uploading: false,
-          continueOnError: s.continueOnError ?? false,
           companions: (s.companions ?? []).map((c) => ({
             uiId: crypto.randomUUID(),
             fileName: c.fileName,
@@ -322,6 +373,7 @@ function toEditorSteps(steps: SoftwareStep[]): EditorStep[] {
             fileSize: c.fileSize,
             uploading: false,
           })),
+          ...hydrateStepFields(s),
         },
   );
 }
@@ -371,7 +423,7 @@ function PackageEditor({
         kind: "script",
         name: "",
         script: "",
-        continueOnError: false,
+        ...defaultEditorStepFields(),
       },
     ]);
   }
@@ -394,7 +446,7 @@ function PackageEditor({
         fileSize: file.size,
         uploading: true,
         companions: [],
-        continueOnError: false,
+        ...defaultEditorStepFields(),
       },
     ]);
     const body = new FormData();
@@ -498,6 +550,12 @@ function PackageEditor({
       } else if (!s.script.trim()) {
         return toast.error("A script step is empty.");
       }
+      if (!Number.isFinite(s.timeoutSec) || s.timeoutSec <= 0) {
+        return toast.error(`"${s.name || "Step"}" needs a positive timeout.`);
+      }
+      if (s.skipIfEnabled && !s.skipIfDisplayName.trim()) {
+        return toast.error(`"${s.name || "Step"}": enter a product name for skip-if.`);
+      }
     }
 
     setBusy(true);
@@ -512,7 +570,7 @@ function PackageEditor({
                 kind: "script",
                 name: s.name.trim(),
                 script: s.script,
-                continueOnError: s.continueOnError,
+                ...editorStepExtras(s),
               }
             : {
                 kind: "install",
@@ -523,7 +581,7 @@ function PackageEditor({
                 sha256: s.sha256,
                 storageKey: s.storageKey,
                 fileSize: s.fileSize,
-                continueOnError: s.continueOnError,
+                ...editorStepExtras(s),
                 companions: s.companions.map((c) => ({
                   storageKey: c.storageKey,
                   sha256: c.sha256,
@@ -725,17 +783,99 @@ function PackageEditor({
                     </div>
                   </div>
                 )}
-                <label className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <input
-                    type="checkbox"
-                    className="size-3.5"
-                    checked={s.continueOnError}
-                    onChange={(e) =>
-                      patch(s.uiId, { continueOnError: e.target.checked })
-                    }
-                  />
-                  Continue to the next step even if this one fails
-                </label>
+                <div className="mt-2 flex flex-col gap-2 border-t pt-2">
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      className="size-3.5"
+                      checked={s.continueOnError}
+                      onChange={(e) =>
+                        patch(s.uiId, { continueOnError: e.target.checked })
+                      }
+                    />
+                    Continue to the next step even if this one fails
+                  </label>
+                  <div className="flex flex-wrap items-end gap-3">
+                    <div className="grid gap-1">
+                      <span className="text-xs text-muted-foreground">
+                        Timeout (minutes)
+                      </span>
+                      <Input
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={Math.round(s.timeoutSec / 60)}
+                        onChange={(e) => {
+                          const min = Number(e.target.value);
+                          patch(s.uiId, {
+                            timeoutSec:
+                              Number.isFinite(min) && min > 0
+                                ? Math.floor(min * 60)
+                                : DEFAULT_STEP_TIMEOUT_SEC,
+                          });
+                        }}
+                        className="h-8 w-24 tabular-nums"
+                      />
+                    </div>
+                    <label className="flex items-center gap-1.5 pb-2 text-xs text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        className="size-3.5"
+                        checked={s.skipIfEnabled}
+                        onChange={(e) =>
+                          patch(s.uiId, { skipIfEnabled: e.target.checked })
+                        }
+                      />
+                      Skip if installed
+                    </label>
+                  </div>
+                  {s.skipIfEnabled && (
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <div className="grid gap-1 sm:col-span-2">
+                        <span className="text-xs text-muted-foreground">
+                          Product display name
+                        </span>
+                        <Input
+                          value={s.skipIfDisplayName}
+                          onChange={(e) =>
+                            patch(s.uiId, { skipIfDisplayName: e.target.value })
+                          }
+                          placeholder="e.g. Microsoft .NET Framework 4.8"
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                      <div className="grid gap-1">
+                        <span className="text-xs text-muted-foreground">Name match</span>
+                        <select
+                          value={s.skipIfMatch}
+                          onChange={(e) =>
+                            patch(s.uiId, {
+                              skipIfMatch: e.target.value as "eq" | "prefix",
+                            })
+                          }
+                          className="h-8 rounded-md border bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                        >
+                          <option value="eq">Exact</option>
+                          <option value="prefix">Prefix</option>
+                        </select>
+                      </div>
+                      <div className="grid gap-1">
+                        <span className="text-xs text-muted-foreground">
+                          Version{" "}
+                          <span className="text-muted-foreground/80">(optional)</span>
+                        </span>
+                        <Input
+                          value={s.skipIfVersion}
+                          onChange={(e) =>
+                            patch(s.uiId, { skipIfVersion: e.target.value })
+                          }
+                          placeholder="e.g. 4.8.03761"
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
               </li>
             ))}
           </ol>
