@@ -7,6 +7,12 @@ via a feature branch + PR.
 
 ---
 
+## Decision — Spec 33 & Spec 31 v2 follow-ups won't do (2026-10-27)
+
+No further work on Spec 33 (portal / create-from-mail / attachments) or remaining
+Spec 31 v2 (WSUS, WUA approve-hide, etc.). Shipped slices stay; specs + roadmap
+updated accordingly.
+
 ## Shipped ✅ — Ingest: preserve fields on empty CIM (merged #130)
 
 Partial WinRM collects (null hostname/OS/hardware) no longer blank a prior good
@@ -680,20 +686,31 @@ Scan the fleet → authenticate as a service account → ingest → reconcile �
 
 ## Next / backlog 🔜
 
-### Web app — stubs & missing features (from the 2026-10-05 comb-through)
+**Closed (won't do):** Spec 33 portal/create-from-mail/attachments; Spec 31 v2 WSUS /
+WUA approve-hide / further patch orchestration.
 
-Surfaces that exist in the UI but aren't wired to anything real:
+### Strong candidates (pick one)
 
-- **Scan QR** 🔜 — asset-table button toasts "coming later"; would be browser-camera
-  QR → open the matching asset. *Niche.*
-- **Print label** 🔜 — detail-page button toasts "coming later"; needs a label format /
-  printer integration. *Niche.*
+- **NSSM / prod service packaging** — web + aw-auth + collector worker as Windows
+  services (the real on-prem deploy step).
+- **Software deploy polish** — conditional steps (“skip if installed”), step
+  timeouts, or package templates (e.g. Wise ePad) documented in-app.
+- **Spec 34 deepen** — more assist surfaces (script explain, ticket reply draft)
+  only where technicians already work.
+- **License / warranty expiry** — track and alert on software licenses + asset
+  warranty dates (inventory already has some warranty hooks).
+- **Metric / report polish** — Spec 26/29 improvements (saved fleet health views,
+  alert→report links) without new PSA/patch epics.
+
+### Web app — stubs (niche)
+
+- **Scan QR** 🔜 — asset-table button toasts "coming later".
+- **Print label** 🔜 — detail-page button toasts "coming later".
 
 ### Collector / infra
 
 - **WMI-over-DCOM fallback** — scan hosts that only expose SMB (no WinRM).
-- **NSSM service wrappers** — package web + aw-auth + collector `worker` as Windows
-  services for prod (the final deploy step; Docker Compose intentionally **not** used).
+- **NSSM service wrappers** — see strong candidates above.
 
 ### aw-auth (not web-focused)
 
