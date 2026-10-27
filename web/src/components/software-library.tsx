@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronUp,
   FileCode2,
+  Download,
   Loader2,
   Package,
   PackagePlus,
@@ -19,6 +20,10 @@ import { toast } from "sonner";
 
 import { deleteSoftwarePackageAction } from "@/app/(app)/software-deploy-actions";
 import type { SoftwareStep } from "@/db/schema";
+import {
+  PACKAGE_TEMPLATES,
+  type EditorStepPartial,
+} from "@/lib/software-package-templates";
 import { HeroHeader } from "@/components/hero-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,6 +36,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -62,10 +73,26 @@ function typeFromName(name: string): "msi" | "exe" | null {
  * token; the proxy refreshes the cookie on the failing request, so the retry goes
  * through with the fresh cookie and the user never sees the lapse.
  */
-async function postWithRetry(url: string, init: RequestInit): Promise<Response> {
+async function fetchWithRetry(
+  url: string,
+  init?: RequestInit,
+): Promise<Response> {
   const res = await fetch(url, init);
   if (res.status !== 401) return res;
   return fetch(url, init);
+}
+
+async function postWithRetry(url: string, init: RequestInit): Promise<Response> {
+  return fetchWithRetry(url, init);
+}
+
+function filenameFromDisposition(
+  header: string | null,
+  fallback: string,
+): string {
+  if (!header) return fallback;
+  const match = /filename="([^"]+)"/i.exec(header);
+  return match?.[1] ?? fallback;
 }
 
 /**
@@ -76,9 +103,12 @@ async function postWithRetry(url: string, init: RequestInit): Promise<Response> 
 export function SoftwareLibrary({
   initialItems,
   storageConfigured,
+  aiEnabled = false,
 }: {
   initialItems: SoftwarePackageItem[];
   storageConfigured: boolean;
+  /** Spec 34 — optional AI preface on break-glass export scripts. */
+  aiEnabled?: boolean;
 }) {
   const router = useRouter();
   const [editorState, setEditorState] = React.useState<
@@ -86,6 +116,10 @@ export function SoftwareLibrary({
   >(null);
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
   const [expanded, setExpanded] = React.useState<string | null>(null);
+  const [exportTarget, setExportTarget] =
+    React.useState<SoftwarePackageItem | null>(null);
+  const [exportWithAi, setExportWithAi] = React.useState(false);
+  const [exporting, setExporting] = React.useState(false);
 
   async function remove(pkg: SoftwarePackageItem) {
     if (
@@ -105,6 +139,47 @@ export function SoftwareLibrary({
       }
     } finally {
       setDeletingId(null);
+    }
+  }
+
+  async function downloadExport() {
+    const pkg = exportTarget;
+    if (!pkg) return;
+    setExporting(true);
+    try {
+      const qs =
+        exportWithAi && aiEnabled ? "?aiComments=1" : "";
+      const res = await fetchWithRetry(
+        `/api/software/packages/${pkg.id}/export${qs}`,
+      );
+      if (!res.ok) {
+        const d = await res.json().catch(() => null);
+        toast.error(d?.error ?? "Could not export the install script.");
+        return;
+      }
+      const blob = await res.blob();
+      const fallback = `${pkg.name}-${pkg.version}-install.ps1`.replace(
+        /[^\w.-]+/g,
+        "_",
+      );
+      const filename = filenameFromDisposition(
+        res.headers.get("Content-Disposition"),
+        fallback,
+      );
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(objectUrl);
+      toast.success(
+        "Install script downloaded. Embedded file URLs expire in about 1 hour.",
+      );
+      setExportTarget(null);
+    } catch {
+      toast.error("Could not export the install script.");
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -187,6 +262,18 @@ export function SoftwareLibrary({
                           size="icon"
                           onClick={(e) => {
                             e.stopPropagation();
+                            setExportWithAi(false);
+                            setExportTarget(p);
+                          }}
+                          aria-label={`Export ${p.name}`}
+                        >
+                          <Download className="size-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setEditorState({ mode: "edit", pkg: p });
                           }}
                           aria-label={`Edit ${p.name}`}
@@ -245,6 +332,54 @@ export function SoftwareLibrary({
         </div>
       )}
 
+      {exportTarget && (
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open && !exporting) setExportTarget(null);
+          }}
+        >
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Export install script</DialogTitle>
+              <DialogDescription>
+                Downloads a break-glass PowerShell script for{" "}
+                <span className="font-medium text-foreground">
+                  {exportTarget.name} {exportTarget.version}
+                </span>
+                . File download URLs inside the script expire in about one hour.
+              </DialogDescription>
+            </DialogHeader>
+            <label
+              className="flex items-center gap-2 text-sm text-muted-foreground"
+              title={aiEnabled ? undefined : "AI not configured"}
+            >
+              <input
+                type="checkbox"
+                className="size-3.5 disabled:opacity-50"
+                checked={exportWithAi}
+                disabled={!aiEnabled}
+                onChange={(e) => setExportWithAi(e.target.checked)}
+              />
+              Add AI comments (warnings only; install steps unchanged)
+            </label>
+            <DialogFooter>
+              <DialogClose render={<Button variant="outline" disabled={exporting} />}>
+                Cancel
+              </DialogClose>
+              <Button onClick={() => void downloadExport()} disabled={exporting}>
+                {exporting ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Download className="size-4" />
+                )}
+                Download .ps1
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
       {editorState && (
         <PackageEditor
           initial={editorState.mode === "edit" ? editorState.pkg : undefined}
@@ -268,15 +403,25 @@ type CompanionFile = {
   uploading: boolean;
 };
 
+const DEFAULT_STEP_TIMEOUT_SEC = 900;
+
+type EditorStepBase = {
+  timeoutSec: number;
+  skipIfEnabled: boolean;
+  skipIfDisplayName: string;
+  skipIfMatch: "eq" | "prefix";
+  skipIfVersion: string;
+  continueOnError: boolean;
+};
+
 type EditorStep =
-  | {
+  | ({
       uiId: string;
       kind: "script";
       name: string;
       script: string;
-      continueOnError: boolean;
-    }
-  | {
+    } & EditorStepBase)
+  | ({
       uiId: string;
       kind: "install";
       name: string;
@@ -288,10 +433,66 @@ type EditorStep =
       fileSize: number;
       uploading: boolean;
       companions: CompanionFile[];
-      continueOnError: boolean;
-    };
+    } & EditorStepBase);
+
+function defaultEditorStepFields(): EditorStepBase {
+  return {
+    timeoutSec: DEFAULT_STEP_TIMEOUT_SEC,
+    skipIfEnabled: false,
+    skipIfDisplayName: "",
+    skipIfMatch: "eq",
+    skipIfVersion: "",
+    continueOnError: false,
+  };
+}
+
+function editorStepExtras(s: EditorStep) {
+  const timeoutSec = s.timeoutSec;
+  const skipIf =
+    s.skipIfEnabled && s.skipIfDisplayName.trim()
+      ? {
+          type: "product_installed" as const,
+          displayName: s.skipIfDisplayName.trim(),
+          ...(s.skipIfMatch !== "eq" ? { displayNameMatch: s.skipIfMatch } : {}),
+          ...(s.skipIfVersion.trim()
+            ? { displayVersion: s.skipIfVersion.trim() }
+            : {}),
+        }
+      : undefined;
+  return {
+    timeoutSec,
+    continueOnError: s.continueOnError,
+    ...(skipIf ? { skipIf } : {}),
+  };
+}
+
+function hydrateStepFields(s: SoftwareStep): EditorStepBase {
+  const skipIf = s.skipIf;
+  return {
+    timeoutSec: s.timeoutSec ?? DEFAULT_STEP_TIMEOUT_SEC,
+    skipIfEnabled: !!skipIf,
+    skipIfDisplayName: skipIf?.displayName ?? "",
+    skipIfMatch: skipIf?.displayNameMatch ?? "eq",
+    skipIfVersion: skipIf?.displayVersion ?? "",
+    continueOnError: s.continueOnError ?? false,
+  };
+}
 
 /** Hydrate a saved package's steps into editor steps (files already uploaded). */
+function editorStepFromPartial(partial: EditorStepPartial): EditorStep {
+  if (partial.kind === "script") {
+    return { ...partial, uiId: crypto.randomUUID() };
+  }
+  return {
+    ...partial,
+    uiId: crypto.randomUUID(),
+    companions: partial.companions.map((c) => ({
+      ...c,
+      uiId: crypto.randomUUID(),
+    })),
+  };
+}
+
 function toEditorSteps(steps: SoftwareStep[]): EditorStep[] {
   return steps.map((s) =>
     s.kind === "script"
@@ -300,7 +501,7 @@ function toEditorSteps(steps: SoftwareStep[]): EditorStep[] {
           kind: "script",
           name: s.name,
           script: s.script,
-          continueOnError: s.continueOnError ?? false,
+          ...hydrateStepFields(s),
         }
       : {
           uiId: crypto.randomUUID(),
@@ -313,7 +514,6 @@ function toEditorSteps(steps: SoftwareStep[]): EditorStep[] {
           storageKey: s.storageKey,
           fileSize: s.fileSize,
           uploading: false,
-          continueOnError: s.continueOnError ?? false,
           companions: (s.companions ?? []).map((c) => ({
             uiId: crypto.randomUUID(),
             fileName: c.fileName,
@@ -322,6 +522,7 @@ function toEditorSteps(steps: SoftwareStep[]): EditorStep[] {
             fileSize: c.fileSize,
             uploading: false,
           })),
+          ...hydrateStepFields(s),
         },
   );
 }
@@ -371,8 +572,17 @@ function PackageEditor({
         kind: "script",
         name: "",
         script: "",
-        continueOnError: false,
+        ...defaultEditorStepFields(),
       },
+    ]);
+  }
+
+  function addFromTemplate(templateId: string) {
+    const template = PACKAGE_TEMPLATES.find((t) => t.id === templateId);
+    if (!template) return;
+    setSteps((prev) => [
+      ...prev,
+      ...template.buildSteps().map((p) => editorStepFromPartial(p)),
     ]);
   }
 
@@ -394,7 +604,7 @@ function PackageEditor({
         fileSize: file.size,
         uploading: true,
         companions: [],
-        continueOnError: false,
+        ...defaultEditorStepFields(),
       },
     ]);
     const body = new FormData();
@@ -498,6 +708,12 @@ function PackageEditor({
       } else if (!s.script.trim()) {
         return toast.error("A script step is empty.");
       }
+      if (!Number.isFinite(s.timeoutSec) || s.timeoutSec <= 0) {
+        return toast.error(`"${s.name || "Step"}" needs a positive timeout.`);
+      }
+      if (s.skipIfEnabled && !s.skipIfDisplayName.trim()) {
+        return toast.error(`"${s.name || "Step"}": enter a product name for skip-if.`);
+      }
     }
 
     setBusy(true);
@@ -512,7 +728,7 @@ function PackageEditor({
                 kind: "script",
                 name: s.name.trim(),
                 script: s.script,
-                continueOnError: s.continueOnError,
+                ...editorStepExtras(s),
               }
             : {
                 kind: "install",
@@ -523,7 +739,7 @@ function PackageEditor({
                 sha256: s.sha256,
                 storageKey: s.storageKey,
                 fileSize: s.fileSize,
-                continueOnError: s.continueOnError,
+                ...editorStepExtras(s),
                 companions: s.companions.map((c) => ({
                   storageKey: c.storageKey,
                   sha256: c.sha256,
@@ -598,6 +814,29 @@ function PackageEditor({
               >
                 <Plus className="size-3.5" /> Installer
               </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={<Button variant="outline" size="sm" />}
+                >
+                  Add from template
+                  <ChevronDown className="size-3.5 opacity-70" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="max-w-sm">
+                  {PACKAGE_TEMPLATES.map((t) => (
+                    <DropdownMenuItem
+                      key={t.id}
+                      onClick={() => addFromTemplate(t.id)}
+                    >
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-medium">{t.label}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {t.description}
+                        </span>
+                      </div>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
               <input
                 ref={fileRef}
                 type="file"
@@ -725,17 +964,99 @@ function PackageEditor({
                     </div>
                   </div>
                 )}
-                <label className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <input
-                    type="checkbox"
-                    className="size-3.5"
-                    checked={s.continueOnError}
-                    onChange={(e) =>
-                      patch(s.uiId, { continueOnError: e.target.checked })
-                    }
-                  />
-                  Continue to the next step even if this one fails
-                </label>
+                <div className="mt-2 flex flex-col gap-2 border-t pt-2">
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      className="size-3.5"
+                      checked={s.continueOnError}
+                      onChange={(e) =>
+                        patch(s.uiId, { continueOnError: e.target.checked })
+                      }
+                    />
+                    Continue to the next step even if this one fails
+                  </label>
+                  <div className="flex flex-wrap items-end gap-3">
+                    <div className="grid gap-1">
+                      <span className="text-xs text-muted-foreground">
+                        Timeout (minutes)
+                      </span>
+                      <Input
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={Math.round(s.timeoutSec / 60)}
+                        onChange={(e) => {
+                          const min = Number(e.target.value);
+                          patch(s.uiId, {
+                            timeoutSec:
+                              Number.isFinite(min) && min > 0
+                                ? Math.floor(min * 60)
+                                : DEFAULT_STEP_TIMEOUT_SEC,
+                          });
+                        }}
+                        className="h-8 w-24 tabular-nums"
+                      />
+                    </div>
+                    <label className="flex items-center gap-1.5 pb-2 text-xs text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        className="size-3.5"
+                        checked={s.skipIfEnabled}
+                        onChange={(e) =>
+                          patch(s.uiId, { skipIfEnabled: e.target.checked })
+                        }
+                      />
+                      Skip if installed
+                    </label>
+                  </div>
+                  {s.skipIfEnabled && (
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <div className="grid gap-1 sm:col-span-2">
+                        <span className="text-xs text-muted-foreground">
+                          Product display name
+                        </span>
+                        <Input
+                          value={s.skipIfDisplayName}
+                          onChange={(e) =>
+                            patch(s.uiId, { skipIfDisplayName: e.target.value })
+                          }
+                          placeholder="e.g. Microsoft .NET Framework 4.8"
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                      <div className="grid gap-1">
+                        <span className="text-xs text-muted-foreground">Name match</span>
+                        <select
+                          value={s.skipIfMatch}
+                          onChange={(e) =>
+                            patch(s.uiId, {
+                              skipIfMatch: e.target.value as "eq" | "prefix",
+                            })
+                          }
+                          className="h-8 rounded-md border bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                        >
+                          <option value="eq">Exact</option>
+                          <option value="prefix">Prefix</option>
+                        </select>
+                      </div>
+                      <div className="grid gap-1">
+                        <span className="text-xs text-muted-foreground">
+                          Version{" "}
+                          <span className="text-muted-foreground/80">(optional)</span>
+                        </span>
+                        <Input
+                          value={s.skipIfVersion}
+                          onChange={(e) =>
+                            patch(s.uiId, { skipIfVersion: e.target.value })
+                          }
+                          placeholder="e.g. 4.8.03761"
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
               </li>
             ))}
           </ol>

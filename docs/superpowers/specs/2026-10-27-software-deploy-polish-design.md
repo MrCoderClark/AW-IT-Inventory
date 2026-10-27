@@ -1,7 +1,7 @@
 # Spec 23 polish — conditions, timeouts, templates, break-glass export
 
 **Date**: 2026-10-27  
-**Status**: Design approved; plan at [`../plans/2026-10-27-software-deploy-polish.md`](../plans/2026-10-27-software-deploy-polish.md)  
+**Status**: Implemented on branch `feat/software-deploy-polish` (awaiting merge); plan at [`../plans/2026-10-27-software-deploy-polish.md`](../plans/2026-10-27-software-deploy-polish.md)  
 **Parent**: [Spec 23 — Software deployment](../../specs/23-software-deployment/index.md)  
 **Motivates**: Wise ePad fleet packaging (idempotent uninstall/install, hung
 InstallShield, Chrome/Edge policy scripts, offline break-glass)
@@ -169,11 +169,9 @@ Creating the `.ps1` (and thus minting sigs) requires cookie session +
 
 ## Rollout
 
-1. Slice 1 PR → merge  
-2. Slice 2 PR → merge  
-3. Slice 3 PR → merge  
-
-Update Spec 23 Follow-up / PROGRESS when each slice ships.
+All three slices landed on **`feat/software-deploy-polish`** (single PR). Spec 23
+Follow-up and `PROGRESS.md` updated when docs task 9 completed (2026-10-27).
+Merge to `main` pending controller review.
 
 ## Open questions (none blocking)
 

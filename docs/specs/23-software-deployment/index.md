@@ -371,8 +371,13 @@ Tracer-bullet slices — a thin thread end to end, then thicken.
 - [ ] **Scheduling / maintenance windows** — enqueue deployments to run later.
 - [ ] **Uninstall / repair** — msiexec `/x`, and version-aware upgrade.
 - [ ] **Dependency/order chains** — deploy a set in order, stop on first failure.
-- [ ] **Detection rules** — "already installed at version X → skip", beyond the
-  post-install registry check.
+- [x] **Spec 23 polish (slices 1–3)** — skip-if-installed + step timeouts;
+  client-side package templates in the editor; break-glass export (`.ps1` +
+  signed file URLs). Shipped on branch `feat/software-deploy-polish` (awaiting merge).
+  Design:
+  [2026-10-27-software-deploy-polish-design.md](../../superpowers/specs/2026-10-27-software-deploy-polish-design.md).
+- [ ] **Broader detection rules** — e.g. skip when product **absent**, beyond slice-1
+  `product_installed` and the post-install registry check.
 - [ ] **Deep spec-15 integration** — auto-add a deployed title to the tracked
   watchlist; show "deployed by OPUS" provenance on the software inventory.
 - [ ] **Signature/publisher verification** — check the installer's Authenticode

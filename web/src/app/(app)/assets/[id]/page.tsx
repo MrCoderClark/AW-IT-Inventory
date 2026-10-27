@@ -196,6 +196,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
           name: s.name,
           kind: s.kind,
           status: s.status,
+          reason: s.reason,
           exitCode: s.exitCode,
           outputTail: s.outputTail,
         })) ?? null,

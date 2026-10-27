@@ -18,6 +18,7 @@ installer-defined (0/3010 treated as success, anything else a failure).
 from __future__ import annotations
 
 import base64
+import concurrent.futures
 import hashlib
 
 import httpx
@@ -47,6 +48,15 @@ _OUTPUT_TAIL = 4000
 # base64-over-WinRM chunk (fallback only; SMB is the real transfer — base64 is far
 # too slow for a 90 MB installer, so SMB must be available in practice).
 _CHUNK = 2_000
+DEFAULT_STEP_TIMEOUT_SEC = 900
+
+
+class StepTimeoutError(Exception):
+    pass
+
+
+class IntegrityCheckError(Exception):
+    """Installer or companion bytes did not match the frozen SHA-256."""
 
 
 def _dec(b: bytes | None) -> str:
@@ -164,6 +174,47 @@ def _put_file_b64(
 # ---------------- Run a step ----------------
 
 
+def _product_installed(session: winrm.Session, skip: dict) -> bool:
+    name = (skip.get("displayName") or "").replace("'", "''")
+    match = skip.get("displayNameMatch") or "eq"
+    ver = (skip.get("displayVersion") or "").replace("'", "''")
+    script = f"""
+$name = '{name}'
+$matchMode = '{match}'
+$wantVer = '{ver}'
+$paths = @(
+  'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*',
+  'HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*'
+)
+$found = $false
+foreach ($p in $paths) {{
+  Get-ItemProperty $p -ErrorAction SilentlyContinue | ForEach-Object {{
+    $dn = $_.DisplayName
+    if (-not $dn) {{ return }}
+    $nameOk = if ($matchMode -eq 'prefix') {{ $dn.StartsWith($name) }} else {{ $dn -eq $name }}
+    if (-not $nameOk) {{ return }}
+    if ($wantVer -ne '') {{
+      if ($_.DisplayVersion -ne $wantVer) {{ return }}
+    }}
+    $script:found = $true
+  }}
+}}
+if ($found) {{ Write-Output 'FOUND' }}
+"""
+    r = _ps(session, script)
+    return "FOUND" in (r.get("stdout") or "")
+
+
+def _run_with_timeout(timeout_sec: float, fn):
+    """Run fn() in a thread; raise StepTimeoutError if it exceeds timeout_sec."""
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+        fut = ex.submit(fn)
+        try:
+            return fut.result(timeout=timeout_sec)
+        except concurrent.futures.TimeoutError as e:
+            raise StepTimeoutError("timed out") from e
+
+
 def _run_script(session: winrm.Session, script: str) -> tuple[int, str, str]:
     """Run an inline PowerShell step (elevated over WinRM). Progress is suppressed
     so it doesn't leak as CLIXML on stderr."""
@@ -252,46 +303,88 @@ def run_deployment(config: Config, token: str, job: dict) -> tuple[str, dict]:
                 "kind": step.get("kind"),
             }
             if stopped:
-                results.append({**base, "status": "skipped", "exitCode": None, "outputTail": ""})
+                results.append({
+                    **base,
+                    "status": "skipped",
+                    "reason": "cascade",
+                    "exitCode": None,
+                    "outputTail": "",
+                })
                 continue
+
+            skip = step.get("skipIf")
+            if skip and skip.get("type") == "product_installed":
+                if _product_installed(session, skip):
+                    results.append({
+                        **base,
+                        "status": "skipped",
+                        "reason": "product_installed",
+                        "exitCode": None,
+                        "outputTail": "skipIf: product_installed",
+                    })
+                    continue
+
+            timeout = int(step.get("timeoutSec") or DEFAULT_STEP_TIMEOUT_SEC)
 
             try:
                 if step["kind"] == "script":
-                    code, out, err = _run_script(session, step.get("script") or "")
-                else:
-                    # Transfer the installer + any companions (response/transform
-                    # files), re-verifying each file's hash on arrival.
-                    file_refs = [
-                        {"fileName": step["fileName"], "sha256": step.get("sha256")},
-                        *(step.get("companions") or []),
-                    ]
-                    integrity_bad = False
-                    for fr in file_refs:
-                        data = _download_file(config, token, job, step, fr["fileName"])
-                        actual = hashlib.sha256(data).hexdigest()
-                        if actual != fr.get("sha256"):
-                            results.append({
-                                **base, "status": "failed", "exitCode": None,
-                                "outputTail": f"integrity check failed for "
-                                f"{fr['fileName']} (expected {str(fr.get('sha256'))[:12]}…, "
-                                f"got {actual[:12]}…)",
-                            })
-                            failure = "integrity-failed"
-                            stopped = not step.get("continueOnError")
-                            integrity_bad = True
-                            break
-                        _put_file(
-                            session, prof, ip, data, remote_dir, fr["fileName"], config
-                        )
-                    if integrity_bad:
-                        continue
-                    path = f"{remote_dir}\\{step['fileName']}"
-                    # `%DIR%` lets silentArgs point at a companion on the target,
-                    # e.g. /s /f1"%DIR%\app.iss" /v"/qn".
-                    args = (step.get("silentArgs") or "").replace("%DIR%", remote_dir)
-                    code, out, err = _run_install(
-                        session, path, step["installerType"], args
+                    code, out, err = _run_with_timeout(
+                        timeout,
+                        lambda: _run_script(session, step.get("script") or ""),
                     )
+                else:
+
+                    def _install_body() -> tuple[int, str, str]:
+                        # Transfer the installer + any companions (response/transform
+                        # files), re-verifying each file's hash on arrival.
+                        file_refs = [
+                            {"fileName": step["fileName"], "sha256": step.get("sha256")},
+                            *(step.get("companions") or []),
+                        ]
+                        for fr in file_refs:
+                            data = _download_file(config, token, job, step, fr["fileName"])
+                            actual = hashlib.sha256(data).hexdigest()
+                            if actual != fr.get("sha256"):
+                                raise IntegrityCheckError(
+                                    f"integrity check failed for {fr['fileName']} "
+                                    f"(expected {str(fr.get('sha256'))[:12]}…, got {actual[:12]}…)"
+                                )
+                            _put_file(
+                                session, prof, ip, data, remote_dir, fr["fileName"], config
+                            )
+                        path = f"{remote_dir}\\{step['fileName']}"
+                        # `%DIR%` lets silentArgs point at a companion on the target,
+                        # e.g. /s /f1"%DIR%\app.iss" /v"/qn".
+                        args = (step.get("silentArgs") or "").replace("%DIR%", remote_dir)
+                        return _run_install(
+                            session, path, step["installerType"], args
+                        )
+
+                    code, out, err = _run_with_timeout(timeout, _install_body)
+            except StepTimeoutError:
+                _ps(
+                    session,
+                    "Get-Process setup,msiexec -EA SilentlyContinue | Stop-Process -Force",
+                )
+                results.append({
+                    **base,
+                    "status": "failed",
+                    "reason": "timed_out",
+                    "exitCode": None,
+                    "outputTail": "timed_out",
+                })
+                if not step.get("continueOnError"):
+                    failure = failure or "install-failed"
+                stopped = not step.get("continueOnError")
+                continue
+            except IntegrityCheckError as e:
+                results.append({
+                    **base, "status": "failed", "exitCode": None,
+                    "outputTail": f"{type(e).__name__}: {e}"[:_OUTPUT_TAIL],
+                })
+                failure = "integrity-failed"
+                stopped = not step.get("continueOnError")
+                continue
             except Exception as e:  # noqa: BLE001 — a step error fails that step, not the worker
                 results.append({
                     **base, "status": "failed", "exitCode": None,

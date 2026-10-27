@@ -78,7 +78,7 @@ def test_reboot_required_still_succeeds(monkeypatch):
     assert result["rebootRequired"] is True
 
 
-def test_failed_step_stops_and_skips_rest(monkeypatch):
+def test_failed_step_cascade_skips_rest_with_reason(monkeypatch):
     _patch_common(monkeypatch)
     monkeypatch.setattr(software_deploy, "_run_install", lambda s, p, t, a: (1603, "", "fatal"))
     monkeypatch.setattr(software_deploy, "_run_script", lambda s, script: (0, "", ""))
@@ -89,6 +89,30 @@ def test_failed_step_stops_and_skips_rest(monkeypatch):
 
     assert status == "failed" and result["outcome"] == "install-failed"
     assert [x["status"] for x in result["steps"]] == ["failed", "skipped"]
+    assert result["steps"][1]["reason"] == "cascade"
+
+
+def test_step_timeout_continue_on_error_runs_next_step(monkeypatch):
+    _patch_common(monkeypatch)
+    calls = {"n": 0}
+
+    def run_timeout(_timeout, fn):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise software_deploy.StepTimeoutError("timed out")
+        return fn()
+
+    monkeypatch.setattr(software_deploy, "_run_with_timeout", run_timeout)
+    monkeypatch.setattr(software_deploy, "_run_script", lambda s, script: (0, "", ""))
+    step = {**_script("s1"), "timeoutSec": 1, "continueOnError": True}
+
+    status, result = software_deploy.run_deployment(
+        Config(ingest_url="http://web"), "tok", _job([step, _script("s2")])
+    )
+
+    assert [x["status"] for x in result["steps"]] == ["failed", "ok"]
+    assert result["steps"][0]["reason"] == "timed_out"
+    assert status == "succeeded" and result["outcome"] == "installed"
 
 
 def test_integrity_mismatch_aborts_without_running(monkeypatch):
@@ -198,6 +222,62 @@ def test_is_self_target_loopback_and_local_ips(monkeypatch):
     monkeypatch.setattr(install_printer, "local_ipv4s", lambda: {"192.168.70.7"})
     assert install_printer.is_self_target("192.168.70.7")
     assert not install_printer.is_self_target("192.168.70.16")
+
+
+def test_skip_if_product_installed_skips_without_download(monkeypatch):
+    _patch_common(monkeypatch)
+    downloaded = {"n": 0}
+    monkeypatch.setattr(
+        software_deploy,
+        "_download_file",
+        lambda *a, **k: downloaded.__setitem__("n", downloaded["n"] + 1) or DATA,
+    )
+    monkeypatch.setattr(
+        software_deploy,
+        "_product_installed",
+        lambda session, skip: True,
+    )
+    step = {
+        **_install("s1"),
+        "skipIf": {"type": "product_installed", "displayName": "App"},
+    }
+    status, result = software_deploy.run_deployment(
+        Config(ingest_url="http://web"), "tok", _job([step])
+    )
+    assert status == "succeeded"
+    assert result["steps"][0]["status"] == "skipped"
+    assert result["steps"][0]["reason"] == "product_installed"
+    assert downloaded["n"] == 0
+
+
+def test_run_with_timeout_raises():
+    def slow():
+        import time
+
+        time.sleep(2)
+        return (0, "", "")
+
+    try:
+        software_deploy._run_with_timeout(0.05, slow)
+        assert False, "expected timeout"
+    except software_deploy.StepTimeoutError:
+        pass
+
+
+def test_step_timeout_marks_timed_out(monkeypatch):
+    _patch_common(monkeypatch)
+
+    def boom(*_a, **_k):
+        raise software_deploy.StepTimeoutError("timed out")
+
+    monkeypatch.setattr(software_deploy, "_run_with_timeout", boom)
+    step = {**_script("s1"), "timeoutSec": 1}
+    status, result = software_deploy.run_deployment(
+        Config(ingest_url="http://web"), "tok", _job([step])
+    )
+    assert status == "failed"
+    assert result["steps"][0]["status"] == "failed"
+    assert result["steps"][0]["reason"] == "timed_out"
 
 
 def test_self_target_staging_dir_uses_process_temp(monkeypatch, tmp_path):

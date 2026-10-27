@@ -39,6 +39,7 @@ export type DeployStepResult = {
   name: string;
   kind: "script" | "install";
   status: "ok" | "failed" | "skipped";
+  reason?: "cascade" | "product_installed" | "timed_out";
   exitCode: number | null;
   outputTail: string;
 };
@@ -80,12 +81,33 @@ function statusBadge(item: DeployHistoryItem) {
   return <Badge variant="outline">Canceled</Badge>;
 }
 
-function stepBadge(status: DeployStepResult["status"]) {
-  if (status === "ok")
+function stepBadge(step: DeployStepResult) {
+  if (step.status === "ok")
     return <Badge className="bg-emerald-600 text-white text-[10px]">ok</Badge>;
-  if (status === "failed")
-    return <Badge variant="destructive" className="text-[10px]">failed</Badge>;
-  return <Badge variant="outline" className="text-[10px]">skipped</Badge>;
+  if (step.status === "failed") {
+    if (step.reason === "timed_out")
+      return (
+        <Badge variant="destructive" className="text-[10px]">
+          Timed out
+        </Badge>
+      );
+    return (
+      <Badge variant="destructive" className="text-[10px]">
+        failed
+      </Badge>
+    );
+  }
+  if (step.reason === "product_installed")
+    return (
+      <Badge variant="outline" className="text-[10px]">
+        Skipped (installed)
+      </Badge>
+    );
+  return (
+    <Badge variant="outline" className="text-[10px]">
+      Skipped
+    </Badge>
+  );
 }
 
 /**
@@ -279,7 +301,7 @@ export function SoftwareDeployPanel({
                                       <FileCode2 className="size-3.5 text-muted-foreground" />
                                     )}
                                     <span className="font-medium">{s.name}</span>
-                                    {stepBadge(s.status)}
+                                    {stepBadge(s)}
                                     {s.exitCode !== null && (
                                       <span className="text-xs text-muted-foreground">
                                         exit {s.exitCode}
