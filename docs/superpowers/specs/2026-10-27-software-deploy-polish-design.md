@@ -1,7 +1,7 @@
 # Spec 23 polish — conditions, timeouts, templates, break-glass export
 
 **Date**: 2026-10-27  
-**Status**: Design (approved in brainstorm; awaiting implementation plan)  
+**Status**: Design approved; plan at [`../plans/2026-10-27-software-deploy-polish.md`](../plans/2026-10-27-software-deploy-polish.md)  
 **Parent**: [Spec 23 — Software deployment](../../specs/23-software-deployment/index.md)  
 **Motivates**: Wise ePad fleet packaging (idempotent uninstall/install, hung
 InstallShield, Chrome/Edge policy scripts, offline break-glass)
