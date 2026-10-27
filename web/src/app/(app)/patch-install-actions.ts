@@ -25,6 +25,7 @@ import {
   listRebootJobsForAssetTag,
   type RebootListItem,
 } from "@/db/reboot";
+import { resolveDeviceGroup } from "@/db/script-targets";
 import { getCurrentUser, hasPermission } from "@/lib/auth/session";
 
 /**
@@ -145,7 +146,9 @@ export async function requestPatchInstall(input: {
 }
 
 export async function requestFleetOsPatchInstall(input: {
-  assetTags: string[];
+  assetTags?: string[];
+  /** When set, resolve the device group (IP-gated) instead of checkbox tags. */
+  deviceGroupId?: string;
   rebootAtIso?: string;
 }): Promise<
   | {
@@ -159,13 +162,30 @@ export async function requestFleetOsPatchInstall(input: {
   const user = await getCurrentUser();
   if (!user || !hasPermission(user, "software:deploy")) return FORBIDDEN;
 
-  const tags = (input.assetTags ?? []).map((t) => t.trim()).filter(Boolean);
-  if (tags.length === 0) {
-    return {
-      ok: false,
-      error: "Select at least one computer.",
-      code: "badrequest",
-    };
+  const groupId = (input.deviceGroupId ?? "").trim();
+  let tags: string[];
+  if (groupId) {
+    const resolved = await resolveDeviceGroup(groupId);
+    tags = resolved.resolved.map((r) => r.tag);
+    if (tags.length === 0) {
+      return {
+        ok: false,
+        error:
+          resolved.skippedNoIp > 0
+            ? "No computers in that group have an IP address."
+            : "That device group has no matching computers.",
+        code: "badrequest",
+      };
+    }
+  } else {
+    tags = (input.assetTags ?? []).map((t) => t.trim()).filter(Boolean);
+    if (tags.length === 0) {
+      return {
+        ok: false,
+        error: "Select at least one computer.",
+        code: "badrequest",
+      };
+    }
   }
   if (tags.length > FLEET_OS_INSTALL_TAG_CAP) {
     return {

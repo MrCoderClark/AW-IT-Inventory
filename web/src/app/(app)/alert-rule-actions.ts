@@ -9,6 +9,7 @@ import {
   setAlertRuleEnabled,
   updateAlertRule,
 } from "@/db/alert-rules";
+import { getDeviceGroup } from "@/db/device-groups";
 import {
   alertRuleInputSchema,
   firstAlertRuleError,
@@ -40,6 +41,20 @@ async function rejectInactiveScript(
   return null;
 }
 
+async function rejectMissingGroup(
+  groupId: string | null | undefined,
+): Promise<ActionResult | null> {
+  if (!groupId) return null;
+  const group = await getDeviceGroup(groupId);
+  if (!group) {
+    return {
+      ok: false,
+      error: "Choose an existing device group.",
+    };
+  }
+  return null;
+}
+
 /**
  * Create / edit / enable / delete metric-threshold rules (spec 30, AC-1).
  * Gated on `user:admin` and rechecked here so a viewer can't call the actions
@@ -58,6 +73,8 @@ export async function createAlertRuleAction(
 
   const badScript = await rejectInactiveScript(parsed.data.remediationScriptId);
   if (badScript) return badScript;
+  const badGroup = await rejectMissingGroup(parsed.data.deviceGroupId);
+  if (badGroup) return badGroup;
 
   const row = await createAlertRule(parsed.data);
   revalidate();
@@ -82,6 +99,8 @@ export async function updateAlertRuleAction(
 
   const badScript = await rejectInactiveScript(parsed.data.remediationScriptId);
   if (badScript) return badScript;
+  const badGroup = await rejectMissingGroup(parsed.data.deviceGroupId);
+  if (badGroup) return badGroup;
 
   const row = await updateAlertRule(id, parsed.data);
   if (!row) return { ok: false, error: "That rule is no longer there." };

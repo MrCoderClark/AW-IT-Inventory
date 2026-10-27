@@ -82,6 +82,7 @@ const H = vi.hoisted(() => {
 
   const emailMock = vi.fn(async (_p: Record<string, unknown>) => true);
   const remediationMock = vi.fn(async (_p: Record<string, unknown>) => undefined);
+  const resolveGroupMock = vi.fn(async (_id: string) => new Set<string>());
 
   return {
     state,
@@ -92,6 +93,7 @@ const H = vi.hoisted(() => {
     notifyMock,
     emailMock,
     remediationMock,
+    resolveGroupMock,
   };
 });
 
@@ -110,6 +112,13 @@ vi.mock("./alert-rule-remediation", () => ({
   maybeEnqueueAlertRemediation: (...args: unknown[]) =>
     H.remediationMock(...(args as [Record<string, unknown>])),
   getActiveRemediationScript: vi.fn(),
+}));
+vi.mock("./device-groups", () => ({
+  listDeviceGroupOptions: vi.fn(async () => []),
+}));
+vi.mock("./script-targets", () => ({
+  resolveDeviceGroupAssetIds: (...args: unknown[]) =>
+    H.resolveGroupMock(...args),
 }));
 
 import {
@@ -132,6 +141,7 @@ const DISK = {
   enabled: true,
   ticketAutoCreate: "inherit" as const,
   remediationScriptId: null as string | null,
+  deviceGroupId: null as string | null,
 };
 const CPU = {
   id: "rule-cpu",
@@ -144,6 +154,7 @@ const CPU = {
   enabled: true,
   ticketAutoCreate: "inherit" as const,
   remediationScriptId: null as string | null,
+  deviceGroupId: null as string | null,
 };
 const ASSET = { id: "a1", tag: "H2TECS-COMP-1", name: "Reception PC" };
 
@@ -178,6 +189,7 @@ beforeEach(() => {
   H.notifyMock.mockResolvedValue("notif-id");
   H.emailMock.mockResolvedValue(true);
   H.remediationMock.mockResolvedValue(undefined);
+  H.resolveGroupMock.mockResolvedValue(new Set<string>());
 });
 
 describe("evaluateMetricAlerts", () => {
@@ -332,6 +344,34 @@ describe("evaluateMetricAlerts", () => {
     expect(H.notifyMock).toHaveBeenCalledTimes(1);
     expect(H.state.upserts[0]).toMatchObject({ alertedState: "firing" });
   });
+
+  it("skips assets outside a scoped device group", async () => {
+    H.state.rules = [
+      {
+        ...DISK,
+        deviceGroupId: "g3000000-0000-4000-8000-000000000001",
+      },
+    ];
+    H.resolveGroupMock.mockResolvedValue(new Set(["other-asset"]));
+    await evaluateMetricAlerts([sample({ diskPct: 97 })]);
+    expect(H.resolveGroupMock).toHaveBeenCalledWith(
+      "g3000000-0000-4000-8000-000000000001",
+    );
+    expect(H.notifyMock).not.toHaveBeenCalled();
+    expect(H.state.upserts).toHaveLength(0);
+  });
+
+  it("fires for assets inside a scoped device group", async () => {
+    H.state.rules = [
+      {
+        ...DISK,
+        deviceGroupId: "g3000000-0000-4000-8000-000000000001",
+      },
+    ];
+    H.resolveGroupMock.mockResolvedValue(new Set(["a1"]));
+    await evaluateMetricAlerts([sample({ diskPct: 97 })]);
+    expect(H.notifyMock).toHaveBeenCalledTimes(1);
+  });
 });
 
 const RULE_INPUT = {
@@ -343,6 +383,7 @@ const RULE_INPUT = {
   severity: "warning" as const,
   ticketAutoCreate: "inherit" as const,
   remediationScriptId: null as string | null,
+  deviceGroupId: null as string | null,
 };
 
 const RULE_ID = "a3000000-0000-4000-8000-000000000001";

@@ -8,6 +8,8 @@ const {
   buildSelectionMock,
   enqueuePatchMock,
   enqueueRebootMock,
+  enqueueFleetMock,
+  resolveGroupMock,
 } = vi.hoisted(() => ({
   getUserMock: vi.fn(),
   hasPermMock: vi.fn(),
@@ -15,6 +17,8 @@ const {
   buildSelectionMock: vi.fn(),
   enqueuePatchMock: vi.fn(),
   enqueueRebootMock: vi.fn(),
+  enqueueFleetMock: vi.fn(),
+  resolveGroupMock: vi.fn(),
 }));
 
 vi.mock("@/db/reboot", () => ({
@@ -23,7 +27,8 @@ vi.mock("@/db/reboot", () => ({
 vi.mock("@/db/patch-install", () => ({
   buildPatchSelection: buildSelectionMock,
   enqueuePatchInstall: enqueuePatchMock,
-  enqueueFleetOsPatchInstalls: vi.fn(),
+  enqueueFleetOsPatchInstalls: (...args: unknown[]) =>
+    enqueueFleetMock(...args),
   cancelPatchInstall: vi.fn(),
   getPatchInstallJob: vi.fn(),
   resolveDeployTarget: resolveTargetMock,
@@ -32,6 +37,13 @@ vi.mock("@/db/patch-install", () => ({
 vi.mock("@/db/missing-update-checks", () => ({
   enqueueMissingUpdateCheck: vi.fn(),
   resolveDeployTarget: vi.fn(),
+  listMissingUpdateChecksForAssetTag: vi.fn(),
+}));
+vi.mock("@/db/patches", () => ({
+  getComputerPatches: vi.fn(),
+}));
+vi.mock("@/db/script-targets", () => ({
+  resolveDeviceGroup: (...args: unknown[]) => resolveGroupMock(...args),
 }));
 vi.mock("@/lib/auth/session", () => ({
   getCurrentUser: getUserMock,
@@ -39,7 +51,10 @@ vi.mock("@/lib/auth/session", () => ({
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
-import { requestPatchInstall } from "./patch-install-actions";
+import {
+  requestFleetOsPatchInstall,
+  requestPatchInstall,
+} from "./patch-install-actions";
 
 const SEL = {
   os: [{ kbId: "KB1", title: "Security Update" }],
@@ -84,5 +99,44 @@ describe("requestPatchInstall with rebootAtIso", () => {
       rebootAtIso: "2026-12-01T12:00:00.000Z",
     });
     expect(res).toMatchObject({ ok: true, id: "install-1", rebootWarning: expect.any(String) });
+  });
+});
+
+describe("requestFleetOsPatchInstall with deviceGroupId", () => {
+  beforeEach(() => {
+    enqueueFleetMock.mockResolvedValue({
+      enqueued: ["jid-1"],
+      skipped: [],
+    });
+  });
+
+  it("resolves the group then enqueues by tags", async () => {
+    resolveGroupMock.mockResolvedValue({
+      resolved: [
+        { assetId: "a1", tag: "PC-1", ip: "10.0.0.1" },
+        { assetId: "a2", tag: "PC-2", ip: "10.0.0.2" },
+      ],
+      skippedNoIp: 1,
+    });
+    const res = await requestFleetOsPatchInstall({
+      deviceGroupId: "g1",
+    });
+    expect(resolveGroupMock).toHaveBeenCalledWith("g1");
+    expect(enqueueFleetMock).toHaveBeenCalledWith({
+      tags: ["PC-1", "PC-2"],
+      requestedBy: "me@opus.local",
+    });
+    expect(res).toEqual({ ok: true, enqueued: ["jid-1"], skipped: [] });
+  });
+
+  it("rejects an empty group resolve", async () => {
+    resolveGroupMock.mockResolvedValue({
+      resolved: [],
+      skippedNoIp: 2,
+    });
+    const res = await requestFleetOsPatchInstall({ deviceGroupId: "g1" });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/IP address/i);
+    expect(enqueueFleetMock).not.toHaveBeenCalled();
   });
 });

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { AlertRulesTable } from "./alert-rules-table";
@@ -37,6 +37,10 @@ const SCRIPTS = [
   { id: "s3000000-0000-4000-8000-000000000001", name: "Clear temp" },
 ];
 
+const GROUPS = [
+  { id: "g3000000-0000-4000-8000-000000000001", name: "Win11 lab" },
+];
+
 const RULES: AlertRuleRecord[] = [
   {
     id: "a3000000-0000-4000-8000-000000000001",
@@ -50,6 +54,8 @@ const RULES: AlertRuleRecord[] = [
     ticketAutoCreate: "inherit",
     remediationScriptId: null,
     remediationScriptName: null,
+    deviceGroupId: null,
+    deviceGroupName: null,
   },
   {
     id: "a3000000-0000-4000-8000-000000000003",
@@ -63,6 +69,8 @@ const RULES: AlertRuleRecord[] = [
     ticketAutoCreate: "inherit",
     remediationScriptId: SCRIPTS[0].id,
     remediationScriptName: "Clear temp",
+    deviceGroupId: GROUPS[0].id,
+    deviceGroupName: "Win11 lab",
   },
 ];
 
@@ -70,7 +78,9 @@ beforeEach(() => vi.clearAllMocks());
 
 describe("AlertRulesTable — render (AC-1, AC-8)", () => {
   it("lists each rule with a readable condition and labelled controls", () => {
-    render(<AlertRulesTable rules={RULES} scripts={SCRIPTS} />);
+    render(
+      <AlertRulesTable rules={RULES} scripts={SCRIPTS} groups={GROUPS} />,
+    );
     expect(screen.getByText("CPU high")).toBeInTheDocument();
     expect(
       screen.getByText("CPU ≥ 90% for 2 samples (~30 min)"),
@@ -90,10 +100,12 @@ describe("AlertRulesTable — render (AC-1, AC-8)", () => {
     expect(screen.getAllByText("Inherit")).toHaveLength(2);
     expect(screen.getByText("Clear temp")).toBeInTheDocument();
     expect(screen.getByText("On fire")).toBeInTheDocument();
+    expect(screen.getByText("All")).toBeInTheDocument();
+    expect(screen.getByText("Win11 lab")).toBeInTheDocument();
   });
 
   it("shows empty copy when there are no rules", () => {
-    render(<AlertRulesTable rules={[]} scripts={[]} />);
+    render(<AlertRulesTable rules={[]} scripts={[]} groups={[]} />);
     expect(screen.getByText(/No alert rules yet/i)).toBeInTheDocument();
   });
 });
@@ -105,7 +117,9 @@ describe("AlertRulesTable — enable / delete (AC-1)", () => {
       message: 'Disabled "CPU high".',
     });
     const user = userEvent.setup();
-    render(<AlertRulesTable rules={RULES} scripts={SCRIPTS} />);
+    render(
+      <AlertRulesTable rules={RULES} scripts={SCRIPTS} groups={GROUPS} />,
+    );
 
     await user.click(screen.getByRole("switch", { name: /Disable CPU high/i }));
 
@@ -116,7 +130,9 @@ describe("AlertRulesTable — enable / delete (AC-1)", () => {
   it("deletes a rule", async () => {
     deleteMock.mockResolvedValue({ ok: true, message: "Deleted that rule." });
     const user = userEvent.setup();
-    render(<AlertRulesTable rules={RULES} scripts={SCRIPTS} />);
+    render(
+      <AlertRulesTable rules={RULES} scripts={SCRIPTS} groups={GROUPS} />,
+    );
 
     await user.click(
       screen.getByRole("button", { name: /Delete CPU high/i }),
@@ -131,18 +147,25 @@ describe("AlertRulesTable — enable / delete (AC-1)", () => {
 describe("AlertRulesTable — dialog (AC-1)", () => {
   it("opens the create dialog from New rule", async () => {
     const user = userEvent.setup();
-    render(<AlertRulesTable rules={RULES} scripts={SCRIPTS} />);
+    render(
+      <AlertRulesTable rules={RULES} scripts={SCRIPTS} groups={GROUPS} />,
+    );
     await user.click(screen.getByRole("button", { name: /New rule/i }));
     expect(screen.getByText("New alert rule")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Create rule/i }),
     ).toBeInTheDocument();
     expect(screen.getByText(/Run script on fire/i)).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("dialog")).getByText(/^Scope$/i),
+    ).toBeInTheDocument();
   });
 
   it("opens the edit dialog for a row", async () => {
     const user = userEvent.setup();
-    render(<AlertRulesTable rules={RULES} scripts={SCRIPTS} />);
+    render(
+      <AlertRulesTable rules={RULES} scripts={SCRIPTS} groups={GROUPS} />,
+    );
     await user.click(screen.getByRole("button", { name: /Edit CPU high/i }));
     expect(screen.getByText("Edit alert rule")).toBeInTheDocument();
     expect(screen.getByDisplayValue("CPU high")).toBeInTheDocument();

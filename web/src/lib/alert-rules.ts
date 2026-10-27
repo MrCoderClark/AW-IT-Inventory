@@ -66,6 +66,10 @@ export interface AlertRuleRecord {
   remediationScriptId: string | null;
   /** Display name when the FK resolves; null if unset or script missing. */
   remediationScriptName: string | null;
+  /** Null = fleet-wide; otherwise only computers in this device group. */
+  deviceGroupId: string | null;
+  /** Display name when the FK resolves; null if unset or group missing. */
+  deviceGroupName: string | null;
 }
 
 export function matchesThreshold(

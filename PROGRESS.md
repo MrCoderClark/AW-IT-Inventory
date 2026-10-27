@@ -7,6 +7,13 @@ via a feature branch + PR.
 
 ---
 
+## 🚧 In progress — Device groups consumers (alerts + fleet OS)
+
+Wire saved device groups into Spec 30 alert rules (`alert_rules.device_group_id`,
+membership without IP) and Spec 31 fleet **Install OS updates** (group resolve
+with IP gate). Branch: `feat/device-groups-consumers`.
+Design: `docs/superpowers/specs/2026-10-26-device-groups-consumers-design.md`.
+
 ## Shipped ✅ — Device groups v1 (merged #126)
 
 Dynamic device groups (location + OS + compliance filters) as script Run on… /

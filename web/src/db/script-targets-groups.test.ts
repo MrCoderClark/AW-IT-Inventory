@@ -24,6 +24,7 @@ vi.mock("./queries", () => ({
 
 import {
   resolveDeviceGroup,
+  resolveDeviceGroupAssetIds,
   resolveDeviceGroupRules,
   resolveScriptTargets,
 } from "./script-targets";
@@ -115,5 +116,24 @@ describe("resolveDeviceGroup / resolveScriptTargets group mode", () => {
   it("resolveScriptTargets delegates group mode", async () => {
     const res = await resolveScriptTargets({ mode: "group", groupId: "g1" });
     expect(res.resolved).toHaveLength(1);
+  });
+});
+
+describe("resolveDeviceGroupAssetIds (alert scope, no IP gate)", () => {
+  it("includes hosts without an IP", async () => {
+    H.selectMock.mockImplementation(() =>
+      thenable([
+        ROW,
+        { ...ROW, assetId: "a2", tag: "PC-2", ip: null },
+      ]),
+    );
+    const ids = await resolveDeviceGroupAssetIds("g1");
+    expect(ids).toEqual(new Set(["a1", "a2"]));
+  });
+
+  it("returns empty when the group is missing", async () => {
+    H.getGroupMock.mockResolvedValue(null);
+    const ids = await resolveDeviceGroupAssetIds("missing");
+    expect(ids.size).toBe(0);
   });
 });

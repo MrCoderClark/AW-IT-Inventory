@@ -17,6 +17,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -26,6 +33,8 @@ import {
 } from "@/components/ui/table";
 import type { FleetOsSkipReason } from "@/db/patch-install";
 import type { FleetPatchRow } from "@/db/patches";
+
+export type FleetDeviceGroupOption = { id: string; name: string };
 
 /**
  * Fleet table for `/patches` (spec 31, AC-4). Sortable by attention: pending
@@ -74,23 +83,34 @@ function fleetInstallSummary(enqueued: number, skipped: number): string {
 export function PatchesFleet({
   rows,
   canDeploy = false,
+  deviceGroups = [],
 }: {
   rows: FleetPatchRow[];
   canDeploy?: boolean;
+  deviceGroups?: FleetDeviceGroupOption[];
 }) {
   const router = useRouter();
   const [desc, setDesc] = React.useState(true); // worst first
   const [needsAttentionOnly, setNeedsAttentionOnly] = React.useState(false);
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
+  const [groupId, setGroupId] = React.useState("");
   const [confirmOpen, setConfirmOpen] = React.useState(false);
+  /** null = checkbox selection; string = install for that device group. */
+  const [confirmMode, setConfirmMode] = React.useState<"tags" | "group" | null>(
+    null,
+  );
   const [alsoReboot, setAlsoReboot] = React.useState(false);
   const [rebootAt, setRebootAt] = React.useState("");
   const [summary, setSummary] = React.useState<string | null>(null);
   const [busy, startBusy] = React.useTransition();
 
+  const selectedGroupName =
+    deviceGroups.find((g) => g.id === groupId)?.name ?? "group";
+
   function resetConfirmDialog() {
     setAlsoReboot(false);
     setRebootAt("");
+    setConfirmMode(null);
   }
 
   const view = React.useMemo(() => {
@@ -142,22 +162,34 @@ export function PatchesFleet({
     });
   }
 
-  function openInstallConfirm() {
+  function openInstallConfirm(mode: "tags" | "group") {
     setSummary(null);
-    resetConfirmDialog();
+    setAlsoReboot(false);
+    setRebootAt("");
+    setConfirmMode(mode);
     setConfirmOpen(true);
   }
 
   function doInstall() {
+    if (!confirmMode) return;
+    const mode = confirmMode;
+    const tags = [...selected];
+    const gid = groupId;
     startBusy(async () => {
       const rebootAtIso =
         alsoReboot && rebootAt.trim()
           ? new Date(rebootAt).toISOString()
           : undefined;
-      const res = await requestFleetOsPatchInstall({
-        assetTags: [...selected],
-        rebootAtIso,
-      });
+      const res =
+        mode === "group"
+          ? await requestFleetOsPatchInstall({
+              deviceGroupId: gid,
+              rebootAtIso,
+            })
+          : await requestFleetOsPatchInstall({
+              assetTags: tags,
+              rebootAtIso,
+            });
       setConfirmOpen(false);
       resetConfirmDialog();
       if (!res.ok) {
@@ -176,7 +208,7 @@ export function PatchesFleet({
             .join("; "),
         });
       }
-      setSelected(new Set());
+      if (mode === "tags") setSelected(new Set());
       router.refresh();
     });
   }
@@ -195,19 +227,64 @@ export function PatchesFleet({
               : "Show needs attention only"}
           </Button>
           {canDeploy && (
-            <Button
-              size="sm"
-              disabled={selected.size === 0 || busy}
-              onClick={openInstallConfirm}
-            >
-              {busy ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <RefreshCw className="size-4" />
+            <>
+              <Button
+                size="sm"
+                disabled={selected.size === 0 || busy}
+                onClick={() => openInstallConfirm("tags")}
+              >
+                {busy ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="size-4" />
+                )}
+                Install OS updates
+                {selected.size > 0 ? ` (${selected.size})` : ""}
+              </Button>
+              {deviceGroups.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Select
+                    value={groupId || "__none__"}
+                    onValueChange={(v) =>
+                      setGroupId(v === "__none__" ? "" : (v ?? ""))
+                    }
+                  >
+                    <SelectTrigger
+                      className="h-8 w-[200px]"
+                      aria-label="Device group for OS install"
+                    >
+                      <SelectValue>
+                        {(value) => {
+                          if (!value || value === "__none__") {
+                            return "Device group…";
+                          }
+                          return (
+                            deviceGroups.find((g) => g.id === value)?.name ??
+                            "Device group…"
+                          );
+                        }}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">Device group…</SelectItem>
+                      {deviceGroups.map((g) => (
+                        <SelectItem key={g.id} value={g.id}>
+                          {g.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!groupId || busy}
+                    onClick={() => openInstallConfirm("group")}
+                  >
+                    Install for group…
+                  </Button>
+                </div>
               )}
-              Install OS updates
-              {selected.size > 0 ? ` (${selected.size})` : ""}
-            </Button>
+            </>
           )}
         </div>
         <span className="text-xs text-muted-foreground">
@@ -369,12 +446,22 @@ export function PatchesFleet({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              Install OS updates on {selected.size} computer
-              {selected.size === 1 ? "" : "s"}?
+              {confirmMode === "group"
+                ? `Install OS updates for “${selectedGroupName}”?`
+                : `Install OS updates on ${selected.size} computer${selected.size === 1 ? "" : "s"}?`}
             </DialogTitle>
             <DialogDescription>
-              Each selected computer will get all of its currently missing OS
-              updates over WinRM.{" "}
+              {confirmMode === "group" ? (
+                <>
+                  Computers in this device group that have an IP will get all of
+                  their currently missing OS updates over WinRM.{" "}
+                </>
+              ) : (
+                <>
+                  Each selected computer will get all of its currently missing
+                  OS updates over WinRM.{" "}
+                </>
+              )}
               {alsoReboot ? (
                 <>
                   After each install succeeds, hosts get a <strong>forced</strong>{" "}

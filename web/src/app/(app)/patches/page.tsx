@@ -4,6 +4,7 @@ import { HeroHeader } from "@/components/hero-header";
 import { PagePlaceholder } from "@/components/page-placeholder";
 import { PatchesFleet } from "@/components/patches-fleet";
 import { Card } from "@/components/ui/card";
+import { listDeviceGroupOptions } from "@/db/device-groups";
 import { getFleetPatches } from "@/db/patches";
 import { hasPermission, requireUser } from "@/lib/auth/session";
 import { cn } from "@/lib/utils";
@@ -55,7 +56,11 @@ export default async function Page() {
     );
   }
 
-  const rows = await getFleetPatches();
+  const canDeploy = hasPermission(user, "software:deploy");
+  const [rows, deviceGroups] = await Promise.all([
+    getFleetPatches(),
+    canDeploy ? listDeviceGroupOptions() : Promise.resolve([]),
+  ]);
   const total = rows.length;
   const pendingReboot = rows.filter((r) => r.pendingReboot).length;
   const osMissing = rows.reduce((n, r) => n + (r.missingCount > 0 ? 1 : 0), 0);
@@ -113,7 +118,8 @@ export default async function Page() {
 
       <PatchesFleet
         rows={rows}
-        canDeploy={hasPermission(user, "software:deploy")}
+        canDeploy={canDeploy}
+        deviceGroups={deviceGroups}
       />
     </div>
   );

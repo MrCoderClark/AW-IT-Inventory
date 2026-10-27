@@ -57,16 +57,19 @@ function valuesFrom(rule: AlertRuleRecord | null): AlertRuleFormValues {
     severity: rule.severity,
     ticketAutoCreate: rule.ticketAutoCreate,
     remediationScriptId: rule.remediationScriptId ?? "",
+    deviceGroupId: rule.deviceGroupId ?? "",
   };
 }
 
 export type AlertRuleScriptOption = { id: string; name: string };
+export type AlertRuleGroupOption = { id: string; name: string };
 
 export function AlertRuleFormDialog({
   open,
   onOpenChange,
   rule,
   scripts,
+  groups,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -74,6 +77,8 @@ export function AlertRuleFormDialog({
   rule: AlertRuleRecord | null;
   /** Active library scripts for the remediation picker. */
   scripts: AlertRuleScriptOption[];
+  /** Device groups for optional scope. */
+  groups: AlertRuleGroupOption[];
 }) {
   const [values, setValues] = React.useState<AlertRuleFormValues>(
     EMPTY_ALERT_RULE_FORM,
@@ -281,6 +286,43 @@ export function AlertRuleFormDialog({
               <p className="text-muted-foreground text-xs">
                 Inherit follows Admin → Ticket auto-create for metric notification
                 types.
+              </p>
+            </Field>
+
+            <Field label="Scope" error={errors.deviceGroupId}>
+              <Select
+                value={values.deviceGroupId || "__all__"}
+                onValueChange={(v) =>
+                  set("deviceGroupId", v === "__all__" ? "" : v)
+                }
+              >
+                <SelectTrigger
+                  className="w-full"
+                  aria-invalid={!!errors.deviceGroupId}
+                >
+                  <SelectValue>
+                    {(value) => {
+                      if (!value || value === "__all__") return "All computers";
+                      return (
+                        groups.find((g) => g.id === value)?.name ??
+                        rule?.deviceGroupName ??
+                        "Choose a group"
+                      );
+                    }}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All computers</SelectItem>
+                  {groups.map((g) => (
+                    <SelectItem key={g.id} value={g.id}>
+                      {g.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-muted-foreground text-xs">
+                Limit this rule to computers in a device group. Membership is
+                recomputed on each metric sample (no IP required).
               </p>
             </Field>
 

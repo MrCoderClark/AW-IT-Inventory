@@ -71,6 +71,11 @@ export const alertRuleInputSchema = z.object({
     .union([z.literal(""), z.null(), z.string().uuid("Choose a valid script")])
     .optional()
     .transform((v) => (!v ? null : v)),
+  /** Empty string or null = fleet-wide; otherwise a device-group UUID. */
+  deviceGroupId: z
+    .union([z.literal(""), z.null(), z.string().uuid("Choose a valid group")])
+    .optional()
+    .transform((v) => (!v ? null : v)),
 });
 
 export type AlertRuleInput = z.output<typeof alertRuleInputSchema>;
@@ -85,6 +90,8 @@ export interface AlertRuleFormValues {
   ticketAutoCreate: TicketAutoCreateMode;
   /** Form value: "" means none. */
   remediationScriptId: string;
+  /** Form value: "" means all computers. */
+  deviceGroupId: string;
 }
 
 export const EMPTY_ALERT_RULE_FORM: AlertRuleFormValues = {
@@ -96,6 +103,7 @@ export const EMPTY_ALERT_RULE_FORM: AlertRuleFormValues = {
   severity: "warning",
   ticketAutoCreate: "inherit",
   remediationScriptId: "",
+  deviceGroupId: "",
 };
 
 export function fieldErrors<T extends string>(

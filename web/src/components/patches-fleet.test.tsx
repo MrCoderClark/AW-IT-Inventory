@@ -171,4 +171,34 @@ describe("PatchesFleet", () => {
     expect(screen.getByText("Never scanned")).toBeTruthy();
     expect(screen.getByText("2 of 3 computers")).toBeTruthy();
   });
+
+  it("Install for group passes deviceGroupId", async () => {
+    vi.mocked(requestFleetOsPatchInstall).mockResolvedValue({
+      ok: true,
+      enqueued: ["jid"],
+      skipped: [],
+    });
+    const user = userEvent.setup();
+    const groups = [{ id: "g1", name: "Win11 lab" }];
+    render(<PatchesFleet rows={ROWS} canDeploy deviceGroups={groups} />);
+    await user.click(
+      screen.getByRole("combobox", { name: /Device group for OS install/i }),
+    );
+    await user.click(screen.getByRole("option", { name: /Win11 lab/i }));
+    await user.click(
+      screen.getByRole("button", { name: /Install for group/i }),
+    );
+    const dialog = screen.getByRole("dialog");
+    expect(
+      within(dialog).getByText(/Install OS updates for “Win11 lab”/i),
+    ).toBeTruthy();
+    await user.click(
+      within(dialog).getByRole("button", { name: /^Install$/i }),
+    );
+    await waitFor(() =>
+      expect(requestFleetOsPatchInstall).toHaveBeenCalledWith({
+        deviceGroupId: "g1",
+      }),
+    );
+  });
 });
