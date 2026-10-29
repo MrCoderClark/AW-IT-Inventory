@@ -95,6 +95,7 @@ export interface AssetReachability {
   state: ReachabilityState;
   lastCheckedAt: string | null; // ISO
   downSince: string | null; // ISO; set while down
+  errors?: string[]; // active SNMP error flags (hrPrinterDetectedErrorState)
 }
 
 /** One historical reachability check, for the printer detail page. */
@@ -135,6 +136,21 @@ export interface PrinterProtocolCheck {
   checkedAt: string; // ISO
 }
 
+/** One consumable level from prtMarkerSuppliesTable (toner, drum, waste, etc.). */
+export interface SupplyLevel {
+  name: string;
+  level_pct: number | null; // 0-100; null when exact level unknown
+  level_status: string; // "ok" | "low" | "empty" | "unknown"
+}
+
+/** One paper tray from prtInputTable. */
+export interface TrayLevel {
+  name: string;
+  media: string | null; // e.g. "A4", "Letter"
+  level_pct: number | null; // 0-100; null when unknown
+  level_status: string; // "ok" | "low" | "empty" | "unknown"
+}
+
 /** The Network Health card for one printer (spec 17.03, AC-3.5): the reachable
    rollup plus the latest TCP and SNMP probes. HTTP is deliberately absent
    (shown as "not tracked" in the UI, a spec 12 follow-up). */
@@ -144,6 +160,10 @@ export interface PrinterNetworkHealth {
   ip: string | null;
   tcp: PrinterProtocolCheck | null;
   snmp: PrinterProtocolCheck | null; // latencyMs always null (never timed)
+  errors?: string[]; // active SNMP error flags (hrPrinterDetectedErrorState)
+  errorSince?: string | null; // ISO; when the current error episode started
+  supplies?: SupplyLevel[]; // consumable levels (toner, drum, etc.)
+  trays?: TrayLevel[]; // paper tray levels
 }
 
 /** The kind of a derived activity row (spec 17.03, AC-3.6). */

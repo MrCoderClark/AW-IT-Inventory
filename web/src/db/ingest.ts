@@ -29,6 +29,7 @@ import {
   people,
   phoneDetails,
   printerDetails,
+  printerStatus,
 } from "./schema";
 
 /** Custody-log actor for scan-driven phone assignments (spec 27 AC-6). */
@@ -59,6 +60,7 @@ interface IngestHealth {
 interface IngestPrinter {
   serial?: string | null;
   page_count?: number | null;
+  errors?: string[] | null;
   [k: string]: unknown;
 }
 // VoIP desk phone (spec 27). Phase 1 sends mac + model (credential-free, from the
@@ -556,6 +558,52 @@ export async function ingestScan(payload: IngestPayload): Promise<IngestResult> 
         } catch (err) {
           console.error(
             `[ingest] printer-counter snapshot failed for asset ${assetId}:`,
+            err,
+          );
+        }
+      }
+
+      // Printer SNMP telemetry: error state, supply levels, and paper trays.
+      // Upserts onto the printer_status row in one shot. Best-effort — must
+      // never fail the machine ingest.
+      if (kind === "printer" && pr) {
+        try {
+          const errors = Array.isArray(pr.errors)
+            ? (pr.errors as string[])
+            : undefined;
+          const hasErrors = errors ? errors.length > 0 : false;
+          const supplies = Array.isArray(pr.supplies) ? pr.supplies : undefined;
+          const trays = Array.isArray(pr.trays) ? pr.trays : undefined;
+
+          const set: Record<string, unknown> = { updatedAt: now };
+          if (errors !== undefined) {
+            set.errorState = errors;
+            set.errorSince = hasErrors
+              ? sql`coalesce(${printerStatus.errorSince}, ${now.toISOString()})`
+              : null;
+          }
+          if (supplies !== undefined) set.supplies = supplies;
+          if (trays !== undefined) set.trays = trays;
+
+          await db
+            .insert(printerStatus)
+            .values({
+              assetId,
+              ...(errors !== undefined ? { errorState: errors } : {}),
+              ...(errors !== undefined
+                ? { errorSince: hasErrors ? now : null }
+                : {}),
+              ...(supplies !== undefined ? { supplies } : {}),
+              ...(trays !== undefined ? { trays } : {}),
+              updatedAt: now,
+            })
+            .onConflictDoUpdate({
+              target: printerStatus.assetId,
+              set,
+            });
+        } catch (err) {
+          console.error(
+            `[ingest] printer SNMP telemetry upsert failed for asset ${assetId}:`,
             err,
           );
         }

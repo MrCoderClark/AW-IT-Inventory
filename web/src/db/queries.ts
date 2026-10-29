@@ -267,16 +267,19 @@ function toReachability(row: {
   isDown: boolean;
   lastCheckedAt: Date | string | null;
   downSince: Date | string | null;
+  errorState?: unknown;
 }): AssetReachability {
   const iso = (v: Date | string | null) =>
     v ? (typeof v === "string" ? v : v.toISOString()) : null;
+  const errors = Array.isArray(row.errorState) ? (row.errorState as string[]) : undefined;
   if (row.reachable === null) {
-    return { state: "unknown", lastCheckedAt: iso(row.lastCheckedAt), downSince: null };
+    return { state: "unknown", lastCheckedAt: iso(row.lastCheckedAt), downSince: null, errors };
   }
   return {
     state: row.isDown ? "down" : "up",
     lastCheckedAt: iso(row.lastCheckedAt),
     downSince: iso(row.downSince),
+    errors,
   };
 }
 
@@ -291,6 +294,7 @@ export async function getPrinterReachabilityMap(): Promise<
       isDown: printerStatus.isDown,
       lastCheckedAt: printerStatus.lastCheckedAt,
       downSince: printerStatus.downSince,
+      errorState: printerStatus.errorState,
     })
     .from(printerStatus)
     .innerJoin(assets, eq(assets.id, printerStatus.assetId));
@@ -321,6 +325,7 @@ export async function getPrinterReachability(
       isDown: printerStatus.isDown,
       lastCheckedAt: printerStatus.lastCheckedAt,
       downSince: printerStatus.downSince,
+      errorState: printerStatus.errorState,
     })
     .from(printerStatus)
     .where(eq(printerStatus.assetId, a.id))

@@ -59,7 +59,23 @@ def print_summary(report: RunReport, saved_to: Path) -> None:
         elif h.device_type == "printer" and h.printer:
             name = (h.printer.model or "printer")[:32]
             detail = f"pages {h.printer.page_count or '?'} · {h.printer.status or '?'}"
-            status = "[green]ok[/green]"
+            supply_bits = [
+                f"{s.name} {s.level_pct}%" for s in h.printer.supplies if s.level_pct is not None
+            ]
+            if supply_bits:
+                detail += f" · {', '.join(supply_bits)}"
+            tray_bits = [
+                f"{t.name}{f' ({t.media})' if t.media else ''}"
+                + (f" {t.level_pct}%" if t.level_pct is not None else "")
+                for t in h.printer.trays
+            ]
+            if tray_bits:
+                detail += f" · trays: {', '.join(tray_bits)}"
+            if h.printer.errors:
+                detail += f" · [red]{', '.join(h.printer.errors)}[/red]"
+                status = "[yellow]{n} error(s)[/yellow]".format(n=len(h.printer.errors))
+            else:
+                status = "[green]ok[/green]"
         elif h.device_type == "phone" and h.phone:
             name = (h.phone.model or "phone")[:32]
             bits = [p for p in (h.phone.extension, h.phone.display_name) if p]

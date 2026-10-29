@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 
-from models import PrinterInfo
+from models import PrinterInfo, SupplyLevel, TrayLevel
 
 # Numeric OIDs (Printer-MIB / Host-Resources-MIB); lookupMib disabled for speed.
 # The page_count OID is the standard prtMarkerLifeCount default; it is overridable
@@ -18,8 +18,38 @@ OIDS = {
     "serial": "1.3.6.1.2.1.43.5.1.1.17.1",  # prtGeneralSerialNumber
     "page_count": DEFAULT_COUNTER_OID,
     "status": "1.3.6.1.2.1.25.3.5.1.1.1",  # hrPrinterStatus
+    "error_state": "1.3.6.1.2.1.25.3.5.1.2.1",  # hrPrinterDetectedErrorState
 }
 PRINTER_STATUS = {1: "other", 2: "unknown", 3: "idle", 4: "printing", 5: "warmup"}
+
+# hrPrinterDetectedErrorState (RFC 3805): a 2-byte OCTET STRING bitmask.
+# Each tuple: (byte index, bit mask, error flag name).
+_ERROR_BITS: list[tuple[int, int, str]] = [
+    (0, 0x80, "lowPaper"),
+    (0, 0x40, "noPaper"),
+    (0, 0x20, "lowToner"),
+    (0, 0x10, "noToner"),
+    (0, 0x08, "doorOpen"),
+    (0, 0x04, "jammed"),
+    (0, 0x02, "offline"),
+    (0, 0x01, "serviceRequested"),
+    (1, 0x80, "inputTrayMissing"),
+    (1, 0x40, "outputTrayMissing"),
+    (1, 0x20, "markerSupplyMissing"),
+    (1, 0x10, "outputNearFull"),
+    (1, 0x08, "outputFull"),
+    (1, 0x04, "inputTrayEmpty"),
+    (1, 0x02, "overduePreventMaint"),
+]
+
+
+def _parse_error_bits(raw: bytes) -> list[str]:
+    """Decode the hrPrinterDetectedErrorState bitmask into a list of flag names."""
+    return [
+        name
+        for byte_idx, mask, name in _ERROR_BITS
+        if byte_idx < len(raw) and raw[byte_idx] & mask
+    ]
 
 
 def _to_int(value: str | None) -> int | None:
@@ -135,6 +165,185 @@ async def _read_one(
     return got[0] if got else None
 
 
+async def _read_error_state(
+    ip: str,
+    community: str,
+    timeout: float,
+    versions: tuple[int, ...],
+) -> list[str]:
+    """Read hrPrinterDetectedErrorState and decode the bitmask.
+
+    Uses the shared ``_snmp_get`` path (same SnmpEngine lifecycle as every other
+    per-OID read) and recovers the raw bytes from pysnmp's str-encoded OctetString
+    via ISO-8859-1 (the pyasn1 default encoding, a lossless byte↔char roundtrip).
+    Its own GET on purpose (v1 rule, see _read_page_count)."""
+    try:
+        got = await _snmp_get(ip, community, timeout, [OIDS["error_state"]], versions)
+    except Exception:  # noqa: BLE001
+        return []
+    if not got or not got[0]:
+        return []
+    text = got[0]
+    if "No Such" in text:
+        return []
+    try:
+        raw = text.encode("latin-1")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return []
+    return _parse_error_bits(raw)
+
+
+async def _snmp_walk_column(
+    ip: str,
+    community: str,
+    timeout: float,
+    base_oid: str,
+    versions: tuple[int, ...],
+    max_rows: int = 32,
+) -> dict[str, str]:
+    """Walk one table column via GETNEXT, return {trailing_index: str_value}.
+
+    Stops when the returned OID leaves the subtree or ``max_rows`` is hit.
+    Its own engine per walk on purpose (same lifecycle as ``_snmp_get``).
+    """
+    from pysnmp.hlapi.v3arch.asyncio import (
+        CommunityData,
+        ContextData,
+        ObjectIdentity,
+        ObjectType,
+        SnmpEngine,
+        UdpTransportTarget,
+        next_cmd,
+    )
+
+    base_parts = base_oid.split(".")
+    result: dict[str, str] = {}
+
+    for mp_model in versions:
+        target = await UdpTransportTarget.create((ip, 161), timeout=timeout, retries=1)
+        engine = SnmpEngine()
+        current = ObjectType(ObjectIdentity(base_oid))
+        rows = 0
+
+        while rows < max_rows:
+            err_ind, err_status, _err_idx, var_binds = await next_cmd(
+                engine,
+                CommunityData(community, mpModel=mp_model),
+                target,
+                ContextData(),
+                current,
+                lookupMib=False,
+            )
+            if err_ind or err_status or not var_binds:
+                break
+
+            oid, val = var_binds[0]
+            oid_str = str(oid)
+            oid_parts = oid_str.split(".")
+            if oid_parts[: len(base_parts)] != base_parts:
+                break
+
+            suffix = ".".join(oid_parts[len(base_parts) :])
+            result[suffix] = str(val)
+            current = ObjectType(ObjectIdentity(str(oid)))
+            rows += 1
+
+        if result:
+            return result
+    return result
+
+
+# Printer-MIB supply table columns (prtMarkerSuppliesEntry, device index 1).
+_SUPPLY_DESC_OID = "1.3.6.1.2.1.43.11.1.1.6.1"
+_SUPPLY_MAX_OID = "1.3.6.1.2.1.43.11.1.1.8.1"
+_SUPPLY_LEVEL_OID = "1.3.6.1.2.1.43.11.1.1.9.1"
+
+# Printer-MIB input tray table columns (prtInputEntry, device index 1).
+_TRAY_DESC_OID = "1.3.6.1.2.1.43.8.2.1.18.1"   # prtInputDescription
+_TRAY_NAME_OID = "1.3.6.1.2.1.43.8.2.1.13.1"   # prtInputName (fallback)
+_TRAY_MAX_OID = "1.3.6.1.2.1.43.8.2.1.9.1"
+_TRAY_LEVEL_OID = "1.3.6.1.2.1.43.8.2.1.10.1"
+_TRAY_MEDIA_OID = "1.3.6.1.2.1.43.8.2.1.12.1"
+
+
+def _level_info(level: int | None, capacity: int | None) -> tuple[int | None, str]:
+    """Compute (percentage_or_None, status) from SNMP level/maxCapacity.
+
+    RFC 3805 sentinel values:
+      -1 = other (unknown), -2 = unknown, -3 = at least some remaining.
+    """
+    if level is None or capacity is None:
+        return None, "unknown"
+    if level == -3:
+        return None, "ok"
+    if level < 0 or capacity <= 0:
+        return None, "unknown"
+    if level == 0:
+        return 0, "empty"
+    pct = max(0, min(100, round(level * 100 / capacity)))
+    return pct, "low" if pct <= 10 else "ok"
+
+
+async def _read_supplies(
+    ip: str, community: str, timeout: float, versions: tuple[int, ...],
+) -> list[SupplyLevel]:
+    """Read prtMarkerSuppliesTable: description, maxCapacity, currentLevel."""
+    try:
+        descs, maxes, levels = await asyncio.gather(
+            _snmp_walk_column(ip, community, timeout, _SUPPLY_DESC_OID, versions),
+            _snmp_walk_column(ip, community, timeout, _SUPPLY_MAX_OID, versions),
+            _snmp_walk_column(ip, community, timeout, _SUPPLY_LEVEL_OID, versions),
+        )
+    except Exception:
+        return []
+    if not descs:
+        return []
+    result: list[SupplyLevel] = []
+    for idx, name_raw in descs.items():
+        name = name_raw.strip()
+        if not name or "No Such" in name:
+            continue
+        capacity = _to_int(maxes.get(idx))
+        level = _to_int(levels.get(idx))
+        pct, status = _level_info(level, capacity)
+        result.append(SupplyLevel(name=name, level_pct=pct, level_status=status))
+    return result
+
+
+async def _read_trays(
+    ip: str, community: str, timeout: float, versions: tuple[int, ...],
+) -> list[TrayLevel]:
+    """Read prtInputTable: description/name, media name, maxCapacity, currentLevel.
+
+    Iterates on the level column (always present when a tray exists) and falls
+    back through prtInputDescription → prtInputName → "Tray {n}" for the label,
+    since not every printer populates both name columns."""
+    try:
+        descs, names, medias, maxes, levels = await asyncio.gather(
+            _snmp_walk_column(ip, community, timeout, _TRAY_DESC_OID, versions),
+            _snmp_walk_column(ip, community, timeout, _TRAY_NAME_OID, versions),
+            _snmp_walk_column(ip, community, timeout, _TRAY_MEDIA_OID, versions),
+            _snmp_walk_column(ip, community, timeout, _TRAY_MAX_OID, versions),
+            _snmp_walk_column(ip, community, timeout, _TRAY_LEVEL_OID, versions),
+        )
+    except Exception:
+        return []
+    all_indices = set(levels) | set(maxes) | set(descs) | set(names)
+    if not all_indices:
+        return []
+    result: list[TrayLevel] = []
+    for n, idx in enumerate(sorted(all_indices), 1):
+        desc = _clean(descs.get(idx))
+        name = _clean(names.get(idx))
+        label = desc or name or f"Tray {n}"
+        media = _clean(medias.get(idx))
+        capacity = _to_int(maxes.get(idx))
+        level = _to_int(levels.get(idx))
+        pct, status = _level_info(level, capacity)
+        result.append(TrayLevel(name=label, media=media, level_pct=pct, level_status=status))
+    return result
+
+
 async def _pick_version(
     ip: str,
     community: str,
@@ -177,10 +386,15 @@ async def collect_printer(
     if not versions_ok:
         return None, ["snmp_no_response"]
 
-    serial = await _read_one(ip, community, timeout, OIDS["serial"], versions_ok)
-    status = await _read_one(ip, community, timeout, OIDS["status"], versions_ok)
-    page_count = await _read_page_count(
-        ip, community, timeout, counter_oids or [DEFAULT_COUNTER_OID], versions_ok
+    serial, status, page_count, errors, supplies, trays = await asyncio.gather(
+        _read_one(ip, community, timeout, OIDS["serial"], versions_ok),
+        _read_one(ip, community, timeout, OIDS["status"], versions_ok),
+        _read_page_count(
+            ip, community, timeout, counter_oids or [DEFAULT_COUNTER_OID], versions_ok
+        ),
+        _read_error_state(ip, community, timeout, versions_ok),
+        _read_supplies(ip, community, timeout, versions_ok),
+        _read_trays(ip, community, timeout, versions_ok),
     )
 
     printer = PrinterInfo(
@@ -189,6 +403,9 @@ async def collect_printer(
         serial=_clean(serial),
         page_count=page_count,
         status=PRINTER_STATUS.get(_to_int(_clean(status)) or 0),
+        supplies=supplies,
+        trays=trays,
+        errors=errors,
     )
     return printer, []
 

@@ -140,13 +140,32 @@ class Monitor(BaseModel):
     refresh_hz: int | None = None
 
 
+class SupplyLevel(BaseModel):
+    """One consumable (toner, drum, waste bin) from prtMarkerSuppliesTable."""
+
+    name: str
+    level_pct: int | None = None  # 0-100; None when exact level is unknown
+    level_status: str = "unknown"  # ok | low | empty | unknown
+
+
+class TrayLevel(BaseModel):
+    """One input tray from prtInputTable."""
+
+    name: str
+    media: str | None = None  # e.g. "A4", "Letter"
+    level_pct: int | None = None  # 0-100; None when unknown
+    level_status: str = "unknown"  # ok | low | empty | unknown
+
+
 class PrinterInfo(BaseModel):
     description: str | None = None
     model: str | None = None
     serial: str | None = None
     page_count: int | None = None
     status: str | None = None
-    supplies: dict[str, int] = Field(default_factory=dict)
+    supplies: list[SupplyLevel] = Field(default_factory=list)
+    trays: list[TrayLevel] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
 
 
 class PhoneInfo(BaseModel):
