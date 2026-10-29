@@ -82,6 +82,10 @@ export async function getPrinterNetworkHealth(
         reachable: printerStatus.reachable,
         isDown: printerStatus.isDown,
         lastCheckedAt: printerStatus.lastCheckedAt,
+        errorState: printerStatus.errorState,
+        errorSince: printerStatus.errorSince,
+        supplies: printerStatus.supplies,
+        trays: printerStatus.trays,
       })
       .from(printerStatus)
       .where(eq(printerStatus.assetId, assetId))
@@ -102,12 +106,37 @@ export async function getPrinterNetworkHealth(
         ? "down"
         : "up";
 
+  const errors = Array.isArray(statusRow?.errorState)
+    ? (statusRow.errorState as string[])
+    : undefined;
+
+  const supplies = Array.isArray(statusRow?.supplies)
+    ? (statusRow.supplies as {
+        name: string;
+        level_pct: number | null;
+        level_status: string;
+      }[])
+    : undefined;
+
+  const trays = Array.isArray(statusRow?.trays)
+    ? (statusRow.trays as {
+        name: string;
+        media: string | null;
+        level_pct: number | null;
+        level_status: string;
+      }[])
+    : undefined;
+
   return {
     state,
     lastCheckedAt: iso(statusRow?.lastCheckedAt ?? null),
     ip: detailRow?.ip ?? null,
     tcp,
     snmp,
+    errors,
+    errorSince: iso(statusRow?.errorSince ?? null),
+    supplies,
+    trays,
   };
 }
 

@@ -597,6 +597,23 @@ export const printerStatus = pgTable("printer_status", {
     .$type<"up" | "down">()
     .notNull()
     .default("up"),
+  // Active SNMP error flags from hrPrinterDetectedErrorState (e.g. lowToner,
+  // jammed, doorOpen). Null = never read; empty array = no errors.
+  errorState: jsonb("error_state").$type<string[]>(),
+  errorSince: timestamp("error_since", { withTimezone: true }),
+  // Consumable levels from prtMarkerSuppliesTable (toner, drum, waste, etc.).
+  supplies: jsonb("supplies").$type<
+    { name: string; level_pct: number | null; level_status: string }[]
+  >(),
+  // Paper tray levels from prtInputTable.
+  trays: jsonb("trays").$type<
+    {
+      name: string;
+      media: string | null;
+      level_pct: number | null;
+      level_status: string;
+    }[]
+  >(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

@@ -3,15 +3,18 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import {
+  AlertTriangle,
   ArrowLeft,
   BarChart3,
   Building2,
   Calendar,
   Copy,
+  Droplets,
   ExternalLink,
   FileText,
   Hash,
   Info,
+  Layers,
   Loader2,
   MapPin,
   MoreHorizontal,
@@ -28,7 +31,11 @@ import {
 import { toast } from "sonner";
 
 import { deleteAsset } from "@/app/(app)/assets/actions";
-import { requestScan, runPrinterCheckAction } from "@/app/(app)/scan-actions";
+import {
+  pollScanJob,
+  requestScan,
+  runPrinterCheckAction,
+} from "@/app/(app)/scan-actions";
 import { AssetFormDialog } from "@/components/asset-form-dialog";
 import { AssetImageUpload } from "@/components/asset-image-upload";
 import { Button } from "@/components/ui/button";
@@ -60,6 +67,7 @@ import {
 } from "@/lib/data";
 import type { AssetFormValues } from "@/lib/asset-schema";
 import { detailsToFormValues } from "@/lib/asset-fields";
+import { humanError } from "@/components/reachability-badge";
 import { cn } from "@/lib/utils";
 // Shared, server-safe detail primitives (spec 17). The printer page used to keep
 // byte-identical local copies; it now consumes the shared ones like the computer
@@ -210,6 +218,54 @@ function ActivityTable({ events }: { events: PrinterActivityEvent[] }) {
 
 /* ---------------- the page ---------------- */
 
+/* ---------------- supply / tray level bars ---------------------------------- */
+
+const STATUS_COLOR: Record<string, string> = {
+  ok: "var(--status-online)",
+  low: "var(--status-deployed)",
+  empty: "var(--status-maintenance)",
+  unknown: "var(--muted-foreground)",
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  ok: "OK",
+  low: "Low",
+  empty: "Empty",
+  unknown: "Unknown",
+};
+
+function LevelBar({
+  name,
+  pct,
+  status,
+}: {
+  name: string;
+  pct: number | null;
+  status: string;
+}) {
+  const color = STATUS_COLOR[status] ?? STATUS_COLOR.unknown;
+  const label = pct != null ? `${pct}%` : (STATUS_LABEL[status] ?? "Unknown");
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between text-sm">
+        <span className="font-medium">{name}</span>
+        <span className="font-mono text-xs tabular-nums" style={{ color }}>
+          {label}
+        </span>
+      </div>
+      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+        <div
+          className="h-full rounded-full transition-all"
+          style={{
+            width: pct != null ? `${pct}%` : status === "ok" ? "100%" : "0%",
+            backgroundColor: color,
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
 export function PrinterDetail({
   asset,
   details = null,
@@ -277,20 +333,61 @@ export function PrinterDetail({
   function runCheck() {
     startCheck(async () => {
       const res = await runPrinterCheckAction(asset.id);
-      if (res.ok) {
-        toast.success(res.message);
-        router.refresh();
-      } else {
+      if (!res.ok) {
         toast.error(res.error);
+        return;
       }
+      toast.success(res.message);
+      if (!res.jobId) {
+        router.refresh();
+        return;
+      }
+      const jobId = res.jobId;
+      for (let i = 0; i < 20; i++) {
+        await new Promise((r) => setTimeout(r, 3000));
+        const status = await pollScanJob(jobId);
+        if (!status.ok) break;
+        if (status.status === "done" || status.status === "failed") {
+          if (status.status === "done") {
+            toast.success("Check complete — refreshing.");
+          } else {
+            toast.error(status.error ?? "Check failed.");
+          }
+          router.refresh();
+          return;
+        }
+      }
+      router.refresh();
     });
   }
 
   function scanNow() {
     startScan(async () => {
       const res = await requestScan("selected", [asset.id]);
-      if (res.ok) toast.success(res.message);
-      else toast.error(res.error);
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success(res.message);
+      if (!res.jobId) return;
+      const jobId = res.jobId;
+      const poll = async () => {
+        for (let i = 0; i < 20; i++) {
+          await new Promise((r) => setTimeout(r, 3000));
+          const status = await pollScanJob(jobId);
+          if (!status.ok) break;
+          if (status.status === "done" || status.status === "failed") {
+            if (status.status === "done") {
+              toast.success("Scan complete — refreshing.");
+            } else {
+              toast.error(status.error ?? "Scan failed.");
+            }
+            router.refresh();
+            return;
+          }
+        }
+      };
+      poll();
     });
   }
 
@@ -527,6 +624,21 @@ export function PrinterDetail({
                         : "Unknown"}
                   </Dot>
                 </StatusRow>
+                <StatusRow label="Error State">
+                  {networkHealth?.errors && networkHealth.errors.length > 0 ? (
+                    <span
+                      className="inline-flex items-center gap-1.5 text-sm font-medium"
+                      style={{ color: "var(--status-maintenance)" }}
+                    >
+                      <AlertTriangle className="size-3.5" />
+                      {networkHealth.errors.length} error{networkHealth.errors.length !== 1 ? "s" : ""}
+                    </span>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">
+                      {networkHealth?.errors ? "No errors" : "Not checked"}
+                    </span>
+                  )}
+                </StatusRow>
                 <StatusRow label="Color Mode">{colorModeLabel}</StatusRow>
                 <StatusRow label="Duplex">{duplexLabel}</StatusRow>
                 <StatusRow label="Connection">{connectionLabel}</StatusRow>
@@ -547,6 +659,47 @@ export function PrinterDetail({
               </div>
             </Panel>
           </div>
+
+          {/* Error State — shown only when there are active SNMP errors */}
+          {networkHealth?.errors && networkHealth.errors.length > 0 && (
+            <Panel
+              icon={<AlertTriangle className="text-[color:var(--status-maintenance)]" />}
+              title="Printer Errors"
+              action={
+                <span
+                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold"
+                  style={{
+                    color: "var(--status-maintenance)",
+                    backgroundColor:
+                      "color-mix(in oklch, var(--status-maintenance), transparent 88%)",
+                  }}
+                >
+                  {networkHealth.errors.length} active
+                </span>
+              }
+            >
+              <ul className="divide-y">
+                {networkHealth.errors.map((err) => (
+                  <li
+                    key={err}
+                    className="flex items-center gap-3 py-2.5 text-sm"
+                  >
+                    <span
+                      aria-hidden
+                      className="size-1.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: "var(--status-maintenance)" }}
+                    />
+                    <span className="font-medium">{humanError(err)}</span>
+                  </li>
+                ))}
+              </ul>
+              {networkHealth.errorSince && (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Errors detected since {fmtDateTime(networkHealth.errorSince)}
+                </p>
+              )}
+            </Panel>
+          )}
 
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
             {/* Recent Activity */}
@@ -622,6 +775,44 @@ export function PrinterDetail({
               </div>
             </Panel>
           </div>
+
+          {/* Supplies & Trays — shown when data is available */}
+          {(networkHealth?.supplies?.length || networkHealth?.trays?.length) ? (
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+              {/* Supplies (toner, drum, waste, etc.) */}
+              {networkHealth.supplies && networkHealth.supplies.length > 0 && (
+                <Panel icon={<Droplets />} title="Supplies">
+                  <div className="flex flex-col gap-3">
+                    {networkHealth.supplies.map((s) => (
+                      <LevelBar
+                        key={s.name}
+                        name={s.name}
+                        pct={s.level_pct}
+                        status={s.level_status}
+                      />
+                    ))}
+                  </div>
+                </Panel>
+              )}
+
+              {/* Paper trays */}
+              {networkHealth.trays && networkHealth.trays.length > 0 && (
+                <Panel icon={<Layers />} title="Paper Trays">
+                  <div className="flex flex-col gap-3">
+                    {networkHealth.trays.map((t) => (
+                      <LevelBar
+                        key={t.name}
+                        name={t.media ? `${t.name} (${t.media})` : t.name}
+                        pct={t.level_pct}
+                        status={t.level_status}
+                      />
+                    ))}
+                  </div>
+                </Panel>
+              )}
+            </div>
+          ) : null}
+
         </TabsPanel>
 
         {/* -------- Network -------- */}
