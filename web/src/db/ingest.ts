@@ -15,6 +15,10 @@ import {
   type PostedMonitor,
 } from "./monitors";
 import { createNotification } from "./notifications";
+import {
+  replaceConnectedSignaturePads,
+  type PostedSignaturePad,
+} from "./signature-pads";
 import { assignAsset } from "./assignments";
 import { replaceInstalledSoftware, type PostedSoftware } from "./software";
 import {
@@ -93,6 +97,8 @@ export interface IngestHost {
   // Connected displays (spec 25). null/absent = not read (leave stored set intact);
   // an array = the current set.
   monitors?: PostedMonitor[] | null;
+  // Signature pads (ePad peripheral scan). null/absent = not read; array = current set.
+  signature_pads?: PostedSignaturePad[] | null;
   // Security posture from a Windows collect (spec 21). null/absent = not
   // collected (leave the prior posture row intact).
   compliance?: PostedCompliance | null;
@@ -687,6 +693,19 @@ export async function ingestScan(payload: IngestPayload): Promise<IngestResult> 
         } catch (err) {
           console.error(
             `[ingest] monitor auto-create failed for asset ${assetId}:`,
+            err,
+          );
+        }
+      }
+
+      // Signature pads (ePad peripheral scan). Same pattern as monitors: a matched
+      // Computer with an array replaces its set; null/absent = leave prior rows.
+      if (Array.isArray(h.signature_pads)) {
+        try {
+          await replaceConnectedSignaturePads(assetId, h.signature_pads, now);
+        } catch (err) {
+          console.error(
+            `[ingest] signature pad inventory failed for asset ${assetId}:`,
             err,
           );
         }

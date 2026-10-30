@@ -30,6 +30,7 @@ import { listDeploymentsForAssetTag } from "@/db/software-deploy";
 import { listSoftwarePackages } from "@/db/software-packages";
 import { listRemoteSessionsForAsset } from "@/db/remote-sessions";
 import { getConnectedMonitors, getMonitorConnection } from "@/db/monitors";
+import { getConnectedSignaturePads } from "@/db/signature-pads";
 import { getPrinterActivity, getPrinterNetworkHealth } from "@/db/printers";
 import {
   getAssetAssigneeId,
@@ -120,6 +121,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
       scriptRunRows,
       remoteSessions,
       monitors,
+      signaturePads,
       metrics,
       recentAssistRows,
     ] = await Promise.all([
@@ -146,6 +148,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
       canDeploy ? listScriptRunsForAssetTag(id) : Promise.resolve([]),
       canRemote ? listRemoteSessionsForAsset(id) : Promise.resolve([]),
       getConnectedMonitors(id),
+      getConnectedSignaturePads(id),
       getDeviceMetrics(id),
       aiEnabled ? listAssistJobsForAssetTag(id, 5) : Promise.resolve([]),
     ]);
@@ -217,6 +220,7 @@ export default async function Page({ params }: PageProps<"/assets/[id]">) {
         canRemote={canRemote}
         remoteSessions={remoteSessions}
         monitors={monitors}
+        signaturePads={signaturePads}
         canDeploy={canDeploy}
         installJobs={installJobs}
         installPackages={installPackages}

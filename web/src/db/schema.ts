@@ -1833,6 +1833,33 @@ export type SoftwareDeploymentRow = typeof softwareDeployments.$inferSelect;
 export type ConnectedMonitorRow = typeof connectedMonitors.$inferSelect;
 export type DismissedMonitorRow = typeof dismissedMonitors.$inferSelect;
 
+// Signature pads (ePad peripherals) detected during a Windows scan. Current state,
+// fully replaced on each scan (like connected_monitors). Each row = one ePadLink
+// software entry; USB PnP and COM status are per-host (shared across all rows).
+export const connectedSignaturePads = pgTable(
+  "connected_signature_pads",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    name: text("name"), // DisplayName, e.g. "ePadLink ePad 13.6.12670"
+    version: text("version"), // DisplayVersion
+    connected: boolean("connected").notNull().default(false), // USB device present
+    comRegistered: boolean("com_registered").notNull().default(false),
+    comBitness: text("com_bitness"), // "x86" | "x64"
+    deviceStatus: text("device_status"), // PnP status
+    installLocation: text("install_location"),
+    seenAt: timestamp("seen_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [index("connected_sig_pads_asset_idx").on(t.assetId)],
+);
+
+export type ConnectedSignaturePadRow =
+  typeof connectedSignaturePads.$inferSelect;
+
 // Saved custom-report definitions (spec 26). A report is a data source + a spec
 // (columns/filters/groupBy/aggregates/sort/limit) stored as jsonb and re-run on
 // demand — no user SQL, the engine composes from a whitelisted field catalog.
