@@ -26,6 +26,7 @@ import {
   MoreHorizontal,
   Package,
   Pencil,
+  PenLine,
   Printer,
   ScanLine,
   ShieldCheck,
@@ -77,6 +78,7 @@ import {
   type RemoteSessionHistoryItem,
 } from "@/components/remote-session-history";
 import type { ConnectedMonitorItem } from "@/db/monitors";
+import type { SignaturePadItem } from "@/db/signature-pads";
 import {
   SoftwareDeployPanel,
   type DeployHistoryItem,
@@ -322,6 +324,7 @@ export function ComputerDetail({
   canRemote = false,
   remoteSessions = [],
   monitors = [],
+  signaturePads = [],
   canDeploy = false,
   installJobs = [],
   installPackages = [],
@@ -355,6 +358,7 @@ export function ComputerDetail({
   canRemote?: boolean;
   remoteSessions?: RemoteSessionHistoryItem[];
   monitors?: ConnectedMonitorItem[];
+  signaturePads?: SignaturePadItem[];
   canDeploy?: boolean;
   installJobs?: InstallJobListItem[];
   installPackages?: PackageOption[];
@@ -751,6 +755,43 @@ export function ComputerDetail({
               </p>
             )}
           </Panel>
+
+          {/* -------- Signature Pads (ePad peripheral scan) -------- */}
+          {signaturePads.length > 0 && (
+            <Panel icon={<PenLine />} title="Signature Pads">
+              <ul className="divide-y text-sm">
+                {signaturePads.map((pad, i) => (
+                  <li
+                    key={i}
+                    className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0"
+                  >
+                    <span className="min-w-0">
+                      <span className="flex items-center gap-2">
+                        <span className="truncate font-medium">
+                          {pad.name || "Signature Pad"}
+                        </span>
+                        {pad.connected ? (
+                          <Badge
+                            variant="default"
+                            className="text-[10px]"
+                          >
+                            connected
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px]"
+                          >
+                            not connected
+                          </Badge>
+                        )}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </Panel>
+          )}
         </TabsPanel>
 
         {/* -------- Monitoring: metrics (29) + Assist (34) -------- */}

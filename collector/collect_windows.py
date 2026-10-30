@@ -22,6 +22,7 @@ from models import (
     LocalAdmin,
     Monitor,
     NetworkAdapter,
+    SignaturePad,
     Software,
     WindowsUpdates,
 )
@@ -251,6 +252,69 @@ if($m){try{$u=@(Get-WinGetPackage|?{$_.IsUpdateAvailable}|%{$av=$null;if($_.Avai
 """
 
 
+# Signature pad detection (ePadLink): USB PnP device, installed software, and COM
+# registration. Its OWN WinRM call (like PS_MONITORS). Best-effort.
+PS_SIGNATURE_PADS = r"""
+$ErrorActionPreference = 'SilentlyContinue'
+$pads = @()
+
+$regPaths = @(
+    'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
+    'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
+)
+$seen = @{}
+foreach ($rp in $regPaths) {
+    foreach ($key in (Get-ChildItem $rp -EA SilentlyContinue)) {
+        $props = Get-ItemProperty $key.PSPath -EA SilentlyContinue
+        if ($props.DisplayName -like 'ePadLink*') {
+            $dk = "$($props.DisplayName)|$($props.DisplayVersion)"
+            if (-not $seen[$dk]) {
+                $seen[$dk] = $true
+                $pads += [ordered]@{
+                    name             = "$($props.DisplayName)"
+                    version          = "$($props.DisplayVersion)"
+                    install_location = "$($props.InstallLocation)"
+                }
+            }
+        }
+    }
+}
+
+$connected = $false
+$devStatus = $null
+try {
+    $devs = @(Get-PnpDevice -EA Stop | Where-Object {
+        $_.FriendlyName -like '*ePad*' -or
+        $_.FriendlyName -like '*Signature Pad*' -or
+        $_.InstanceId -like '*VID_04DF*'
+    })
+    if ($devs.Count -gt 0) {
+        $connected = $true
+        $devStatus = "$($devs[0].Status)"
+    }
+} catch {}
+
+$comReg = $false
+$comBit = $null
+$clsid = '{30778FC6-EABA-43A7-BA39-6875A3B16057}'
+$x86 = Get-ItemProperty "Registry::HKEY_CLASSES_ROOT\Wow6432Node\CLSID\$clsid\InprocServer32" -EA SilentlyContinue
+$x64 = Get-ItemProperty "Registry::HKEY_CLASSES_ROOT\CLSID\$clsid\InprocServer32" -EA SilentlyContinue
+if ($x86) { $comReg = $true; $comBit = 'x86' }
+elseif ($x64) { $comReg = $true; $comBit = 'x64' }
+
+if ($pads.Count -eq 0 -and $connected) {
+    $pads += [ordered]@{ name = 'ePad (USB only)'; version = $null; install_location = $null }
+}
+foreach ($p in $pads) {
+    $p['connected']      = $connected
+    $p['com_registered'] = $comReg
+    $p['com_bitness']    = $comBit
+    $p['device_status']  = $devStatus
+}
+[ordered]@{ signature_pads = @($pads) } | ConvertTo-Json -Depth 3 -Compress
+"""
+
+
 def _as_list(value) -> list:
     if value is None:
         return []
@@ -417,6 +481,31 @@ def _parse_monitors(data: dict) -> list[Monitor]:
     return mons
 
 
+def _parse_signature_pads(data: dict) -> list[SignaturePad]:
+    """Parse the PS_SIGNATURE_PADS JSON into pads. Single-element coercion like
+    _parse_monitors. An empty list = no ePadLink software or device found."""
+    raw = data.get("signature_pads")
+    if raw is None:
+        return []
+    items = raw if isinstance(raw, list) else [raw]
+    pads: list[SignaturePad] = []
+    for p in items:
+        if not isinstance(p, dict):
+            continue
+        pads.append(
+            SignaturePad(
+                name=_clean(p.get("name")),
+                version=_clean(p.get("version")),
+                connected=bool(p.get("connected", False)),
+                com_registered=bool(p.get("com_registered", False)),
+                com_bitness=_clean(p.get("com_bitness")),
+                device_status=_clean(p.get("device_status")),
+                install_location=_clean(p.get("install_location")),
+            )
+        )
+    return pads
+
+
 def _parse_posture(data: dict) -> Compliance:
     """Parse the PS_POSTURE JSON (spec 21) into a Compliance; a null signal (the
     collector couldn't read it) stays None = "unknown"."""
@@ -580,6 +669,7 @@ def collect_windows(
         "software": None,
         "compliance": None,
         "monitors": None,
+        "signature_pads": None,
         "updates": None,
         "errors": [],
     }
@@ -693,6 +783,14 @@ def collect_windows(
                 if mr is not None and mr.status_code == 0:
                     mraw = (mr.std_out or b"").decode("utf-8", errors="ignore").strip() or "{}"
                     out["monitors"] = _parse_monitors(json.loads(mraw))
+            except Exception:  # noqa: BLE001 — optional, never fatal
+                pass
+            # Signature pads (ePad peripheral scan).
+            try:
+                spr = _best_effort(PS_SIGNATURE_PADS)
+                if spr is not None and spr.status_code == 0:
+                    spraw = (spr.std_out or b"").decode("utf-8", errors="ignore").strip() or "{}"
+                    out["signature_pads"] = _parse_signature_pads(json.loads(spraw))
             except Exception:  # noqa: BLE001 — optional, never fatal
                 pass
             # Patch inventory (spec 31): hotfixes always (best-effort), then optional

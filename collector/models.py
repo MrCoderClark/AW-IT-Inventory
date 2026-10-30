@@ -185,6 +185,19 @@ class PhoneInfo(BaseModel):
     register_status: str | None = None  # "Registered" | "Unregistered" | …
 
 
+class SignaturePad(BaseModel):
+    """A signature pad detected on a Windows host — ePadLink USB device, installed
+    software (registry Uninstall key), and COM registration state."""
+
+    name: str | None = None  # DisplayName, e.g. "ePadLink ePad 13.6.12670"
+    version: str | None = None  # DisplayVersion
+    connected: bool = False  # USB PnP device present
+    com_registered: bool = False  # Wow6432Node CLSID registered
+    com_bitness: str | None = None  # "x86" | "x64"
+    device_status: str | None = None  # PnP status: "OK", "Error", etc.
+    install_location: str | None = None
+
+
 class HostResult(BaseModel):
     ip: str
     subnet: str
@@ -208,6 +221,8 @@ class HostResult(BaseModel):
     # Connected displays from EDID (spec 25). None = not collected (non-Windows, or
     # the read failed); an empty list = read OK, no displays detected.
     monitors: list[Monitor] | None = None
+    # Signature pads (ePad peripheral scan). None = not collected; empty = none found.
+    signature_pads: list[SignaturePad] | None = None
     # Windows patch inventory (spec 31). None = not collected (non-Windows, or both
     # hotfix and app scripts failed/skipped). Nested Nones are per-section.
     updates: WindowsUpdates | None = None
