@@ -125,12 +125,20 @@ def _put_file(
             return remote_path
 
     user = _winrm_username(prof.username)
+    smb_user = user
+    if "\\" in prof.username:
+        smb_user = prof.username
+    elif prof.qualify:
+        r = session.run_ps("$env:COMPUTERNAME")
+        hn = (r.std_out or b"").decode().strip()
+        if hn:
+            smb_user = f"{hn}\\{user}"
     if config.install_smb_transfer and _SMB_AVAILABLE:
         try:
             import smbclient
 
             with smbclient.open_file(
-                _unc(ip, remote_path), mode="wb", username=user, password=prof.password
+                _unc(ip, remote_path), mode="wb", username=smb_user, password=prof.password
             ) as f:
                 f.write(data)
             return remote_path
