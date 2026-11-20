@@ -269,7 +269,15 @@ def _stage(
 
     if config.install_smb_transfer and _SMB_AVAILABLE:
         try:
-            zip_local = _smb_put_zip(ip, user, prof.password, zip_bytes, remote_dir)
+            smb_user = user
+            if "\\" in prof.username:
+                smb_user = prof.username
+            elif prof.qualify:
+                r = session.run_ps("$env:COMPUTERNAME")
+                hn = (r.std_out or b"").decode().strip()
+                if hn:
+                    smb_user = f"{hn}\\{user}"
+            zip_local = _smb_put_zip(ip, smb_user, prof.password, zip_bytes, remote_dir)
             steps.append(
                 {
                     "name": "smb-copy",
